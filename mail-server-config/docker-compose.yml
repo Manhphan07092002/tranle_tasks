@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  mailserver:
+    image: analogic/poste.io
+    hostname: mail.ctcdn.vn  # Sửa lại thành tên miền chính xác của bạn
+    ports:
+      - "25:25"
+      - "8080:80"   # Đổi sang 8080 để Nginx proxy vào
+      - "4443:443"  # Đổi sang 4443 để Nginx proxy vào (hoặc Nginx tự cài SSL)
+      - "110:110"
+      - "143:143"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+      - "995:995"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - HTTPS=ON
+      - DISABLE_CLAMAV=TRUE # Tạm tắt trình quét virus nếu VPS RAM dưới 3GB để tránh crash
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./mail-data:/data
+    restart: always

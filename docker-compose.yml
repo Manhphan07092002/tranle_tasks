@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: ctc_task_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3500}:3500"
+    volumes:
+      - ./data/uploads:/app/uploads
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3500
+      - DATABASE_URL=${DATABASE_URL:-mysql://${MYSQL_USER:-ctc}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-ctctask}}
+      - JWT_SECRET=${JWT_SECRET}
+      - MAIL_ENCRYPTION_KEY=${MAIL_ENCRYPTION_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    container_name: ctc_mysql
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-ctctask}
+      - MYSQL_USER=${MYSQL_USER:-ctc}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - TZ=Asia/Ho_Chi_Minh
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mailserver:
+    image: analogic/poste.io
+    container_name: ctc_mailserver
+    hostname: mail.ctcdn.vn
+    restart: always
+    ports:
+      - "25:25"
+      - "8080:80"   # Nginx proxy vào cổng 8080 để phục vụ mail.ctcdn.vn
+      - "4443:443"  # Cổng SSL dự phòng
+      - "110:110"
+      - "143:143"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+      - "995:995"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - HTTPS=OFF   # Tắt HTTPS nội bộ vì Nginx đã đảm nhận mã hóa SSL (giúp tránh vòng lặp chuyển hướng)
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./mail-server-config/mail-data:/data
+

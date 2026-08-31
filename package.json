@@ -1,0 +1,22 @@
+{
+  "name": "orangetask-workspace",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=frontend",
+    "start": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" npm run start --workspace=backend",
+    "start:prod": "cross-env NODE_ENV=production PORT=3500 NODE_OPTIONS=\"--max-http-header-size=1000000\" npm run start --workspace=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "cross-env": "^10.1.0",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5"
+  }
+}

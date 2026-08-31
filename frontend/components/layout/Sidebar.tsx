@@ -1,0 +1,492 @@
+import React from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { Button, Avatar } from '../UI';
+import { apiFetch } from '../../services/api';
+
+interface SidebarProps {
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (o: boolean) => void;
+  openCreateModal: () => void;
+}
+
+// Grouped nav structure
+const NAV_GROUPS = [
+  {
+    label: 'Tổng quan',
+    items: [
+      { id: 'dashboard', icon: LayoutDashboard, path: '/', permission: null },
+    ],
+  },
+  {
+    label: 'Công việc',
+    items: [
+      { id: 'tasks',    icon: CheckSquare, path: '/tasks',    permission: ['view_all_tasks', 'manage_dept_tasks', 'view_own_tasks'] },
+      { id: 'calendar', icon: Calendar,    path: '/calendar', permission: ['view_all_tasks', 'manage_dept_tasks', 'view_own_tasks'] },
+      { id: 'reports',  icon: FileText,    path: '/reports',  permission: ['view_all_reports', 'approve_dept_reports', 'create_report', 'director_feedback'] },
+      { id: 'documents', icon: FolderOpen,  path: '/documents', permission: null },
+    ],
+  },
+  {
+    label: 'Giao tiếp',
+    items: [
+      { id: 'mail',          icon: Mail,   path: '/mail',          permission: null },
+      { id: 'meetings',      icon: Video,  path: '/meetings',      permission: null },
+      { id: 'notes',         icon: StickyNote, path: '/notes',     permission: null },
+      { id: 'notifications', icon: Bell,   path: '/notifications', permission: null },
+    ],
+  },
+  {
+    label: 'Kinh doanh',
+    items: [
+      { id: 'projects', icon: Briefcase, path: '/projects', permission: null },
+      { id: 'contracts', icon: Briefcase, path: '/contracts', permission: null },
+      { id: 'products', icon: Package, path: '/products', permission: null },
+      { id: 'revenue',   icon: DollarSign, path: '/revenue',  permission: ['create_revenue_report', 'approve_dept_revenue', 'approve_all_revenue', 'view_all_reports', 'director_feedback'] },
+    ],
+  },
+  {
+    label: 'Hệ thống',
+    items: [
+      { id: 'team',     icon: Users,    path: '/team',     permission: ['view_dept_users', 'manage_users'] },
+      { id: 'settings', icon: Settings, path: '/settings', permission: null },
+    ],
+  },
+];
+
+const NAV_LABELS: Record<string, string> = {
+  dashboard:     'Tổng quan',
+  tasks:         'Công việc',
+  calendar:      'Lịch',
+  reports:       'Báo cáo CV',
+  documents:     'Tài liệu',
+  project_reports: 'Báo cáo DA',
+  projects:      'Dự án',
+  contracts:     'Hợp đồng',
+  products:      'Kho hàng',
+  revenue:       'Doanh thu',
+  mail:          'Hộp thư',
+  meetings:      'Cuộc họp',
+  notes:         'Ghi chú',
+  notifications: 'Thông báo',
+  team:          'Đội ngũ',
+  settings:      'Cài đặt',
+};
+
+export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen, openCreateModal }) => {
+  const { user, logout } = useAuth();
+  const { t } = useLanguage();
+  const [unreadMailCount, setUnreadMailCount] = React.useState(0);
+  const location = useLocation();
+
+  // Swipe-to-close gesture for mobile sidebar
+  const touchStartX = React.useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    if (deltaX < -50) { // Swiped left more than 50px
+      setIsMobileMenuOpen(false);
+    }
+    touchStartX.current = null;
+  };
+  const [isContractsExpanded, setIsContractsExpanded] = React.useState(() => {
+    return location.pathname.startsWith('/contracts');
+  });
+
+  const [isRevenueExpanded, setIsRevenueExpanded] = React.useState(() => {
+    return location.pathname.startsWith('/revenue');
+  });
+
+  React.useEffect(() => {
+    if (location.pathname.startsWith('/contracts')) {
+      setIsContractsExpanded(true);
+    }
+  }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (location.pathname.startsWith('/revenue')) {
+      setIsRevenueExpanded(true);
+    }
+  }, [location.pathname]);
+
+
+  // Fetch unread mail count periodically
+  React.useEffect(() => {
+    if (!user) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await apiFetch('/api/mail/unread-count');
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadMailCount(data.count || 0);
+        }
+      } catch (err) {
+        console.error('Failed to fetch unread mail count:', err);
+      }
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000); // Check every 30 seconds
+    window.addEventListener('mail-count-changed', fetchUnreadCount);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mail-count-changed', fetchUnreadCount);
+    };
+  }, [user]);
+
+  // Update document title
+  React.useEffect(() => {
+    if (unreadMailCount > 0) {
+      document.title = `(${unreadMailCount}) CTC Tasks`;
+    } else {
+      document.title = 'CTC Tasks';
+    }
+  }, [unreadMailCount]);
+
+  if (!user) return null;
+
+  const perms = user?.permissions || [];
+  const hasPerm = (p: string) => perms.includes(p);
+
+  const canSeeItem = (permission: string[] | null) => {
+    if (!permission) return true;
+    return permission.some(p => hasPerm(p));
+  };
+
+  return (
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-20 lg:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`
+        fixed inset-y-2 sm:inset-y-4 left-2 sm:left-4 z-40 w-[calc(100vw-1rem)] sm:w-64 max-w-[16rem] bg-white/80 backdrop-blur-3xl border border-white/60 shadow-2xl shadow-brand-500/10 rounded-2xl sm:rounded-[2rem] flex flex-col overflow-hidden transform transition-all duration-500 ease-out
+        ${isMobileMenuOpen ? 'translate-x-0 opacity-100' : '-translate-x-[120%] lg:translate-x-0 lg:opacity-100'}
+      `}>
+        <div className="h-full flex flex-col">
+
+          {/* Logo */}
+          <div className="h-20 flex items-center px-6 border-b border-gray-100/80 flex-shrink-0">
+            <img src="/logo.png" alt="CTC Logo" className="h-9 w-auto object-contain mr-3 drop-shadow-sm dark:mix-blend-normal mix-blend-multiply" />
+            <div>
+              <span className="text-base font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-300 tracking-tight block leading-tight">
+                CTC Tasks
+              </span>
+              <span className="text-[10px] text-gray-400 font-medium leading-tight block">Hệ thống quản lý</span>
+            </div>
+          </div>
+
+          {/* New Task Button */}
+          <div className="px-4 pt-4 pb-2 flex-shrink-0">
+            <Button onClick={() => openCreateModal()} className="w-full justify-center gap-2 shadow-brand-200/60 shadow-md" size="sm">
+              <PlusCircle size={16} /> Tạo công việc
+            </Button>
+          </div>
+
+          {/* Nav Groups */}
+          <nav className="flex-1 px-3 py-2 overflow-y-auto space-y-4">
+            {NAV_GROUPS.map(group => {
+              const visibleItems = group.items.filter(item => canSeeItem(item.permission));
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={group.label}>
+                  <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                    {group.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {visibleItems.map(item => {
+                      if (item.id === 'contracts') {
+                        const isParentActive = location.pathname.startsWith('/contracts');
+                        const currentTab = new URLSearchParams(location.search).get('tab') || 'output';
+                        
+                        return (
+                          <div key={item.id} className="space-y-0.5">
+                            {/* Parent Dropdown Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => setIsContractsExpanded(prev => !prev)}
+                              className={`
+                                w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all
+                                ${isParentActive
+                                  ? 'bg-brand-50/60 text-brand-700 border border-brand-100/50 shadow-sm'
+                                  : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900'
+                                }
+                              `}
+                            >
+                              <item.icon size={17} className="flex-shrink-0" />
+                              <span className="flex-1 text-left truncate">{NAV_LABELS[item.id] || t(item.id)}</span>
+                              {isContractsExpanded ? (
+                                <ChevronUp size={15} className="text-gray-400" />
+                              ) : (
+                                <ChevronDown size={15} className="text-gray-400" />
+                              )}
+                            </button>
+
+                            {/* Collapsible Submenu */}
+                            {isContractsExpanded && (
+                              <div className="pl-6 pr-1 py-1 space-y-1 border-l-2 border-brand-100/50 ml-5 animate-in slide-in-from-top duration-200">
+                                {/* HĐ Bán ra */}
+                                <NavLink
+                                  to="/contracts?tab=output"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'output'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <ArrowUpRight size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">HĐ Bán ra</span>
+                                </NavLink>
+
+                                {/* HĐ Mua vào */}
+                                <NavLink
+                                  to="/contracts?tab=input"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'input'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <ArrowDownLeft size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">HĐ Mua vào</span>
+                                </NavLink>
+
+                                {/* Lịch sử HĐ */}
+                                <NavLink
+                                  to="/contracts?tab=history"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'history'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <History size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Lịch sử HĐ</span>
+                                </NavLink>
+
+                                {/* Liên kết */}
+                                <NavLink
+                                  to="/contracts?tab=links"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'links'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <Link size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Liên kết</span>
+                                </NavLink>
+
+                                {/* Công nợ */}
+                                <NavLink
+                                  to="/contracts?tab=debts"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'debts'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <CreditCard size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Công nợ</span>
+                                </NavLink>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (item.id === 'revenue') {
+                        const isParentActive = location.pathname.startsWith('/revenue');
+                        const currentTab = new URLSearchParams(location.search).get('tab') || 'list';
+                        
+                        return (
+                          <div key={item.id} className="space-y-0.5">
+                            {/* Parent Dropdown Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => setIsRevenueExpanded(prev => !prev)}
+                              className={`
+                                w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all
+                                ${isParentActive
+                                  ? 'bg-brand-50/60 text-brand-700 border border-brand-100/50 shadow-sm'
+                                  : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900'
+                                }
+                              `}
+                            >
+                              <item.icon size={17} className="flex-shrink-0" />
+                              <span className="flex-1 text-left truncate">{NAV_LABELS[item.id] || t(item.id)}</span>
+                              {isRevenueExpanded ? (
+                                <ChevronUp size={15} className="text-gray-400" />
+                              ) : (
+                                <ChevronDown size={15} className="text-gray-400" />
+                              )}
+                            </button>
+
+                            {/* Collapsible Submenu */}
+                            {isRevenueExpanded && (
+                              <div className="pl-6 pr-1 py-1 space-y-1 border-l-2 border-brand-100/50 ml-5 animate-in slide-in-from-top duration-200">
+                                {/* Báo cáo doanh thu */}
+                                <NavLink
+                                  to="/revenue?tab=list"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && (currentTab === 'list' || currentTab === 'create')
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <FileText size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Báo cáo doanh thu</span>
+                                </NavLink>
+
+                                {/* Lịch sử báo cáo */}
+                                <NavLink
+                                  to="/revenue?tab=history"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'history'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <History size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Lịch sử báo cáo</span>
+                                </NavLink>
+
+                                {/* HĐ đã xuất hóa đơn */}
+                                <NavLink
+                                  to="/revenue?tab=invoiced"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'invoiced'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <ArrowUpRight size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">HĐ đã xuất hóa đơn</span>
+                                </NavLink>
+
+                                {/* Doanh thu theo kỳ */}
+                                <NavLink
+                                  to="/revenue?tab=periodic"
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={`
+                                    w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                    ${isParentActive && currentTab === 'periodic'
+                                      ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                    }
+                                  `}
+                                >
+                                  <Calendar size={14} className="flex-shrink-0" />
+                                  <span className="flex-1 truncate">Doanh thu theo kỳ</span>
+                                </NavLink>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <NavLink
+                          key={item.id}
+                          to={item.path}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={({ isActive }) => `
+                            w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all
+                            ${isActive
+                              ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                              : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900'
+                            }
+                          `}
+                        >
+                          <item.icon size={17} className="flex-shrink-0" />
+                          <span className="flex-1 truncate">{NAV_LABELS[item.id] || t(item.id)}</span>
+                          {item.id === 'mail' && unreadMailCount > 0 && (
+                            <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[20px]">
+                              {unreadMailCount > 99 ? '99+' : unreadMailCount}
+                            </span>
+                          )}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+
+          {/* Bottom Section: Admin + User */}
+          <div className="flex-shrink-0 border-t border-gray-100 pt-2 pb-3 px-3 space-y-1">
+            {/* Admin link */}
+            {hasPerm('admin_panel') && (
+              <a
+                href="/admin"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100"
+              >
+                <Shield size={17} className="flex-shrink-0" />
+                Quản trị viên
+              </a>
+            )}
+
+            {/* User profile / logout */}
+            <div
+              className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100/80 cursor-pointer transition-colors group"
+              onClick={logout}
+              title="Đăng xuất"
+            >
+              <Avatar src={user.avatar} alt={user.name} size={8} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{user.name}</p>
+                <p className="text-[11px] text-gray-400 truncate leading-tight">{user.role}</p>
+              </div>
+              <LogOut size={15} className="text-gray-300 group-hover:text-red-500 transition-colors flex-shrink-0" />
+            </div>
+          </div>
+
+        </div>
+      </aside>
+    </>
+  );
+};
+
+
+
+
