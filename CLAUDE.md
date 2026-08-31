@@ -1,4 +1,4 @@
-# CLAUDE.md — CTC Task
+# CLAUDE.md — Tran Le Tasks
 
 Hướng dẫn lâu dài cho Claude Code khi làm việc với repository này. Chỉ chứa thông tin đã được xác minh từ source code. Mục nào chưa xác định được ghi rõ "Chưa xác định".
 
@@ -6,9 +6,9 @@ Hướng dẫn lâu dài cho Claude Code khi làm việc với repository này. 
 
 ## 1. Project overview
 
-**CTC Task** — nền tảng quản lý công việc & cộng tác nội bộ cho doanh nghiệp (CTC / ctcdn.vn). Kiến trúc **monorepo** (npm workspaces: `frontend`, `backend`). Bao gồm: quản lý công việc (Kanban/List/Calendar), hợp đồng, dự án đấu thầu, doanh thu, kho hàng, báo cáo, webmail IMAP/SMTP, phòng họp WebRTC, AI assistant (Gemini), thông báo realtime.
+**Tran Le Tasks** — nền tảng quản trị công việc, dự án điện mặt trời & cộng tác nội bộ cho **Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (Tran Le Electricity / tranlecorp.com)**. Kiến trúc **monorepo** (npm workspaces: `frontend`, `backend`). Bao gồm: quản lý công việc (Kanban/List/Calendar), hợp đồng, dự án điện mặt trời & đấu thầu, doanh thu, kho hàng, báo cáo, webmail IMAP/SMTP, phòng họp WebRTC, AI assistant (Bot Tran Le AI), thông báo realtime.
 
-Domain production: `task.ctcdn.vn` / `tasks.ctcdn.vn`.
+Domain production: `task.tranlecorp.com.vn` / `tasks.tranlecorp.com.vn` (hoặc `tranlecorp.com`).
 
 ## 2. Technology stack
 

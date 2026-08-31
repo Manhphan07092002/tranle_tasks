@@ -719,7 +719,7 @@ export default function ProductsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">TÊN SẢN PHẨM *</label>
-                    <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="VD: Laptop Dell Inspiron..."
+                    <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="VD: Tấm pin AIKO Neostar 2S+ 455W / Inverter SAJ..."
                       className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-slate-700 text-gray-800 dark:text-slate-100" />
                   </div>
                   
@@ -738,7 +738,7 @@ export default function ProductsPage() {
                       list="product-skus-list"
                       value={form.importCode} 
                       onChange={e => setForm({...form, importCode: e.target.value})} 
-                      placeholder="VD: DELL-INS-001"
+                      placeholder="VD: AIKO-455-N"
                       className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 bg-white dark:bg-slate-700 text-gray-800 dark:text-slate-100 font-medium ${
                         (getSingleEditCodeError() || singleCodeDbError)
                           ? 'border-rose-500 focus:ring-rose-500 focus:border-rose-500 bg-rose-50/5'

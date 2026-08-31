@@ -175,7 +175,7 @@ export function adminRoutes(db: any, mailer: any) {
       ];
       if (SMTP_PASS && SMTP_PASS !== '********') entries.push(['SMTP_PASS', SMTP_PASS]);
       for (const [key, value] of entries) {
-        await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [key, value]);
+        await db.run('INSERT INTO system_config (`key`, `value`) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [key, value]);
       }
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
@@ -186,7 +186,7 @@ export function adminRoutes(db: any, mailer: any) {
       const { testEmail } = req.body;
       const { transporter, smtp } = await mailer.createTransporter();
       if (!transporter) return res.status(400).json({ error: 'SMTP chưa được cấu hình đầy đủ' });
-      await transporter.sendMail({ from: smtp.SMTP_FROM, to: testEmail || smtp.SMTP_USER, subject: 'CTC Task - Test cấu hình SMTP', text: 'Chúc mừng, cấu hình SMTP của anh đã hoạt động.', html: '<div style="font-family:Arial,sans-serif"><h3>CTC Task</h3><p>Chúc mừng, cấu hình SMTP của anh đã hoạt động.</p></div>' });
+      await transporter.sendMail({ from: smtp.SMTP_FROM, to: testEmail || smtp.SMTP_USER, subject: 'Tran Le Tasks - Test cấu hình SMTP', text: 'Chúc mừng, cấu hình SMTP của bạn đã hoạt động.', html: '<div style="font-family:Arial,sans-serif"><h3>Tran Le Electricity</h3><p>Chúc mừng, cấu hình SMTP của bạn đã hoạt động.</p></div>' });
       res.json({ success: true });
     } catch (e: any) { console.error(e); res.status(500).json({ error: e.message || 'Lỗi gửi mail' }); }
   });
@@ -198,11 +198,11 @@ export function adminRoutes(db: any, mailer: any) {
       const keysMap: Record<string, string[]> = {};
       
       for (const p of providers) {
-        const config = await db.get(`SELECT value FROM system_config WHERE key = ?`, [`${p}_api_keys`]);
+        const config = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = ?`, [`${p}_api_keys`]);
         keysMap[p] = config && config.value ? JSON.parse(config.value) : [];
       }
 
-      const providerConfig = await db.get(`SELECT value FROM system_config WHERE key = 'ai_provider'`);
+      const providerConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'ai_provider'`);
       const provider = providerConfig && providerConfig.value ? providerConfig.value : 'gemini';
       
       res.json({ keysMap, provider });
@@ -216,13 +216,13 @@ export function adminRoutes(db: any, mailer: any) {
       if (keysMap && typeof keysMap === 'object') {
          for (const [p, keys] of Object.entries(keysMap)) {
            if (Array.isArray(keys)) {
-             await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [`${p}_api_keys`, JSON.stringify(keys)]);
+             await db.run('INSERT INTO system_config (`key`, `value`) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [`${p}_api_keys`, JSON.stringify(keys)]);
            }
          }
       }
       
       if (provider) {
-        await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', ['ai_provider', provider]);
+        await db.run('INSERT INTO system_config (`key`, `value`) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', ['ai_provider', provider]);
       }
       invalidateAiKeyCache(); // Force reload next AI request
       res.json({ success: true });
@@ -232,9 +232,9 @@ export function adminRoutes(db: any, mailer: any) {
   // --- Poste.io Mail Server Config & Proxy ---
   router.get('/system-config/poste-api', async (_req, res) => {
     try {
-      const urlConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_URL'`);
-      const userConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_USER'`);
-      const passConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_PASS'`);
+      const urlConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_URL'`);
+      const userConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_USER'`);
+      const passConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_PASS'`);
       res.json({
         POSTE_API_URL: urlConfig?.value || '',
         POSTE_API_USER: userConfig?.value || '',
@@ -252,16 +252,16 @@ export function adminRoutes(db: any, mailer: any) {
       ];
       if (POSTE_API_PASS && POSTE_API_PASS !== '********') entries.push(['POSTE_API_PASS', POSTE_API_PASS]);
       for (const [key, value] of entries) {
-        await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [key, value]);
+        await db.run('INSERT INTO system_config (`key`, `value`) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [key, value]);
       }
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
 
   const getPosteAuth = async () => {
-    const urlConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_URL'`);
-    const userConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_USER'`);
-    const passConfig = await db.get(`SELECT value FROM system_config WHERE key = 'POSTE_API_PASS'`);
+    const urlConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_URL'`);
+    const userConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_USER'`);
+    const passConfig = await db.get(`SELECT \`value\` FROM system_config WHERE \`key\` = 'POSTE_API_PASS'`);
     if (!urlConfig?.value || !userConfig?.value || !passConfig?.value) return null;
     return {
       url: urlConfig.value.replace(/\/$/, ''),

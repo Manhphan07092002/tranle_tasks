@@ -1,7 +1,7 @@
 {
-  "name": "CTC Tasks",
-  "short_name": "CTC Tasks",
-  "description": "Hệ thống quản lý công việc thông minh CTC",
+  "name": "Tran Le Tasks",
+  "short_name": "Tran Le Tasks",
+  "description": "Hệ thống quản trị & điều hành công việc Tran Le Electricity",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fcfaf8",
@@ -9,14 +9,14 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/logo1.jpg",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/jpeg"
+      "type": "image/png"
     },
     {
-      "src": "/logo1.jpg",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg"
+      "type": "image/png"
     }
   ]
 }

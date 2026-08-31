@@ -375,11 +375,11 @@ export default function AdminMailServerConfig() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Poste.io API URL</label>
-                <input value={posteApiConfig.POSTE_API_URL} onChange={e => setPosteApiConfig(p => ({ ...p, POSTE_API_URL: e.target.value }))} placeholder="https://mail.ctcdn.vn/admin/api/v1" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" />
+                <input value={posteApiConfig.POSTE_API_URL} onChange={e => setPosteApiConfig(p => ({ ...p, POSTE_API_URL: e.target.value }))} placeholder="https://mail.tranlecorp.com.vn/admin/api/v1" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Tài khoản Admin (Email)</label>
-                <input value={posteApiConfig.POSTE_API_USER} onChange={e => setPosteApiConfig(p => ({ ...p, POSTE_API_USER: e.target.value }))} placeholder="admin@ctcdn.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" />
+                <input value={posteApiConfig.POSTE_API_USER} onChange={e => setPosteApiConfig(p => ({ ...p, POSTE_API_USER: e.target.value }))} placeholder="admin@tranlecorp.com.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wider">Mật khẩu Admin</label>
@@ -582,8 +582,8 @@ export default function AdminMailServerConfig() {
             <form onSubmit={createDomain} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tên miền (Domain)</label>
-                <input required type="text" value={domainFormData.name} onChange={e => setDomainFormData({ name: e.target.value })} placeholder="ctcdn.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
-                <p className="text-xs text-gray-500 mt-1.5">Ví dụ: ctcdn.vn, ctc.vn</p>
+                <input required type="text" value={domainFormData.name} onChange={e => setDomainFormData({ name: e.target.value })} placeholder="tranlecorp.com.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
+                <p className="text-xs text-gray-500 mt-1.5">Ví dụ: tranlecorp.com.vn, tranlecorp.com</p>
               </div>
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setShowDomainModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors">Hủy</button>
@@ -612,7 +612,7 @@ export default function AdminMailServerConfig() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Địa chỉ Email</label>
-                <input required type="email" value={posteFormData.email} readOnly={isBoxUpdateRender} onChange={e => setPosteFormData(p => ({ ...p, email: e.target.value }))} placeholder="nva@ctcdn.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none read-only:bg-gray-100 read-only:text-gray-500" />
+                <input required type="email" value={posteFormData.email} readOnly={isBoxUpdateRender} onChange={e => setPosteFormData(p => ({ ...p, email: e.target.value }))} placeholder="nva@tranlecorp.com.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none read-only:bg-gray-100 read-only:text-gray-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mật khẩu (Plaintext)</label>
@@ -652,8 +652,8 @@ export default function AdminMailServerConfig() {
             <form onSubmit={createOrUpdateAlias} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Địa chỉ Email của Nhóm</label>
-                <input required type="email" value={aliasFormData.email} readOnly={isAliasUpdateRender} onChange={e => setAliasFormData(p => ({ ...p, email: e.target.value }))} placeholder="nhom_du_an@ctcdn.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none read-only:bg-gray-100 read-only:text-gray-500" />
-                <p className="text-xs text-gray-500 mt-1.5">Ví dụ: sales@ctcdn.vn, contact@ctcdn.vn (không cần tạo hộp thư thật, mọi người trong nhóm sẽ nhận được mail gửi vào địa chỉ này).</p>
+                <input required type="email" value={aliasFormData.email} readOnly={isAliasUpdateRender} onChange={e => setAliasFormData(p => ({ ...p, email: e.target.value }))} placeholder="nhom_du_an@tranlecorp.com.vn" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none read-only:bg-gray-100 read-only:text-gray-500" />
+                <p className="text-xs text-gray-500 mt-1.5">Ví dụ: sales@tranlecorp.com.vn, contact@tranlecorp.com.vn (không cần tạo hộp thư thật, mọi người trong nhóm sẽ nhận được mail gửi vào địa chỉ này).</p>
               </div>
               
               <div>
@@ -794,7 +794,7 @@ export default function AdminMailServerConfig() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email Hệ thống</label>
-                  <input value={smtpConfig.SMTP_USER} onChange={(e) => handleSmtpChange('SMTP_USER', e.target.value)} placeholder="noreply@ctcdn.vn" className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
+                  <input value={smtpConfig.SMTP_USER} onChange={(e) => handleSmtpChange('SMTP_USER', e.target.value)} placeholder="noreply@tranlecorp.com.vn" className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mật khẩu</label>
@@ -802,7 +802,7 @@ export default function AdminMailServerConfig() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tên hiển thị (SMTP From)</label>
-                  <input value={smtpConfig.SMTP_FROM} onChange={(e) => handleSmtpChange('SMTP_FROM', e.target.value)} placeholder='CTC Task Hệ thống <noreply@ctcdn.vn>' className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
+                  <input value={smtpConfig.SMTP_FROM} onChange={(e) => handleSmtpChange('SMTP_FROM', e.target.value)} placeholder='Tran Le Tasks Hệ thống <noreply@tranlecorp.com.vn>' className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-200 outline-none" />
                 </div>
               </div>
             </div>

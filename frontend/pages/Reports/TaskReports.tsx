@@ -393,7 +393,7 @@ export default function ReportsPage() {
     ws['!cols'] = [{ wch: 22 }, { wch: 35 }, { wch: 16 }, { wch: 16 }, { wch: 40 }, { wch: 30 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 16 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo');
-    XLSX.writeFile(wb, `CTC_BaoCao_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `TranLe_BaoCao_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const pendingList = canViewAll ? pendingDirectorReports : pendingManagerReports;

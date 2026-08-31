@@ -502,7 +502,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         <div class="header">
           <img src="${logoUrl}" alt="Logo" class="header-logo" />
           <div class="header-text">
-            <div class="company">CÔNG TY CỔ PHẦN XÂY LẮP BƯU ĐIỆN MIỀN TRUNG</div>
+            <div class="company">CÔNG TY CỔ PHẦN TƯ VẤN XÂY DỰNG ĐIỆN TRẦN LÊ</div>
             <div class="dept">${currentUser.department || 'Phòng ban'}</div>
             <div class="title">BÁO CÁO CÔNG VIỆC THỰC HIỆN</div>
             <div class="meta">
@@ -617,11 +617,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
           <div className="relative flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-md overflow-hidden flex-shrink-0">
-                <img src="/logo.png" alt="CTC Logo" className="w-10 h-10 object-contain" />
+              <div className="h-12 px-3 rounded-2xl bg-white flex items-center justify-center shadow-md overflow-hidden flex-shrink-0">
+                <img src="/logo-tranle-dark.png" alt="Tran Le Electricity Logo" className="h-8 w-auto object-contain" />
               </div>
               <div>
-                <p className="text-[11px] font-medium text-blue-200/80 uppercase tracking-widest mb-0.5">CÔNG TY CỔ PHẦN XÂY LẮP BƯU ĐIỆN MIỀN TRUNG</p>
+                <p className="text-[11px] font-medium text-blue-200/80 uppercase tracking-widest mb-0.5">CÔNG TY CỔ PHẦN TƯ VẤN XÂY DỰNG ĐIỆN TRẦN LÊ</p>
                 <h1 className="text-xl font-bold tracking-tight">{currentUser.department || 'Phòng ban'}</h1>
               </div>
             </div>

@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: '0.0.0.0',
-      allowedHosts: ['task.ctcdn.vn', 'tasks.ctcdn.vn', '.ctcdn.vn'],
+      allowedHosts: ['task.tranlecorp.com.vn', 'tasks.tranlecorp.com.vn', '.tranlecorp.com.vn', 'tranlecorp.com', 'localhost', '127.0.0.1'],
       port: parseInt(env.VITE_PORT || '5173'),
       proxy: {
         '/api': {

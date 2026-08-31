@@ -3,7 +3,7 @@ version: '3.7'
 services:
   mailserver:
     image: analogic/poste.io
-    hostname: mail.ctcdn.vn  # Sửa lại thành tên miền chính xác của bạn
+    hostname: mail.tranlecorp.com.vn  # Sửa lại thành tên miền chính xác của bạn
     ports:
       - "25:25"
       - "8080:80"   # Đổi sang 8080 để Nginx proxy vào

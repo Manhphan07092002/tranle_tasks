@@ -84,7 +84,7 @@ export default function AdminDatabaseManagement() {
     try {
       if ('showSaveFilePicker' in window) {
         const handle = await (window as any).showSaveFilePicker({
-          suggestedName: `ctc-database-${new Date().toISOString().split('T')[0]}.json`,
+          suggestedName: `tranle-database-${new Date().toISOString().split('T')[0]}.json`,
           types: [{
             description: 'JSON Database Backup',
             accept: { 'application/json': ['.json'] },
@@ -103,7 +103,7 @@ export default function AdminDatabaseManagement() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ctc-database-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `tranle-database-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();

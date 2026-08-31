@@ -39,6 +39,11 @@ function normalizeSql(sql: string): string {
     "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name ASC",
   );
 
+  // Reserved-word `key` in system_config queries.
+  s = s.replace(/\bFROM\s+system_config\s+WHERE\s+key\b/gi, 'FROM system_config WHERE `key`');
+  s = s.replace(/\bSELECT\s+key\s*,\s*value\s+FROM\s+system_config\b/gi, 'SELECT `key`, `value` FROM system_config');
+  s = s.replace(/\bINSERT\s+INTO\s+system_config\s*\(\s*key\s*,\s*value\s*\)/gi, 'INSERT INTO system_config (`key`, `value`)');
+
   return s;
 }
 
@@ -460,12 +465,12 @@ async function seedIfEmpty(db: MysqlDb) {
   // Seed Users
   const userCount = await db.get('SELECT COUNT(*) as count FROM users');
   if (userCount && userCount.count === 0) {
-    const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'CTC@dmin2026!';
+    const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'TranLe@dmin2026!';
     const INITIAL_USERS = [
-      { id: 'u1', name: 'Admin', email: 'admin@ctcdn.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Admin', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u1', phone: '0912345678', dob: '1990-01-01', hometown: 'Hồ Chí Minh', bio: 'Quản trị viên hệ thống.' },
-      { id: 'u2', name: 'Nguyễn Văn Đạt', email: 'vandat@ctcdn.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Manager', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u2', phone: '0987654321', dob: '1985-06-15', hometown: 'Hà Nội', bio: 'Chuyên gia quản trị.' },
-      { id: 'u3', name: 'Phan Xuân Mạnh', email: 'xuanmanh@ctcdn.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Employee', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u3', phone: '0123456789', dob: '2002-09-07', hometown: 'Đà Nẵng', bio: 'Nhân viên ưu tú.' },
-      { id: 'u4', name: 'Nguyễn Văn Duy', email: 'vanduy@ctcdn.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Director', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u4', phone: '0933333333', dob: '1980-02-20', hometown: 'Hải Phòng', bio: 'Giám đốc điều hành.' },
+      { id: 'u1', name: 'Admin', email: 'admin@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Admin', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u1', phone: '0939792428', dob: '1990-01-01', hometown: 'Đà Nẵng', bio: 'Quản trị viên hệ thống Tran Le Electricity.' },
+      { id: 'u2', name: 'Nguyễn Văn Đạt', email: 'vandat@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Manager', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u2', phone: '0987654321', dob: '1985-06-15', hometown: 'Đà Nẵng', bio: 'Quản lý dự án & kỹ thuật điện mặt trời.' },
+      { id: 'u3', name: 'Phan Xuân Mạnh', email: 'xuanmanh@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Employee', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u3', phone: '0123456789', dob: '2002-09-07', hometown: 'Đà Nẵng', bio: 'Kỹ sư giải pháp năng lượng tái tạo.' },
+      { id: 'u4', name: 'Nguyễn Văn Duy', email: 'vanduy@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Director', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u4', phone: '0939792428', dob: '1980-02-20', hometown: 'Đà Nẵng', bio: 'Ban Giám đốc Tran Le Electricity.' },
     ];
     console.log(`🔑 Seed users created. Default password: ${adminPwd.slice(0, 3)}${'*'.repeat(Math.max(adminPwd.length - 3, 0))}`);
     for (const u of INITIAL_USERS) {

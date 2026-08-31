@@ -30,7 +30,7 @@ export function mailRoutes(db: any) {
       }
       const config = await getDynamicConfig();
       const host = (config.SMTP_HOST || '').toLowerCase();
-      const isPoste = host.includes('ctcdn.vn') || host.includes('localhost') || host.includes('mailserver') || host.includes('127.0.0.1');
+      const isPoste = host.includes('tranlecorp.com.vn') || host.includes('tranlecorp.com') || host.includes('ctcdn.vn') || host.includes('localhost') || host.includes('mailserver') || host.includes('127.0.0.1');
       res.json({
         provider: userConfig.provider || (isPoste ? 'poste' : 'vnpt'),
         imapHost: userConfig.imapHost || config.IMAP_HOST,

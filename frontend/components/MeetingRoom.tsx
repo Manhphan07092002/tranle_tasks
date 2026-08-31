@@ -596,7 +596,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meeting, onLeave, allU
         document.body.appendChild(a);
         a.style.display = 'none';
         a.href = url;
-        a.download = `CTC_Meeting_${new Date().toISOString().slice(0,10)}.webm`;
+        a.download = `TranLe_Meeting_${new Date().toISOString().slice(0,10)}.webm`;
         a.click();
         window.URL.revokeObjectURL(url);
         

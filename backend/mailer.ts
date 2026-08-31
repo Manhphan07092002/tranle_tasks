@@ -4,7 +4,7 @@ type DbType = any; // will be passed in at runtime
 
 export function createMailer(db: DbType) {
   const getSystemConfig = async () => {
-    const rows = await db.all('SELECT key, value FROM system_config');
+    const rows = await db.all('SELECT `key`, `value` FROM system_config');
     const config = Object.fromEntries(rows.map((row: any) => [row.key, row.value]));
     return {
       IMAP_HOST: config.IMAP_HOST || process.env.IMAP_HOST || 'imap.vnptemail.vn',
@@ -41,17 +41,17 @@ export function createMailer(db: DbType) {
     }
     await transporter.sendMail({
       from: smtp.SMTP_FROM, replyTo: smtp.SMTP_FROM, to,
-      subject: 'CTC Task - Cấp lại mật khẩu',
-      text: `Xin chào,\n\nMật khẩu đăng nhập mới của bạn là: ${newPassword}\n\nVui lòng đăng nhập và đổi lại mật khẩu ngay.\n\nTrân trọng,\nCTC Task`,
+      subject: 'Tran Le Tasks - Cấp lại mật khẩu',
+      text: `Xin chào,\n\nMật khẩu đăng nhập mới của bạn là: ${newPassword}\n\nVui lòng đăng nhập và đổi lại mật khẩu ngay.\n\nTrân trọng,\nTran Le Electricity`,
       html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
         <div style="max-width:560px;margin:0 auto;padding:24px">
-          <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#111827;color:#fff;text-align:center;font-weight:800;font-size:20px">CTC Task</div>
+          <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#1e3a8a;color:#fff;text-align:center;font-weight:800;font-size:20px">Tran Le Electricity</div>
           <div style="padding:24px;background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 16px 16px">
             <p style="margin:0 0 12px">Xin chào,</p>
             <p style="margin:0 0 16px">Mật khẩu đăng nhập mới của bạn là:</p>
             <div style="display:inline-block;padding:12px 16px;background:#f3f4f6;border-radius:12px;font-size:20px;font-weight:800;letter-spacing:1px">${newPassword}</div>
             <p style="margin:16px 0 0">Vui lòng đăng nhập và đổi lại mật khẩu ngay sau khi vào hệ thống.</p>
-            <p style="margin:24px 0 0;color:#6b7280;font-size:13px">Trân trọng,<br/>CTC Task</p>
+            <p style="margin:24px 0 0;color:#6b7280;font-size:13px">Trân trọng,<br/>Tran Le Electricity</p>
           </div>
         </div>
       </div>`,
@@ -67,21 +67,21 @@ export function createMailer(db: DbType) {
     }
     await transporter.sendMail({
       from: smtp.SMTP_FROM, replyTo: smtp.SMTP_FROM, to,
-      subject: 'CTC Task - Link đặt lại mật khẩu',
-      text: `Xin chào,\n\nBạn vừa yêu cầu đặt lại mật khẩu cho tài khoản CTC Task.\n\nMở link này để đặt lại mật khẩu:\n${resetLink}\n\nLink sẽ hết hạn sau 30 phút.\n\nNếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.\n\nTrân trọng,\nCTC Task`,
+      subject: 'Tran Le Tasks - Link đặt lại mật khẩu',
+      text: `Xin chào,\n\nBạn vừa yêu cầu đặt lại mật khẩu cho tài khoản Tran Le Tasks.\n\nMở link này để đặt lại mật khẩu:\n${resetLink}\n\nLink sẽ hết hạn sau 30 phút.\n\nNếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.\n\nTrân trọng,\nTran Le Electricity`,
       html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
         <div style="max-width:560px;margin:0 auto;padding:24px">
-          <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#111827;color:#fff;text-align:center;font-weight:800;font-size:20px">CTC Task</div>
+          <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#1e3a8a;color:#fff;text-align:center;font-weight:800;font-size:20px">Tran Le Electricity</div>
           <div style="padding:24px;background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 16px 16px">
             <p style="margin:0 0 12px">Xin chào,</p>
-            <p style="margin:0 0 16px">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản CTC Task.</p>
+            <p style="margin:0 0 16px">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản Tran Le Tasks.</p>
             <div style="text-align:center;margin:20px 0">
               <a href="${resetLink}" style="display:inline-block;padding:12px 20px;background:#f97316;color:#fff;text-decoration:none;border-radius:12px;font-weight:800">Đặt lại mật khẩu</a>
             </div>
             <div style="padding:12px 14px;background:#f9fafb;border-radius:12px;word-break:break-all;font-size:13px;color:#374151">${resetLink}</div>
             <p style="margin:16px 0 0;color:#b45309;font-weight:700">Link này sẽ hết hạn sau 30 phút.</p>
             <p style="margin:0 0 16px">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
-            <p style="margin:24px 0 0;color:#6b7280;font-size:13px">Trân trọng,<br/>CTC Task</p>
+            <p style="margin:24px 0 0;color:#6b7280;font-size:13px">Trân trọng,<br/>Tran Le Electricity</p>
           </div>
         </div>
       </div>`,

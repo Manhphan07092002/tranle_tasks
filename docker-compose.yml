@@ -45,12 +45,12 @@ services:
 
   mailserver:
     image: analogic/poste.io
-    container_name: ctc_mailserver
-    hostname: mail.ctcdn.vn
+    container_name: tranle_mailserver
+    hostname: mail.tranlecorp.com.vn
     restart: always
     ports:
       - "25:25"
-      - "8080:80"   # Nginx proxy vào cổng 8080 để phục vụ mail.ctcdn.vn
+      - "8080:80"   # Nginx proxy vào cổng 8080 để phục vụ mail.tranlecorp.com.vn
       - "4443:443"  # Cổng SSL dự phòng
       - "110:110"
       - "143:143"

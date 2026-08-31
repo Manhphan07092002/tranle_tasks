@@ -43,8 +43,18 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
     try {
       const saved = localStorage.getItem(historyKey);
       if (saved) {
-        setMessages(JSON.parse(saved));
-        return;
+        let parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed = parsed.map((m: Message) => {
+            if (m.id === 'welcome' || m.text.includes('Bot CTC Tasks') || m.text.includes('CTC Task') || m.text.includes('CTC')) {
+              return { ...m, text: t('aiGreeting') };
+            }
+            return m;
+          });
+          setMessages(parsed);
+          localStorage.setItem(historyKey, JSON.stringify(parsed));
+          return;
+        }
       }
     } catch (e) {}
     
@@ -126,17 +136,22 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
   const getSuggestions = () => {
     switch (location.pathname) {
       case '/':
-        return ["Tóm tắt công việc hôm nay", "Có thông báo nào mới không?"];
+        return ["Tóm tắt công việc hôm nay", "Tính dự toán đầu tư điện mặt trời 5kWp / 10kWp"];
       case '/tasks':
         return ["Tôi có công việc nào quá hạn không?", "Tạo một công việc mới"];
       case '/calendar':
       case '/meetings':
         return ["Hôm nay có cuộc họp nào không?", "Lên lịch một cuộc họp nhanh"];
+      case '/projects':
+      case '/contracts':
+        return ["Tư vấn giải pháp On-Grid / Hybrid", "Các dự án tiêu biểu (Cocotex, Nam Lý, Gio Linh)"];
+      case '/products':
+        return ["Thông số tấm pin AIKO 650Wp N-Type 24.1%", "Biến tần SAJ & Pin lưu trữ Dyness"];
       case '/revenue':
       case '/reports':
         return ["Tổng doanh thu gần đây là bao nhiêu?", "Phân tích các báo cáo"];
       default:
-        return ["Tôi có thể giúp gì cho bạn?", "Tóm tắt thông báo mới"];
+        return ["Trung tâm bảo hành SAJ tại Việt Nam", "Chính sách bảo hành thiết bị Tran Le"];
     }
   };
 
@@ -375,7 +390,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
         }
         const m: any = {
           id: crypto.randomUUID(), title: args.title, description: args.description || '', startTime, endTime,
-          hostId: user?.id || '', participants, meetingLink: `meet.ctctasks.com/${crypto.randomUUID().substring(0,8)}`, status: 'scheduled'
+          hostId: user?.id || '', participants, meetingLink: `meet.tranlecorp.com/${crypto.randomUUID().substring(0,8)}`, status: 'scheduled'
         };
         await saveMeeting(m);
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: '', uiContent: { type: 'meeting', data: m } }]);
@@ -550,7 +565,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
           <div className="bg-white/20 p-1.5 rounded-lg">
             <Bot size={18} />
           </div>
-          <span className="font-bold">Bot CTC Tasks</span>
+          <span className="font-bold">Bot Tran Le AI</span>
         </div>
         <div className="flex items-center gap-2 text-white/80">
           <button 
@@ -558,7 +573,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
               e.stopPropagation(); 
               openConfirm(
                 'Xóa lịch sử trò chuyện',
-                'Toàn bộ lịch sử cuộc trò chuyện với Bot CTC Tasks sẽ bị xóa vĩnh viễn. Bạn có chắc chắn không?',
+                'Toàn bộ lịch sử cuộc trò chuyện với Bot Tran Le AI sẽ bị xóa vĩnh viễn. Bạn có chắc chắn không?',
                 () => {
                   setMessages([{ id: 'welcome', role: 'model', text: t('aiGreeting') }]);
                   chatSessionRef.current = null;

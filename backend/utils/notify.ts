@@ -56,10 +56,10 @@ export const sendNotification = async (
                 await transporter.sendMail({
                   from: smtp.SMTP_FROM,
                   to: user.email,
-                  subject: `CTC Task - ${title}`,
-                  text: `Xin chào ${user.name},\n\n${message}\n\nTruy cập hệ thống: ${portalUrl}\n\nTrân trọng,\nCTC Task`,
+                  subject: `Tran Le Tasks - ${title}`,
+                  text: `Xin chào ${user.name},\n\n${message}\n\nTruy cập hệ thống: ${portalUrl}\n\nTrân trọng,\nTran Le Electricity`,
                   html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px">
-                    <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#111827;color:#fff;text-align:center;font-weight:800;font-size:20px">CTC Task</div>
+                    <div style="padding:18px 20px;border-radius:16px 16px 0 0;background:#1e3a8a;color:#fff;text-align:center;font-weight:800;font-size:20px">Tran Le Electricity</div>
                     <div style="padding:24px;background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 16px 16px">
                       <p style="margin:0 0 16px">Xin chào <strong>${user.name}</strong>,</p>
                       <p style="margin:0 0 16px">${message}</p>

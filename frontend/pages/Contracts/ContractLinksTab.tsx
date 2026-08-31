@@ -399,7 +399,7 @@ export const ContractLinksTab: React.FC<Props> = ({ contracts }) => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wider">Ghi chú (tùy chọn)</label>
-                  <input value={linkDesc} onChange={e => setLinkDesc(e.target.value)} placeholder="VD: Mua thiết bị switch cho HĐ..." className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                  <input value={linkDesc} onChange={e => setLinkDesc(e.target.value)} placeholder="VD: Mua tấm pin AIKO và Inverter SAJ cho HĐ..." className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
               </div>
             </div>
@@ -434,7 +434,7 @@ export const ContractLinksTab: React.FC<Props> = ({ contracts }) => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wider">Ghi chú (tùy chọn)</label>
-                  <input value={linkDesc} onChange={e => setLinkDesc(e.target.value)} placeholder="VD: Mua thiết bị switch cho HĐ..." className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                  <input value={linkDesc} onChange={e => setLinkDesc(e.target.value)} placeholder="VD: Mua tấm pin AIKO và Inverter SAJ cho HĐ..." className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
               </div>
             </div>

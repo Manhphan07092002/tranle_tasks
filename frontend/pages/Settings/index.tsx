@@ -518,8 +518,8 @@ export const SettingsView: React.FC = () => {
         if (mailProvider === 'poste') providerLabel = 'Poste.io';
         else if (mailProvider === 'custom') providerLabel = 'Tùy chỉnh';
 
-        const providerHelpLink = mailProvider === 'poste' ? 'mail.ctcdn.vn' : mailProvider === 'custom' ? 'IT support' : 'webmail.vnptemail.vn';
-        const emailPlaceholder = mailProvider === 'poste' ? 'vd: ten.nhanvien@ctcdn.vn' : mailProvider === 'custom' ? 'vd: ten@domain.com' : 'vd: ten.nhanvien@ctchn.com.vn';
+        const providerHelpLink = mailProvider === 'poste' ? 'mail.tranlecorp.com.vn' : mailProvider === 'custom' ? 'IT support' : 'webmail.tranlecorp.com.vn';
+        const emailPlaceholder = mailProvider === 'poste' ? 'vd: ten.nhanvien@tranlecorp.com.vn' : mailProvider === 'custom' ? 'vd: ten@domain.com' : 'vd: ten.nhanvien@tranlecorp.com.vn';
         const passwordPlaceholder = mailStatus === 'connected' ? '(giữ nguyên nếu không đổi)' : `Nhập mật khẩu email ${providerLabel}...`;
         const helpDescription = mailProvider === 'poste' 
           ? 'Email hộp thư Poste.io của bạn (ví dụ: email được cấp theo tên miền công ty)' 
@@ -712,7 +712,7 @@ export const SettingsView: React.FC = () => {
               <p className="text-xs font-semibold text-blue-700 mb-2">ℹ️ Hướng dẫn lấy mật khẩu Email {providerLabel}</p>
               <ul className="text-xs text-blue-600 space-y-1 list-disc list-inside">
                 <li>Đăng nhập vào <strong>{providerHelpLink}</strong> hoặc liên hệ IT để lấy mật khẩu email.</li>
-                <li>Mật khẩu email {providerLabel} có thể <strong>khác</strong> mật khẩu đăng nhập hệ thống CTC Task.</li>
+                <li>Mật khẩu email {providerLabel} có thể <strong>khác</strong> mật khẩu đăng nhập hệ thống Tran Le Tasks.</li>
                 <li>Nếu quên mật khẩu, liên hệ bộ phận IT hoặc Admin để được cấp lại.</li>
               </ul>
             </div>

@@ -1,6 +1,6 @@
-# 🔍 Phân Tích Toàn Diện Dự Án CTC Task
+# 🔍 Phân Tích Toàn Diện Dự Án Tran Le Tasks
 
-> **Ngày phân tích:** 31/08/2026 (cập nhật lần 3 — Đã loại bỏ hoàn toàn SQLite & PostgreSQL, chuẩn hoá 100% MySQL 8)  
+> **Ngày phân tích:** 31/08/2026 (cập nhật lần 4 — Chuyển đổi toàn diện Tran Le Electricity & MySQL 8)  
 > **Mục đích:** Lưu trữ kiến thức về cấu trúc, kiến trúc, điểm mạnh, vấn đề và hướng cải thiện của dự án — phục vụ tra cứu nhanh, không cần phân tích lại.  
 > **Tham khảo thêm:** [CLAUDE.md](CLAUDE.md) — hướng dẫn coding conventions dành cho AI.
 
@@ -8,7 +8,7 @@
 
 ## 1. Tổng Quan Dự Án
 
-**CTC Task** là nền tảng quản lý công việc & cộng tác nội bộ dành cho doanh nghiệp, được xây dựng theo kiến trúc **Monorepo** (frontend + backend trong cùng 1 repo). Hệ thống phục vụ công ty CTC (ctcdn.vn) với khách hàng chủ yếu là các VNPT tỉnh.
+**Tran Le Tasks** là nền tảng quản lý công việc, dự án & cộng tác nội bộ dành cho doanh nghiệp năng lượng tái tạo, được xây dựng theo kiến trúc **Monorepo** (frontend + backend trong cùng 1 repo). Hệ thống phục vụ Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (Tran Le Electricity - tranlecorp.com).
 
 | Thuộc tính | Giá trị |
 |---|---|
@@ -20,7 +20,7 @@
 | **AI** | Google Gemini API (`@google/genai`) |
 | **Email** | Nodemailer (SMTP) + IMAPFlow (IMAP) + Poste.io (self-hosted) |
 | **Deployment** | Docker (3 services: App + MySQL 8 + Poste.io) + PM2 + Nginx |
-| **Domain** | task.ctcdn.vn / tasks.ctcdn.vn |
+| **Domain** | task.tranlecorp.com.vn / tasks.tranlecorp.com.vn |
 | **Port Backend** | 3500 |
 | **Port Frontend (dev)** | 5173 |
 

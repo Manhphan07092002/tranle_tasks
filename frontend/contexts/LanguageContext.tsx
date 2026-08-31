@@ -87,7 +87,7 @@ const translations = {
     security: 'Security',
     darkMode: 'Dark Mode',
     // AI
-    aiGreeting: "Hello! I'm Bot CTC Tasks, your productivity partner. I'm here to help you organize tasks, stay focused, and get more done. Let's make today productive! How can I help you?",
+    aiGreeting: "Hello! I'm Bot Tran Le AI, your intelligent productivity and energy solutions assistant. I'm here to help you organize tasks, projects, and solar energy solutions for Tran Le Electricity. How can I help you today?",
     askAi: 'Ask AI',
     askAiPlaceholder: 'Ask me anything...',
     aiSummary: 'AI Daily Summary',
@@ -227,7 +227,7 @@ const translations = {
     security: 'Bảo mật',
     darkMode: 'Chế độ tối',
     // AI
-    aiGreeting: "Xin chào! Tôi là Bot CTC Tasks 🤖, trợ lý năng suất của bạn. Tôi ở đây để giúp bạn sắp xếp công việc, tập trung và hoàn thành mục tiêu. Hãy cùng làm việc thật hiệu quả nhé! Tôi có thể giúp gì cho bạn?",
+    aiGreeting: "Xin chào! Tôi là Bot Tran Le AI ⚡, trợ lý thông minh của Tran Le Electricity. Tôi ở đây để hỗ trợ bạn quản lý công việc, theo dõi dự án điện mặt trời, tra cứu thiết bị và vận hành doanh nghiệp hiệu quả. Tôi có thể giúp gì cho bạn hôm nay?",
     askAi: 'Hỏi AI',
     askAiPlaceholder: 'Bạn muốn hỏi gì...',
     aiSummary: 'AI Tóm tắt ngày',

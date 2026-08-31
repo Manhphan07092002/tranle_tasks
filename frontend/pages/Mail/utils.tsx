@@ -78,15 +78,14 @@ export const groupEmailsByDate = (items: { representative: Email, thread: Email[
 export const getSignature = (user: any) => {
   return `<br><br><span style="color: #6b7280; font-family: sans-serif; font-size: 13px;">
 --<br>
-<strong>Thank and Best Regards!</strong><br>
+<strong>Thanks & Best Regards!</strong><br>
 ----------------------------------------------------------------------------------------------------------------------<br>
 <strong>${user?.name || ''}</strong> - ${user?.role || ''} - ${user?.department || ''}<br>
-<strong>Công Ty CP Xây lắp Bưu điện Miền Trung - CTC</strong><br>
-Central VietNam Post and Telecommunication Contruction JSC<br>
-Address: 50B Nguyen Du St. - Hai Chau Dist. - Da Nang City - Vietnam.<br>
-Mobiphone: ${user?.phone || '[Điền SĐT của bạn]'} &nbsp;&nbsp; - &nbsp;&nbsp; 02363.745678	 &nbsp;&nbsp;&nbsp;&nbsp; MST: 0400458940<br>
-<img src="https://ctcdn.vn/Image/logo_rm_bgr.png" alt="CTC Logo" style="height: 80px; margin: 12px 0;" /><br>
-Email: ${user?.email || ''} &nbsp;&nbsp; Website: <a href="https://ctcdn.vn" style="color: #2563eb;">https://ctcdn.vn</a><br>
+<strong>Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (Tran Le Electricity)</strong><br>
+Trụ sở chính: 275-277-279 Diên Hồng, P. Hoà Xuân, Q. Cẩm Lệ, TP. Đà Nẵng<br>
+Trụ sở miền Nam: Số 2 Đường số 27, KDC Vạn Phúc, P. Hiệp Bình, TP.HCM<br>
+Hotline: 0939 792 428 &nbsp;&nbsp; - &nbsp;&nbsp; Phone: ${user?.phone || '0939 792 428'}<br>
+Email: ${user?.email || 'info@tranlecorp.com.vn'} &nbsp;&nbsp; Website: <a href="https://tranlecorp.com/" style="color: #2563eb;">https://tranlecorp.com/</a><br>
 ----------------------------------------------------------------------------------------------------------------------
 </span>`;
 };

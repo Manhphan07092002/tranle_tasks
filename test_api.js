@@ -14,7 +14,7 @@ const TEST_USER = {
 };
 
 async function runTests() {
-  console.log('🚀 Bắt đầu kịch bản kiểm thử API CTC Tasks...\n');
+  console.log('🚀 Bắt đầu kịch bản kiểm thử API Tran Le Tasks...\n');
 
   let token = '';
 

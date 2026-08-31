@@ -166,7 +166,7 @@ export default function AdminRevenueManagement() {
     const ws = utils.json_to_sheet(data);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Doanh Thu");
-    writeFile(wb, "Bao_Cao_Doanh_Thu.xlsx");
+    writeFile(wb, `TranLe_Bao_Cao_Doanh_Thu_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const chartData = useMemo(() => {

@@ -12,10 +12,10 @@ const fmtMoney = (v: number) => v.toLocaleString('vi-VN');
 export const PrintableQuote = forwardRef<HTMLDivElement, PrintableQuoteProps>(({ contract, user }, ref) => {
   const currentDate = new Date();
   
-  // Fake company info, ideally from settings
-  const companyName = "CÔNG TY TNHH CTC";
-  const companyAddress = "Số 123, Đường Mẫu, Phường ABC, TP. XYZ";
-  const companyPhone = "0123.456.789";
+  // Tran Le Electricity company info
+  const companyName = "CÔNG TY CỔ PHẦN TƯ VẤN XÂY DỰNG ĐIỆN TRẦN LÊ";
+  const companyAddress = "275-277-279 Diên Hồng, P. Hoà Xuân, Q. Cẩm Lệ, TP. Đà Nẵng";
+  const companyPhone = "0939 792 428";
 
   return (
     <div ref={ref} className="print-only bg-white text-black p-8 text-[12pt] leading-tight font-serif" style={{ display: 'none' }}>

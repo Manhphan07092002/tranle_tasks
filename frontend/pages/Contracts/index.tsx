@@ -552,7 +552,7 @@ const ContractsPage: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Hop_Dong");
-    XLSX.writeFile(wb, `Danh_Sach_Hop_Dong_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(wb, `TranLe_Hop_Dong_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const handleSaveExportStock = async (contractId: string, updatedProducts: ContractProduct[]) => {

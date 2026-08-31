@@ -59,25 +59,25 @@ export default function DashboardPage({
 
   const randomGreeting = useMemo(() => {
     const greetings = [
-      "Chúc bạn một ngày làm việc tràn đầy năng lượng cùng CTC!",
+      "Chúc bạn một ngày làm việc tràn đầy năng lượng cùng Tran Le Electricity!",
       "Sẵn sàng bứt phá mục tiêu hôm nay chưa?",
-      "CTC chúc bạn một ngày làm việc hiệu quả và thành công!",
+      "Tran Le Electricity chúc bạn một ngày làm việc hiệu quả và thành công!",
       "Hôm nay là một ngày tuyệt vời để hoàn thành những dự án lớn!",
-      "Hãy giữ vững phong độ và gặt hái nhiều thành công cùng CTC nhé!",
+      "Hãy giữ vững phong độ và gặt hái nhiều thành công cùng Tran Le Electricity nhé!",
       "Một tinh thần sảng khoái sẽ mang lại hiệu suất tuyệt vời!",
-      "Cùng CTC tạo nên những đột phá mới trong ngày hôm nay!",
+      "Cùng Tran Le Electricity tạo nên những đột phá mới trong ngày hôm nay!",
       "Chúc bạn giải quyết mọi công việc thật mượt mà và nhanh chóng!",
-      "Khởi động ngày mới với 100% năng lượng nào!",
+      "Khởi động ngày mới với 100% năng lượng sạch nào!",
       "Thành công luôn đến với những ai làm việc chăm chỉ. Cố lên!",
-      "CTC luôn đồng hành cùng bạn trên con đường phát triển!",
+      "Tran Le Electricity luôn đồng hành cùng bạn trên con đường phát triển!",
       "Hãy biến những thách thức hôm nay thành cơ hội tỏa sáng!",
       "Chúc bạn có một ngày ngập tràn ý tưởng sáng tạo!",
       "Đừng quên dành vài phút nghỉ ngơi để nạp lại năng lượng nhé!",
-      "Mỗi nhiệm vụ hoàn thành là một bước tiến gần hơn đến mục tiêu chung của CTC!",
+      "Mỗi nhiệm vụ hoàn thành là một bước tiến gần hơn đến mục tiêu chung của Tran Le Electricity!",
 
       "Có công mài sắt, có ngày nên kim. Cùng cố gắng hôm nay nhé!",
       "Đi một ngày đàng, học một sàng khôn. Mỗi ngày làm việc là một ngày trưởng thành!",
-      "Muốn đi nhanh thì đi một mình, muốn đi xa thì đi cùng nhau. CTC cùng bạn tiến bước!",
+      "Muốn đi nhanh thì đi một mình, muốn đi xa thì đi cùng nhau. Tran Le Electricity cùng bạn tiến bước!",
       "Một cây làm chẳng nên non, ba cây chụm lại nên hòn núi cao. Cùng phối hợp thật tốt hôm nay nhé!",
       "Nước chảy đá mòn. Kiên trì từng chút, thành công sẽ đến!",
       "Lửa thử vàng, gian nan thử sức. Hôm nay là cơ hội để bạn tỏa sáng!",
@@ -88,7 +88,7 @@ export default function DashboardPage({
       "Kiến tha lâu cũng đầy tổ. Từng nhiệm vụ nhỏ sẽ đưa bạn đến thành công lớn!",
       "Học đi đôi với hành. Hôm nay vừa làm, vừa học, vừa tiến bộ nhé!",
       "Việc hôm nay chớ để ngày mai. Cùng bắt tay hoàn thành thật gọn gàng nào!",
-      "Đoàn kết là sức mạnh. Cùng CTC tạo nên một ngày làm việc thật hiệu quả!",
+      "Đoàn kết là sức mạnh. Cùng Tran Le Electricity tạo nên một ngày làm việc thật hiệu quả!",
       "Người có tâm ắt có tầm. Làm việc bằng trách nhiệm, kết quả sẽ xứng đáng!",
 
       "Chúc bạn hôm nay làm đâu chắc đó, xử lý việc nào gọn việc đó!",
@@ -102,7 +102,7 @@ export default function DashboardPage({
       "Hôm nay hãy làm việc bằng cả sự chủ động, trách nhiệm và tinh thần đồng đội!",
       "Chúc bạn luôn có đủ bình tĩnh để xử lý việc khó và đủ năng lượng để hoàn thành việc lớn!",
       "Một ngày hiệu quả không cần quá hoàn hảo, chỉ cần bạn tiến bộ hơn hôm qua!",
-      "Cùng CTC biến kế hoạch hôm nay thành kết quả thực tế!",
+      "Cùng Tran Le Electricity biến kế hoạch hôm nay thành kết quả thực tế!",
       "Chúc bạn luôn tìm thấy niềm vui trong từng nhiệm vụ mình đang làm!",
       "Dù hôm nay có nhiều việc, hãy cứ từng bước hoàn thành thật chắc chắn nhé!",
       "Tinh thần tốt là khởi đầu của một ngày làm việc thành công!",
@@ -110,7 +110,7 @@ export default function DashboardPage({
       "Hãy làm việc bằng sự tận tâm, vì những điều lớn lao luôn bắt đầu từ những việc nhỏ!",
       "Mỗi thử thách hôm nay là một cơ hội để bạn chứng minh năng lực của mình!",
       "Chúc bạn có một ngày thật nhiều cảm hứng, nhiều ý tưởng và nhiều thành công!",
-      "Cùng nhau làm việc hết mình để mỗi ngày tại CTC đều là một ngày đáng nhớ!"
+      "Cùng nhau làm việc hết mình để mỗi ngày tại Tran Le Electricity đều là một ngày đáng nhớ!"
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
   }, []);

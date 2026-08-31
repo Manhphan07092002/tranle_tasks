@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-const DEFAULT_KEY = 'CTC-Task-Secure-Key-123456789012';
+const DEFAULT_KEY = 'TranLe-Task-Secure-Key-123456789';
 const ENCRYPTION_KEY = process.env.MAIL_ENCRYPTION_KEY || DEFAULT_KEY;
 const IV_LENGTH = 16;
 

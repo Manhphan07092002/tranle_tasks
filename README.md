@@ -1,8 +1,8 @@
 
 
-# CTC Task Management & Collaboration Platform
+# Tran Le Tasks — Tran Le Electricity Management & Collaboration Platform
 
-Hệ thống **CTC Task** là một giải pháp quản lý công việc và cộng tác nội bộ toàn diện được xây dựng trên nền tảng web hiện đại. Hệ thống tích hợp nhiều module mạnh mẽ từ quản lý tiến độ, ghi chú, đặt phòng họp, lịch biểu, đến quản lý email nội bộ và Trợ lý ảo AI.
+Hệ thống **Tran Le Tasks** là giải pháp quản trị công việc, dự án năng lượng tái tạo, hợp đồng và cộng tác nội bộ toàn diện cho **Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (Tran Le Electricity)**. Hệ thống tích hợp các module từ quản lý tiến độ, dự án điện mặt trời, kho hàng, hợp đồng, đặt phòng họp, lịch biểu, đến quản lý email nội bộ và Trợ lý ảo AI.
 
 ## ✨ Tính năng nổi bật
 

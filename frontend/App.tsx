@@ -49,7 +49,7 @@ const getNextDate = (dateStr: string, type: RecurrenceType): string => {
   return d.toISOString().split('T')[0];
 };
 
-export default function CTCTaskApp() {
+export default function TranLeTaskApp() {
   const { t } = useLanguage();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { tasks, notes, users, reports, contracts, isLoading: isDataLoading, saveTask, deleteTask, saveNote, deleteNote, saveUser, deleteUser } = useData();
@@ -303,26 +303,36 @@ export default function CTCTaskApp() {
 
   if (isAuthLoading || isDataLoading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-white to-brand-50/30 relative overflow-hidden">
-        <div className="absolute top-[-15%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-gradient-to-br from-brand-300/20 to-rose-200/20 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-gradient-to-tr from-brand-400/15 to-orange-300/15 blur-[100px] pointer-events-none" />
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#F8FAFC] relative overflow-hidden">
+        {/* Ambient background */}
+        <div className="absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-emerald-100/40 blur-[130px] pointer-events-none" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-amber-100/30 blur-[120px] pointer-events-none" />
 
-        {/* Logo + spinner */}
+        {/* Brand Emblem + Spinner */}
         <div className="relative flex items-center justify-center mb-5">
-          <div className="absolute w-16 h-16 rounded-full border-[3px] border-transparent border-t-brand-500 border-r-brand-300 animate-spin" style={{ animationDuration: '1s' }} />
-          <div className="absolute w-20 h-20 rounded-full border-2 border-transparent border-b-brand-200/60 border-l-brand-100/40 animate-spin" style={{ animationDuration: '1.8s', animationDirection: 'reverse' }} />
-          <div className="w-11 h-11 rounded-xl bg-white shadow-lg shadow-brand-100/50 border border-white flex items-center justify-center overflow-hidden">
-            <img src="/logo1.jpg" alt="CTC Task" className="w-full h-full object-cover" />
+          <div 
+            className="absolute w-16 h-16 rounded-full border-[3px] border-transparent border-t-[#16A34A] border-r-emerald-300 animate-spin" 
+            style={{ animationDuration: '0.9s' }} 
+          />
+          <div 
+            className="absolute w-20 h-20 rounded-full border-2 border-transparent border-b-amber-400/50 border-l-amber-200/30 animate-spin" 
+            style={{ animationDuration: '1.6s', animationDirection: 'reverse' }} 
+          />
+          <div className="w-12 h-12 rounded-xl bg-white shadow-md border border-[#E2E8F0] flex items-center justify-center p-2">
+            <img src="/logo-square.png" alt="Tran Le Electricity" className="w-full h-full object-contain" />
           </div>
         </div>
 
-        <h1 className="text-base font-extrabold text-gray-800 tracking-tight mb-0.5">CTC Task</h1>
-        <p className="text-xs text-gray-400 font-medium mb-5">Đang tải dữ liệu...</p>
+        <h1 className="text-base font-bold text-[#0F172A] tracking-tight mb-1">Tran Le Tasks</h1>
+        <p className="text-xs text-[#64748B] font-medium mb-4">Đang tải không gian làm việc...</p>
 
         <div className="flex items-center gap-1.5">
           {[0, 1, 2, 3].map(i => (
-            <span key={i} className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-bounce"
-              style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.8s' }} />
+            <span 
+              key={i} 
+              className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.8s' }} 
+            />
           ))}
         </div>
       </div>

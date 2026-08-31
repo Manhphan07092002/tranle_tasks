@@ -144,9 +144,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileM
   // Update document title
   React.useEffect(() => {
     if (unreadMailCount > 0) {
-      document.title = `(${unreadMailCount}) CTC Tasks`;
+      document.title = `(${unreadMailCount}) Tran Le Tasks`;
     } else {
-      document.title = 'CTC Tasks';
+      document.title = 'Tran Le Tasks';
     }
   }, [unreadMailCount]);
 
@@ -181,13 +181,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileM
         <div className="h-full flex flex-col">
 
           {/* Logo */}
-          <div className="h-20 flex items-center px-6 border-b border-gray-100/80 flex-shrink-0">
-            <img src="/logo.png" alt="CTC Logo" className="h-9 w-auto object-contain mr-3 drop-shadow-sm dark:mix-blend-normal mix-blend-multiply" />
+          <div className="h-20 flex items-center px-5 border-b border-gray-100/80 flex-shrink-0">
+            <img src="/logo-square.png" alt="Tran Le Electricity" className="h-9 w-9 object-contain mr-3 drop-shadow-sm flex-shrink-0" />
             <div>
               <span className="text-base font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-300 tracking-tight block leading-tight">
-                CTC Tasks
+                Tran Le Tasks
               </span>
-              <span className="text-[10px] text-gray-400 font-medium leading-tight block">Hệ thống quản lý</span>
+              <span className="text-[10px] text-gray-500 font-medium leading-tight block">Tran Le Electricity</span>
             </div>
           </div>
 

@@ -63,7 +63,7 @@ const AdminSidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOp
             </div>
             <div>
               <p className="text-white font-black text-lg leading-none">Admin Panel</p>
-              <p className="text-slate-400 text-xs mt-0.5">CTC Task System</p>
+              <p className="text-slate-400 text-xs mt-0.5">Tran Le Tasks System</p>
             </div>
           </div>
           <button

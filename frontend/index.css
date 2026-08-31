@@ -6,21 +6,40 @@
 @source "./";
 
 @theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
+  /* Tran Le Energy Green (Primary) */
+  --color-brand-50: #F0FDF4;
+  --color-brand-100: #DCFCE7;
+  --color-brand-200: #BBF7D0;
+  --color-brand-300: #86EFAC;
+  --color-brand-400: #4ADE80;
+  --color-brand-500: #22C55E;
+  --color-brand-600: #16A34A;
+  --color-brand-700: #15803D;
+  --color-brand-800: #166534;
+  --color-brand-900: #14532D;
 
-  --color-success-50: #f0fdf4;
-  --color-success-100: #dcfce7;
-  --color-success-500: #22c55e;
-  --color-success-600: #16a34a;
+  /* Tran Le Solar / Sun Gold (Secondary Accent) */
+  --color-solar-50: #FFFBEB;
+  --color-solar-100: #FEF3C7;
+  --color-solar-200: #FDE68A;
+  --color-solar-300: #FCD34D;
+  --color-solar-400: #FBBF24;
+  --color-solar-500: #F59E0B;
+  --color-solar-600: #D97706;
+  --color-solar-700: #B45309;
+
+  /* Dark Navy */
+  --color-dark-950: #020617;
+  --color-dark-900: #0F172A;
+  --color-dark-800: #1E293B;
+  --color-dark-700: #334155;
+  --color-dark-600: #475569;
+  --color-dark-500: #64748B;
+
+  --color-success-50: #F0FDF4;
+  --color-success-100: #DCFCE7;
+  --color-success-500: #22C55E;
+  --color-success-600: #16A34A;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   
@@ -31,9 +50,55 @@
   }
 }
 
-
-
 :root {
+  /* Brand */
+  --brand-primary: #16A34A;
+  --brand-primary-hover: #15803D;
+  --brand-primary-active: #166534;
+  --brand-primary-soft: #F0FDF4;
+
+  --brand-secondary: #F59E0B;
+  --brand-secondary-hover: #D97706;
+  --brand-secondary-soft: #FFFBEB;
+
+  /* Text */
+  --text-heading: #0F172A;
+  --text-body: #334155;
+  --text-muted: #64748B;
+  --text-inverse: #FFFFFF;
+
+  /* Surface */
+  --surface: #FFFFFF;
+  --surface-soft: #F8FAFC;
+  --surface-muted: #F1F5F9;
+  --surface-dark: #0F172A;
+
+  /* Border */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* Status */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #0EA5E9;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
+
+  /* Layout */
+  --container-max: 1280px;
+  --container-padding: 24px;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -42,13 +107,15 @@
 
 body {
   min-height: 100vh;
-  background-color: #fcfaf8;
+  background-color: #f8fafc;
   background-image: 
-    radial-gradient(at 0% 0%, hsla(210,100%,74%,0.15) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, hsla(190,100%,86%,0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(210,100%,74%,0.2) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, hsla(142,76%,36%,0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, hsla(38,92%,50%,0.07) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(142,76%,36%,0.06) 0px, transparent 50%);
   background-attachment: fixed;
   background-repeat: no-repeat;
+  color: #334155;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 #root {

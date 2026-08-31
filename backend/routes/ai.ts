@@ -24,10 +24,10 @@ async function getAiConfig(db: any): Promise<{ provider: string; keys: string[] 
     const providers = ['gemini', 'groq', 'deepseek', 'openrouter', 'openai'];
     const keysMap: Record<string, string[]> = {};
     for (const p of providers) {
-      const row = await db.get('SELECT value FROM system_config WHERE key = ?', [`${p}_api_keys`]);
+      const row = await db.get('SELECT `value` FROM system_config WHERE `key` = ?', [`${p}_api_keys`]);
       keysMap[p] = row?.value ? JSON.parse(row.value) : [];
     }
-    const providerRow = await db.get("SELECT value FROM system_config WHERE key = 'ai_provider'");
+    const providerRow = await db.get("SELECT `value` FROM system_config WHERE `key` = 'ai_provider'");
     const provider = providerRow?.value || 'gemini';
     const keys = (keysMap[provider] || []).filter((k: string) => k.trim().length > 0);
     _cachedProvider = provider;
@@ -116,7 +116,7 @@ async function withRotation<T>(db: any, operation: (apiKey: string, provider: st
   throw new Error('All AI API keys exhausted or rate limited.');
 }
 
-const BOT_SYSTEM_INSTRUCTION = `Bạn là "Bot CTC Tasks", trợ lý AI đắc lực, tinh tế và vô cùng thông minh, được phát triển nội bộ cho hệ thống quản lý công việc của công ty CTC.
+const BOT_SYSTEM_INSTRUCTION = `Bạn là "Bot Tran Le AI", trợ lý AI đắc lực, tinh tế và vô cùng thông minh, được phát triển nội bộ cho hệ thống quản lý công việc và năng lượng của Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (Tran Le Electricity).
 Bạn giao tiếp bằng Tiếng Việt với phong thái chuyên nghiệp, nhiệt tình, luôn đưa ra giải pháp (Solution-oriented) thay vì chỉ báo cáo.
 
 QUY TẮC HOẠT ĐỘNG CỐT LÕI (TUYỆT ĐỐI TUÂN THỦ):
@@ -129,10 +129,10 @@ QUY TẮC HOẠT ĐỘNG CỐT LÕI (TUYỆT ĐỐI TUÂN THỦ):
 5. ĐỊNH DẠNG TIN NHẮN: Luôn trình bày trực quan bằng Markdown (bullet points, in đậm từ khóa quan trọng) để tối ưu trải nghiệm đọc.
 6. THỜI GIAN THỰC: Luôn tham khảo thời gian thực (Giờ/Ngày) được cung cấp trong ngữ cảnh để phản hồi mang tính thời sự (Ví dụ: "Hiện tại đã 16:00, bạn nhớ nộp báo cáo nhé!").
 
-Hãy mang lại năng lượng tích cực và sự hiệu quả tối đa cho mọi nhân sự của CTC!
+Hãy mang lại năng lượng tích cực và sự hiệu quả tối đa cho mọi nhân sự của Tran Le Electricity!
 
 =============================================
-DƯỚI ĐÂY LÀ KIẾN THỨC NỘI BỘ VỀ CÔNG TY CTC MÀ BẠN CẦN NẮM ĐỂ TRẢ LỜI CÁC CÂU HỎI VÀ TƯ VẤN:
+DƯỚI ĐÂY LÀ KIẾN THỨC NỘI BỘ VỀ CÔNG TY TRAN LE ELECTRICITY MÀ BẠN CẦN NẮM ĐỂ TRẢ LỜI CÁC CÂU HỎI VÀ TƯ VẤN:
 ${CTC_KNOWLEDGE}
 =============================================`;
 
@@ -196,7 +196,7 @@ export function aiRoutes(db: any) {
         const { url, model } = getOpenAIProviderConfig(provider);
         const r = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://ctctask.vn', 'X-Title': 'CTC Task' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://tranlecorp.com', 'X-Title': 'Tran Le Electricity' },
           body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
         });
         if (!r.ok) {
@@ -256,7 +256,7 @@ export function aiRoutes(db: any) {
           return parseJSON(response.text || '[]') || [];
         } else {
           const { url, model } = getOpenAIProviderConfig(provider);
-          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://ctctask.vn', 'X-Title': 'CTC Task' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `Generate a JSON array of 3-5 subtask strings for task: "${taskTitle}". Return ONLY the JSON array.` }] }) });
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://tranlecorp.com', 'X-Title': 'Tran Le Electricity' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `Generate a JSON array of 3-5 subtask strings for task: "${taskTitle}". Return ONLY the JSON array.` }] }) });
           const data = await r.json() as any;
           const parsed = parseJSON(data.choices?.[0]?.message?.content || '[]');
           return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.subtasks) ? parsed.subtasks : []);
@@ -282,7 +282,7 @@ export function aiRoutes(db: any) {
           return parseJSON(response.text || 'null');
         } else {
           const { url, model } = getOpenAIProviderConfig(provider);
-          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://ctctask.vn', 'X-Title': 'CTC Task' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `For task "${taskTitle}", return JSON with "description" (string) and "subtasks" (array of strings). Return ONLY JSON.` }] }) });
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://tranlecorp.com', 'X-Title': 'Tran Le Electricity' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `For task "${taskTitle}", return JSON with "description" (string) and "subtasks" (array of strings). Return ONLY JSON.` }] }) });
           const data = await r.json() as any;
           return parseJSON(data.choices?.[0]?.message?.content || 'null');
         }
@@ -307,7 +307,7 @@ export function aiRoutes(db: any) {
           return parseJSON(response.text || '[]') || [];
         } else {
           const { url, model } = getOpenAIProviderConfig(provider);
-          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://ctctask.vn', 'X-Title': 'CTC Task' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `Goal: "${goal}". Return JSON array of 3-6 tasks, each with title, description, priority (High/Medium/Low). Return ONLY the JSON array.` }] }) });
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://tranlecorp.com', 'X-Title': 'Tran Le Electricity' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: `Goal: "${goal}". Return JSON array of 3-6 tasks, each with title, description, priority (High/Medium/Low). Return ONLY the JSON array.` }] }) });
           const data = await r.json() as any;
           const parsed = parseJSON(data.choices?.[0]?.message?.content || '[]');
           return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.tasks) ? parsed.tasks : []);
@@ -354,7 +354,7 @@ export function aiRoutes(db: any) {
           ];
           const r = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://ctctask.vn', 'X-Title': 'CTC Task' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'HTTP-Referer': 'https://tranlecorp.com', 'X-Title': 'Tran Le Electricity' },
             body: JSON.stringify({ model, messages, tools: OPENAI_TOOLS, tool_choice: 'auto' })
           });
           if (!r.ok) {

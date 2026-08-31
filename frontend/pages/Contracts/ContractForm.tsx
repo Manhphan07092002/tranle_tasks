@@ -617,7 +617,7 @@ export const ContractForm: React.FC<ContractFormProps> = ({
               list="contract-number-suggestions"
               value={form.contractNumber} 
               onChange={e => setForm((f: any) => ({...f, contractNumber: e.target.value}))} 
-              placeholder="VD: HD 02-2026/VTKH-CTC"
+              placeholder="VD: HD 02-2026/TL-SOLAR"
               className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50"
             />
             <datalist id="contract-number-suggestions">
@@ -632,7 +632,7 @@ export const ContractForm: React.FC<ContractFormProps> = ({
               list="client-suggestions"
               value={form.contractType === 'input' ? form.supplierName : form.clientName} 
               onChange={e => form.contractType === 'input' ? setForm((f: any) => ({...f, supplierName: e.target.value, clientName: e.target.value})) : setForm((f: any) => ({...f, clientName: e.target.value}))} 
-              placeholder={form.contractType === 'input' ? 'VD: Công ty ABC' : 'VD: Viễn thông Khánh Hòa'}
+              placeholder={form.contractType === 'input' ? 'VD: Công ty TNHH AIKO Solar' : 'VD: Công ty TNHH Cocotex'}
               className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50"
             />
             <datalist id="client-suggestions">
@@ -654,7 +654,7 @@ export const ContractForm: React.FC<ContractFormProps> = ({
               list="contract-name-suggestions"
               value={form.contractName} 
               onChange={e => setForm((f: any) => ({...f, contractName: e.target.value}))} 
-              placeholder="VD: Cung cấp thiết bị mạng"
+              placeholder="VD: Cung cấp và lắp đặt hệ thống điện mặt trời 100kWp"
               className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50"
             />
             <datalist id="contract-name-suggestions">
