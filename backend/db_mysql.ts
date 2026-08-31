@@ -409,107 +409,536 @@ export async function initDbMysql(): Promise<MysqlDb> {
 }
 
 async function seedIfEmpty(db: MysqlDb) {
-  // Patch existing system roles to ensure all permissions are included
-  const rolePatches: { name: string; permissions: string[] }[] = [
-    { name: 'Admin', permissions: ['admin_panel', 'manage_users', 'manage_meetings', 'view_all_tasks', 'manage_dept_tasks', 'view_own_tasks', 'view_all_reports', 'approve_dept_reports', 'director_feedback', 'create_report', 'view_dept_users', 'join_meetings', 'create_revenue_report', 'approve_dept_revenue', 'approve_all_revenue', 'manage_warehouse'] },
-    { name: 'Director', permissions: ['view_all_reports', 'director_feedback', 'view_all_tasks', 'manage_meetings', 'join_meetings', 'approve_all_revenue', 'manage_warehouse'] },
-    { name: 'Manager', permissions: ['manage_dept_tasks', 'approve_dept_reports', 'view_dept_users', 'manage_meetings', 'join_meetings', 'create_report', 'create_revenue_report', 'approve_dept_revenue', 'manage_warehouse'] },
-    { name: 'Employee', permissions: ['view_own_tasks', 'create_report', 'join_meetings', 'create_revenue_report'] },
+  const now = new Date().toISOString();
+  const todayStr = now.split('T')[0];
+
+  // ── 1. System Config (Company Profile & Design Tokens) ─────────────────────
+  const COMPANY_CONFIGS: [string, string][] = [
+    ['company_name', 'Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê'],
+    ['brand_name', 'Tran Le Electricity'],
+    ['company_website', 'https://tranlecorp.com/'],
+    ['company_email', 'info@tranlecorp.com.vn'],
+    ['company_hotline', '0939 792 428'],
+    ['company_founded', '2015'],
+    ['company_anniversary', '25/11/2015 – 25/11/2025 (Kỷ niệm 10 năm thành lập)'],
+    ['company_industry', 'Năng lượng tái tạo, điện mặt trời và các giải pháp năng lượng'],
+    ['company_mission', 'Mang năng lượng sạch đến mọi nhà.'],
+    ['company_vision', 'Dẫn đầu thị trường năng lượng tái tạo.'],
+    ['company_core_values', 'Uy tín – Chất lượng – Bền vững.'],
+    ['company_headquarter', '275-277-279 Diên Hồng, phường Hoà Xuân, Quận Cẩm Lệ, TP. Đà Nẵng, Việt Nam'],
+    ['company_southern_office', 'Số 2 Đường số 27, Khu Dân Cư Vạn Phúc, Phường Hiệp Bình, TP.HCM'],
+    ['company_warehouse_hanoi', 'Kho Cầu Nhật Tân, Xã Vân Nội, Huyện Đông Anh, TP. Hà Nội'],
+    ['company_warehouse_danang_1', 'Kho 1: 275–279 Diên Hồng, Phường Hoà Xuân, Quận Cẩm Lệ, TP. Đà Nẵng'],
+    ['company_warehouse_danang_2', 'Kho 2: Đường Võ An Ninh – Phan Triêm, Phường Hoà Xuân, Quận Cẩm Lệ, TP. Đà Nẵng'],
+    ['company_warehouse_hcm', 'Kho 1: 02 Nguyễn Ảnh Thủ, Phường Trung Mỹ Tây, Quận 12, TP.HCM'],
+    ['company_warehouse_vungtau', 'Kho 2: Phú Mỹ, Thị xã Phú Mỹ, Tỉnh Bà Rịa – Vũng Tàu'],
+    ['saj_partnership_date', '08/03/2026'],
+    ['saj_service_center', 'Trung Tâm Dịch Vụ & Bảo Hành Ủy Quyền SAJ tại Việt Nam'],
+    ['brand_primary_color', '#16A34A'],
+    ['brand_secondary_color', '#F59E0B'],
+    ['brand_dark_color', '#0F172A'],
   ];
-  for (const patch of rolePatches) {
-    const existing = await db.get('SELECT permissions FROM roles WHERE name = ? AND isSystem = 1', [patch.name]);
-    if (existing) {
-      let perms: string[] = [];
-      try { perms = JSON.parse(existing.permissions || '[]'); } catch { perms = []; }
-      let changed = false;
-      for (const p of patch.permissions) {
-        if (!perms.includes(p)) { perms.push(p); changed = true; }
-      }
-      if (changed) {
-        await db.run('UPDATE roles SET permissions = ? WHERE name = ? AND isSystem = 1', [JSON.stringify(perms), patch.name]);
-      }
+
+  for (const [key, value] of COMPANY_CONFIGS) {
+    await db.run(
+      'INSERT INTO system_config (`key`, `value`) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+      [key, value]
+    );
+  }
+
+  // ── 2. Roles (Design System Color Tokens) ──────────────────────────────────
+  const INITIAL_ROLES = [
+    {
+      id: 'role-admin',
+      name: 'Admin',
+      description: 'Toàn quyền quản trị hệ thống Tran Le Electricity.',
+      color: '#ef4444',
+      permissions: JSON.stringify([
+        'admin_panel', 'manage_users', 'manage_meetings', 'view_all_tasks',
+        'manage_dept_tasks', 'view_own_tasks', 'view_all_reports', 'approve_dept_reports',
+        'director_feedback', 'create_report', 'view_dept_users', 'join_meetings',
+        'create_revenue_report', 'approve_dept_revenue', 'approve_all_revenue', 'manage_warehouse'
+      ]),
+      isSystem: 1
+    },
+    {
+      id: 'role-director',
+      name: 'Director',
+      description: 'Ban Giám đốc — Phê duyệt dự án điện mặt trời, kế hoạch tài chính và chiến lược phát triển.',
+      color: '#0f172a', // Design System Dark / Navy
+      permissions: JSON.stringify([
+        'view_all_reports', 'director_feedback', 'view_all_tasks', 'manage_meetings',
+        'join_meetings', 'approve_all_revenue', 'manage_warehouse'
+      ]),
+      isSystem: 1
+    },
+    {
+      id: 'role-manager',
+      name: 'Manager',
+      description: 'Quản lý khối kỹ thuật/phòng ban, điều phối dự án EPC/O&M, phân công nhiệm vụ và duyệt báo cáo.',
+      color: '#16a34a', // Design System Primary Energy Green
+      permissions: JSON.stringify([
+        'manage_dept_tasks', 'approve_dept_reports', 'view_dept_users', 'manage_meetings',
+        'join_meetings', 'create_report', 'create_revenue_report', 'approve_dept_revenue', 'manage_warehouse'
+      ]),
+      isSystem: 1
+    },
+    {
+      id: 'role-employee',
+      name: 'Employee',
+      description: 'Kỹ sư & nhân viên thực thi dự án, tư vấn thiết kế, thi công lắp đặt, O&M và báo cáo tiến độ.',
+      color: '#f59e0b', // Design System Solar Gold
+      permissions: JSON.stringify([
+        'view_own_tasks', 'create_report', 'join_meetings', 'create_revenue_report'
+      ]),
+      isSystem: 1
+    },
+  ];
+
+  for (const r of INITIAL_ROLES) {
+    const existing = await db.get('SELECT id FROM roles WHERE name = ?', [r.name]);
+    if (!existing) {
+      await db.run(
+        'INSERT INTO roles (id, name, description, color, permissions, isSystem) VALUES (?, ?, ?, ?, ?, ?)',
+        [r.id, r.name, r.description, r.color, r.permissions, r.isSystem]
+      );
+    } else {
+      await db.run(
+        'UPDATE roles SET description = ?, color = ?, permissions = ? WHERE name = ?',
+        [r.description, r.color, r.permissions, r.name]
+      );
     }
   }
 
-  // Seed Roles
-  const roleCount = await db.get('SELECT COUNT(*) as count FROM roles');
-  if (roleCount && roleCount.count === 0) {
-    const INITIAL_ROLES = [
-      { id: 'role-admin', name: 'Admin', description: 'Toàn quyền hệ thống.', color: '#ef4444', permissions: JSON.stringify(['admin_panel', 'manage_users', 'manage_meetings', 'view_all_tasks', 'manage_dept_tasks', 'view_own_tasks', 'view_all_reports', 'approve_dept_reports', 'director_feedback', 'create_report', 'view_dept_users', 'join_meetings', 'create_revenue_report', 'approve_dept_revenue', 'approve_all_revenue', 'manage_warehouse']), isSystem: 1 },
-      { id: 'role-director', name: 'Director', description: 'Xem toàn bộ báo cáo, cung cấp phản hồi Giám đốc.', color: '#8b5cf6', permissions: JSON.stringify(['view_all_reports', 'director_feedback', 'view_all_tasks', 'manage_meetings', 'join_meetings', 'approve_all_revenue', 'manage_warehouse']), isSystem: 1 },
-      { id: 'role-manager', name: 'Manager', description: 'Quản lý nhân viên trong phòng ban, giao việc, duyệt báo cáo phòng ban và doanh thu.', color: '#3b82f6', permissions: JSON.stringify(['manage_dept_tasks', 'approve_dept_reports', 'view_dept_users', 'manage_meetings', 'join_meetings', 'create_report', 'create_revenue_report', 'approve_dept_revenue', 'manage_warehouse']), isSystem: 1 },
-      { id: 'role-employee', name: 'Employee', description: 'Xem và thực hiện công việc được giao, tạo báo cáo tuần và doanh thu.', color: '#10b981', permissions: JSON.stringify(['view_own_tasks', 'create_report', 'join_meetings', 'create_revenue_report']), isSystem: 1 },
-    ];
-    for (const r of INITIAL_ROLES) {
-      await db.run('INSERT INTO roles (id, name, description, color, permissions, isSystem) VALUES (?, ?, ?, ?, ?, ?)', [r.id, r.name, r.description, r.color, r.permissions, r.isSystem]);
+  // ── 3. Departments (Tran Le Organizational Structure) ──────────────────────
+  const TRANLE_DEPTS = [
+    { id: 'dept-board', name: 'Ban Lãnh Đạo', description: 'Hội đồng quản trị & Ban Tổng Giám đốc định hướng chiến lược năng lượng tái tạo.', color: '#0f172a' },
+    { id: 'dept-epc', name: 'Khối Tổng Thầu EPC & Thi Công', description: 'Khảo sát, thiết kế kỹ thuật, mua sắm và thi công lắp đặt dự án điện mặt trời.', color: '#16a34a' },
+    { id: 'dept-om', name: 'Trung Tâm Dịch Vụ & Bảo Hành O&M (SAJ Center)', description: 'Vận hành, bảo trì O&M 24/7 và Trung tâm Dịch vụ Bảo hành ủy quyền SAJ tại Việt Nam.', color: '#0ea5e9' },
+    { id: 'dept-sales', name: 'Phòng Kinh Doanh & Phân Phối Thiết Bị', description: 'Kinh doanh giải pháp điện mặt trời (Residential, Commercial, Utility) và phân phối thiết bị chính hãng.', color: '#f59e0b' },
+    { id: 'dept-design', name: 'Phòng Tư Vấn & Thiết Kế Kỹ Thuật', description: 'Khảo sát hiện trạng, mô phỏng PVSyst/AutoCAD và tối ưu hóa giải pháp kỹ thuật.', color: '#8b5cf6' },
+    { id: 'dept-finance', name: 'Phòng Kế Toán & Tài Chính', description: 'Quản lý hợp đồng EPC, thanh quyết toán, dòng tiền và báo cáo doanh thu tài chính.', color: '#14b8a6' },
+    { id: 'dept-hr', name: 'Phòng Hành Chính & Nhân Sự', description: 'Quản trị nguồn nhân lực, phát triển văn hóa doanh nghiệp xanh và hành chính văn phòng.', color: '#ec4899' },
+    // Compatibility aliases
+    { id: 'dept-product', name: 'Product', description: 'Quản lý danh mục sản phẩm thiết bị năng lượng mặt trời.', color: '#16a34a' },
+    { id: 'dept-board-en', name: 'Board', description: 'Ban Giám đốc & Hội đồng quản trị.', color: '#0f172a' },
+    { id: 'dept-marketing', name: 'Marketing', description: 'Tiếp thị và truyền thông thương hiệu Tran Le Electricity.', color: '#f59e0b' },
+    { id: 'dept-sales-en', name: 'Sales', description: 'Kinh doanh và phát triển thị trường năng lượng sạch.', color: '#16a34a' },
+    { id: 'dept-it', name: 'IT', description: 'Hạ tầng số, nền tảng giám sát IoT Solar và hệ thống nội bộ.', color: '#8b5cf6' },
+    { id: 'dept-hr-en', name: 'HR', description: 'Nhân sự và tuyển dụng.', color: '#ec4899' },
+    { id: 'dept-finance-en', name: 'Finance', description: 'Tài chính và kế toán.', color: '#14b8a6' },
+  ];
+
+  for (const d of TRANLE_DEPTS) {
+    const existing = await db.get('SELECT id FROM departments WHERE name = ?', [d.name]);
+    if (!existing) {
+      await db.run(
+        'INSERT INTO departments (id, name, description, color) VALUES (?, ?, ?, ?)',
+        [d.id, d.name, d.description, d.color]
+      );
+    } else {
+      await db.run(
+        'UPDATE departments SET description = ?, color = ? WHERE name = ?',
+        [d.description, d.color, d.name]
+      );
     }
   }
 
-  // Seed Departments
-  const deptCount = await db.get('SELECT COUNT(*) as count FROM departments');
-  if (deptCount && deptCount.count === 0) {
-    const INITIAL_DEPTS = [
-      { id: 'dept-board', name: 'Board', description: 'Hội đồng quản trị và ban lãnh đạo công ty.', color: '#ef4444' },
-      { id: 'dept-product', name: 'Product', description: 'Phát triển và quản lý sản phẩm.', color: '#3b82f6' },
-      { id: 'dept-marketing', name: 'Marketing', description: 'Tiếp thị và truyền thông thương hiệu.', color: '#f59e0b' },
-      { id: 'dept-sales', name: 'Sales', description: 'Kiến tạo doanh thu và phát triển thị trường.', color: '#10b981' },
-      { id: 'dept-it', name: 'IT', description: 'Hạ tầng công nghệ và hệ thống nội bộ.', color: '#8b5cf6' },
-      { id: 'dept-hr', name: 'HR', description: 'Nhân sự, tuyển dụng và phát triển văn hoá doanh nghiệp.', color: '#ec4899' },
-      { id: 'dept-finance', name: 'Finance', description: 'Kế toán, tài chính và kiểm soát ngân sách.', color: '#14b8a6' },
-    ];
-    for (const d of INITIAL_DEPTS) {
-      await db.run('INSERT INTO departments (id, name, description, color) VALUES (?, ?, ?, ?)', [d.id, d.name, d.description, d.color]);
-    }
-  }
-
-  // Seed Users
+  // ── 4. Users ───────────────────────────────────────────────────────────────
   const userCount = await db.get('SELECT COUNT(*) as count FROM users');
   if (userCount && userCount.count === 0) {
     const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'TranLe@dmin2026!';
     const INITIAL_USERS = [
-      { id: 'u1', name: 'Admin', email: 'admin@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Admin', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u1', phone: '0939792428', dob: '1990-01-01', hometown: 'Đà Nẵng', bio: 'Quản trị viên hệ thống Tran Le Electricity.' },
-      { id: 'u2', name: 'Nguyễn Văn Đạt', email: 'vandat@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Manager', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u2', phone: '0987654321', dob: '1985-06-15', hometown: 'Đà Nẵng', bio: 'Quản lý dự án & kỹ thuật điện mặt trời.' },
-      { id: 'u3', name: 'Phan Xuân Mạnh', email: 'xuanmanh@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Employee', department: 'Product', avatar: 'https://i.pravatar.cc/150?u=u3', phone: '0123456789', dob: '2002-09-07', hometown: 'Đà Nẵng', bio: 'Kỹ sư giải pháp năng lượng tái tạo.' },
-      { id: 'u4', name: 'Nguyễn Văn Duy', email: 'vanduy@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Director', department: 'Board', avatar: 'https://i.pravatar.cc/150?u=u4', phone: '0939792428', dob: '1980-02-20', hometown: 'Đà Nẵng', bio: 'Ban Giám đốc Tran Le Electricity.' },
+      { id: 'u1', name: 'Admin Tran Le', email: 'admin@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Admin', department: 'Ban Lãnh Đạo', avatar: 'https://i.pravatar.cc/150?u=u1', phone: '0939792428', dob: '1990-01-01', hometown: 'Đà Nẵng', bio: 'Quản trị viên hệ thống Tran Le Electricity.' },
+      { id: 'u2', name: 'Nguyễn Văn Đạt', email: 'vandat@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Manager', department: 'Khối Tổng Thầu EPC & Thi Công', avatar: 'https://i.pravatar.cc/150?u=u2', phone: '0987654321', dob: '1985-06-15', hometown: 'Đà Nẵng', bio: 'Chỉ huy trưởng thi công & Quản lý dự án EPC Điện mặt trời.' },
+      { id: 'u3', name: 'Phan Xuân Mạnh', email: 'xuanmanh@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Employee', department: 'Khối Tổng Thầu EPC & Thi Công', avatar: 'https://i.pravatar.cc/150?u=u3', phone: '0123456789', dob: '2002-09-07', hometown: 'Đà Nẵng', bio: 'Kỹ sư giải pháp năng lượng tái tạo & O&M Solar.' },
+      { id: 'u4', name: 'Nguyễn Văn Duy', email: 'vanduy@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Director', department: 'Ban Lãnh Đạo', avatar: 'https://i.pravatar.cc/150?u=u4', phone: '0939792428', dob: '1980-02-20', hometown: 'Đà Nẵng', bio: 'Ban Giám đốc Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê.' },
     ];
     console.log(`🔑 Seed users created. Default password: ${adminPwd.slice(0, 3)}${'*'.repeat(Math.max(adminPwd.length - 3, 0))}`);
     for (const u of INITIAL_USERS) {
-      await db.run('INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [u.id, u.name, u.email, u.password, u.role, u.department, u.avatar, u.phone, u.dob, u.hometown, u.bio]);
+      await db.run(
+        'INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [u.id, u.name, u.email, u.password, u.role, u.department, u.avatar, u.phone, u.dob, u.hometown, u.bio]
+      );
     }
   }
 
-  // Seed Tasks
+  // ── 5. Products (Catalog from Ho_so_tong_hop_Tran_Le_Electricity.md) ───────
+  const prodCount = await db.get('SELECT COUNT(*) as count FROM products');
+  if (prodCount && prodCount.count === 0) {
+    const INITIAL_PRODUCTS = [
+      // Tấm pin Solar
+      { id: 'prod-pin-01', name: 'Tấm pin AIKO 650Wp N-Type ABC Dual-Glass Stellar 1N+', category: 'Tấm pin', unit: 'Tấm', origin: 'AIKO', defaultPrice: 2850000, importPrice: 2250000, salePrice: 2850000, importCode: 'NK-PIN-0001', importQuantity: 1000, remainingQuantity: 850, invoiceDate: '2026-01-15' },
+      { id: 'prod-pin-02', name: 'Tấm pin Jinko Solar Tiger Pro 585Wp N-Type TOPCon', category: 'Tấm pin', unit: 'Tấm', origin: 'Jinko Solar', defaultPrice: 2490000, importPrice: 1950000, salePrice: 2490000, importCode: 'NK-PIN-0002', importQuantity: 800, remainingQuantity: 620, invoiceDate: '2026-01-20' },
+      { id: 'prod-pin-03', name: 'Tấm pin Canadian Solar HiKu7 660Wp Mono PERC', category: 'Tấm pin', unit: 'Tấm', origin: 'Canadian Solar', defaultPrice: 2750000, importPrice: 2150000, salePrice: 2750000, importCode: 'NK-PIN-0003', importQuantity: 600, remainingQuantity: 480, invoiceDate: '2026-02-05' },
+      { id: 'prod-pin-04', name: 'Tấm pin JA Solar DeepBlue 3.0 550Wp', category: 'Tấm pin', unit: 'Tấm', origin: 'JA Solar', defaultPrice: 2320000, importPrice: 1800000, salePrice: 2320000, importCode: 'NK-PIN-0004', importQuantity: 500, remainingQuantity: 390, invoiceDate: '2026-02-12' },
+      { id: 'prod-pin-05', name: 'Tấm pin LONGi Hi-MO 6 Explorer 580Wp', category: 'Tấm pin', unit: 'Tấm', origin: 'LONGi', defaultPrice: 2450000, importPrice: 1920000, salePrice: 2450000, importCode: 'NK-PIN-0005', importQuantity: 400, remainingQuantity: 310, invoiceDate: '2026-02-18' },
+      // Biến tần Inverters
+      { id: 'prod-inv-01', name: 'Biến tần hòa lưới SAJ R5-5K-S2 (1 pha 5kW)', category: 'Biến tần', unit: 'Bộ', origin: 'SAJ', defaultPrice: 14500000, importPrice: 11200000, salePrice: 14500000, importCode: 'NK-INV-0001', importQuantity: 50, remainingQuantity: 38, invoiceDate: '2026-02-01' },
+      { id: 'prod-inv-02', name: 'Biến tần hòa lưới SAJ R6-10K-T2 (3 pha 10kW)', category: 'Biến tần', unit: 'Bộ', origin: 'SAJ', defaultPrice: 23900000, importPrice: 18500000, salePrice: 23900000, importCode: 'NK-INV-0002', importQuantity: 40, remainingQuantity: 28, invoiceDate: '2026-02-01' },
+      { id: 'prod-inv-03', name: 'Biến tần Hybrid lưu trữ SAJ H2-10K-T2 (3 pha 10kW)', category: 'Biến tần', unit: 'Bộ', origin: 'SAJ', defaultPrice: 36000000, importPrice: 28500000, salePrice: 36000000, importCode: 'NK-INV-0003', importQuantity: 30, remainingQuantity: 22, invoiceDate: '2026-02-10' },
+      { id: 'prod-inv-04', name: 'Biến tần công nghiệp SAJ C6-100K-HV (3 pha 100kW)', category: 'Biến tần', unit: 'Bộ', origin: 'SAJ', defaultPrice: 119000000, importPrice: 96000000, salePrice: 119000000, importCode: 'NK-INV-0004', importQuantity: 20, remainingQuantity: 14, invoiceDate: '2026-02-15' },
+      { id: 'prod-inv-05', name: 'Biến tần công nghiệp Huawei SUN2000-100KTL-M2 (3 pha 100kW)', category: 'Biến tần', unit: 'Bộ', origin: 'Huawei', defaultPrice: 132000000, importPrice: 108000000, salePrice: 132000000, importCode: 'NK-INV-0005', importQuantity: 15, remainingQuantity: 9, invoiceDate: '2026-02-20' },
+      // Pin lưu trữ
+      { id: 'prod-bat-01', name: 'Pin lưu trữ SAJ B2-HV5 LiFePO4 Module 7.3kWh (Cao áp)', category: 'Pin lưu trữ', unit: 'Bộ', origin: 'SAJ', defaultPrice: 53500000, importPrice: 43000000, salePrice: 53500000, importCode: 'NK-BAT-0001', importQuantity: 25, remainingQuantity: 18, invoiceDate: '2026-02-10' },
+      { id: 'prod-bat-02', name: 'Hệ thống pin lưu trữ Dyness Tower T14 14.2kWh', category: 'Pin lưu trữ', unit: 'Bộ', origin: 'Dyness', defaultPrice: 96000000, importPrice: 79000000, salePrice: 96000000, importCode: 'NK-BAT-0002', importQuantity: 15, remainingQuantity: 11, invoiceDate: '2026-02-25' },
+      // Phụ kiện
+      { id: 'prod-acc-01', name: 'Cáp năng lượng mặt trời DC Solar Cable 4.0mm² Cu/XLPO 1500V', category: 'Phụ kiện', unit: 'Mét', origin: 'Chính hãng', defaultPrice: 19500, importPrice: 14500, salePrice: 19500, importCode: 'NK-ACC-0001', importQuantity: 15000, remainingQuantity: 11200, invoiceDate: '2026-01-10' },
+      { id: 'prod-acc-02', name: 'Đầu nối chuyên dụng MC4 1500V 30A IP68', category: 'Phụ kiện', unit: 'Cặp', origin: 'Chính hãng', defaultPrice: 39000, importPrice: 26000, salePrice: 39000, importCode: 'NK-ACC-0002', importQuantity: 3000, remainingQuantity: 2400, invoiceDate: '2026-01-10' },
+      { id: 'prod-acc-03', name: 'Thanh ray nhôm định hình Anodized 6005-T5 (4.2m)', category: 'Phụ kiện', unit: 'Thanh', origin: 'Việt Nam', defaultPrice: 295000, importPrice: 225000, salePrice: 295000, importCode: 'NK-ACC-0003', importQuantity: 1200, remainingQuantity: 950, invoiceDate: '2026-01-15' },
+    ];
+    for (const p of INITIAL_PRODUCTS) {
+      await db.run(
+        'INSERT INTO products (id, name, unit, origin, defaultPrice, createdAt, category, importQuantity, remainingQuantity, importPrice, salePrice, importCode, invoiceDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [p.id, p.name, p.unit, p.origin, p.defaultPrice, now, p.category, p.importQuantity, p.remainingQuantity, p.importPrice, p.salePrice, p.importCode, p.invoiceDate]
+      );
+    }
+  }
+
+  // ── 6. Projects (Section 7 from Ho_so_tong_hop_Tran_Le_Electricity.md) ──────
+  const projCount = await db.get('SELECT COUNT(*) as count FROM projects');
+  if (projCount && projCount.count === 0) {
+    const INITIAL_PROJECTS = [
+      {
+        id: 'proj-01',
+        projectCode: 'DA-COCOTEX-4.5M',
+        name: 'Dự án Điện mặt trời Công ty TNHH Cocotex (4,5 MWp)',
+        clientName: 'Công ty TNHH Cocotex',
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        managerId: 'u2',
+        status: 'completed',
+        phase: 'closing',
+        priority: 'high',
+        budget: 65000000000,
+        biddingPrice: 66000000000,
+        winningPrice: 65000000000,
+        description: 'Tổng thầu EPC hệ thống điện mặt trời áp mái 4,5 MWp tại TP. Hồ Chí Minh. Tiết kiệm chi phí năng lượng và giảm ~5.400 tấn CO2/năm cho nhà máy Cocotex.',
+        startDate: '2024-03-01',
+        endDate: '2024-11-30',
+        createdAt: '2024-03-01T08:00:00.000Z',
+      },
+      {
+        id: 'proj-02',
+        projectCode: 'DA-NAMLY-3.0M',
+        name: 'Dự án Điện mặt trời áp mái 3 MWp Nam Lý',
+        clientName: 'Công ty Cổ phần Nam Lý',
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        managerId: 'u2',
+        status: 'completed',
+        phase: 'closing',
+        priority: 'high',
+        budget: 43500000000,
+        biddingPrice: 45000000000,
+        winningPrice: 43500000000,
+        description: 'Thi công lắp đặt và đấu nối hệ thống điện mặt trời áp mái công nghiệp 3 MWp tại tỉnh Ninh Bình.',
+        startDate: '2024-06-15',
+        endDate: '2025-01-20',
+        createdAt: '2024-06-15T08:00:00.000Z',
+      },
+      {
+        id: 'proj-03',
+        projectCode: 'DA-GIOLINH-4.0M',
+        name: 'Dự án Điện năng lượng mặt trời nông trại tại Gio Linh (4 MWp)',
+        clientName: 'Nông trại Công nghệ cao Gio Linh',
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        managerId: 'u2',
+        status: 'completed',
+        phase: 'closing',
+        priority: 'high',
+        budget: 58000000000,
+        biddingPrice: 59500000000,
+        winningPrice: 58000000000,
+        description: 'Hệ thống điện mặt trời kết hợp mô hình nông nghiệp công nghệ cao 4 MWp tại huyện Gio Linh, tỉnh Quảng Trị.',
+        startDate: '2024-08-01',
+        endDate: '2025-04-15',
+        createdAt: '2024-08-01T08:00:00.000Z',
+      },
+      {
+        id: 'proj-04',
+        projectCode: 'DA-THIENHOANG-1.5M',
+        name: 'Dự án Điện mặt trời áp mái Nhà máy Thiện Hoàng (1,5 MWp)',
+        clientName: 'Nhà máy May mặc Thiện Hoàng',
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        managerId: 'u2',
+        status: 'completed',
+        phase: 'closing',
+        priority: 'medium',
+        budget: 21800000000,
+        biddingPrice: 22500000000,
+        winningPrice: 21800000000,
+        description: 'Giải pháp điện mặt trời tự dùng hòa lưới bám tải 1,5 MWp cho nhà xưởng may mặc tại tỉnh Bình Định.',
+        startDate: '2025-02-10',
+        endDate: '2025-08-30',
+        createdAt: '2025-02-10T08:00:00.000Z',
+      },
+      {
+        id: 'proj-05',
+        projectCode: 'DA-SAJ-SERVICE-2026',
+        name: 'Phát triển Trung tâm Dịch vụ & Bảo hành SAJ Service Center tại Việt Nam',
+        clientName: 'SAJ Electric Technology Co., Ltd',
+        department: 'Trung Tâm Dịch Vụ & Bảo Hành O&M (SAJ Center)',
+        managerId: 'u2',
+        status: 'in_progress',
+        phase: 'execution',
+        priority: 'high',
+        budget: 8500000000,
+        description: 'Triển khai thỏa thuận hợp tác chiến lược ngày 08/03/2026 giữa Tran Le và SAJ: Xây dựng trung tâm bảo hành ủy quyền, đào tạo kỹ thuật chuyên sâu và kho linh kiện thay thế chính hãng trên toàn quốc.',
+        startDate: '2026-03-08',
+        endDate: '2026-12-31',
+        createdAt: '2026-03-08T08:00:00.000Z',
+      },
+    ];
+
+    for (const pr of INITIAL_PROJECTS) {
+      await db.run(
+        `INSERT INTO projects (id, projectCode, name, clientName, department, managerId, status, startDate, endDate, budget, description, biddingPrice, winningPrice, priority, phase, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [pr.id, pr.projectCode, pr.name, pr.clientName, pr.department, pr.managerId, pr.status, pr.startDate, pr.endDate, pr.budget, pr.description, pr.biddingPrice || 0, pr.winningPrice || 0, pr.priority, pr.phase, pr.createdAt]
+      );
+    }
+  }
+
+  // ── 7. Clients (Partners & Project Owners) ──────────────────────────────────
+  const clientCount = await db.get('SELECT COUNT(*) as count FROM clients');
+  if (clientCount && clientCount.count === 0) {
+    const INITIAL_CLIENTS = [
+      { id: 'client-cocotex', name: 'Công ty TNHH Cocotex', region: 'TP. Hồ Chí Minh' },
+      { id: 'client-namly', name: 'Công ty Cổ phần Nam Lý', region: 'Ninh Bình' },
+      { id: 'client-giolinh', name: 'Nông trại Công nghệ cao Gio Linh', region: 'Quảng Trị' },
+      { id: 'client-thienhoang', name: 'Nhà máy May mặc Thiện Hoàng', region: 'Bình Định' },
+      { id: 'client-saj', name: 'SAJ Electric Technology Co., Ltd', region: 'Đối tác Chiến lược Quốc tế' },
+      { id: 'client-aiko', name: 'AIKO Solar Energy Technology', region: 'Đối tác Sản phẩm Quốc tế' },
+      { id: 'client-jinko', name: 'Jinko Solar Holding Co., Ltd', region: 'Đối tác Sản phẩm Quốc tế' },
+      { id: 'client-canadian', name: 'Canadian Solar Inc.', region: 'Đối tác Sản phẩm Quốc tế' },
+      { id: 'client-huawei', name: 'Huawei Digital Power Technologies', region: 'Đối tác Quốc tế' },
+      { id: 'client-dyness', name: 'Dyness Renewable Energy', region: 'Đối tác Quốc tế' },
+      // VNPT Branches
+      { id: 'client-1', name: 'VNPT Hà Nội', region: 'Hà Nội' },
+      { id: 'client-15', name: 'VNPT Ninh Bình', region: 'Ninh Bình + Nam Định + Hà Nam' },
+      { id: 'client-19', name: 'VNPT Quảng Trị', region: 'Quảng Trị + Quảng Bình' },
+      { id: 'client-20', name: 'VNPT Huế', region: 'Thành phố Huế' },
+      { id: 'client-21', name: 'VNPT Đà Nẵng', region: 'Đà Nẵng + Quảng Nam' },
+      { id: 'client-23', name: 'VNPT Gia Lai', region: 'Gia Lai + Bình Định' },
+      { id: 'client-27', name: 'VNPT TP. Hồ Chí Minh', region: 'TP.HCM + Bình Dương + Bà Rịa - Vũng Tàu' },
+      { id: 'client-30', name: 'VNPT Cần Thơ', region: 'Cần Thơ + Hậu Giang + Sóc Trăng' },
+    ];
+    for (const c of INITIAL_CLIENTS) {
+      await db.run('INSERT INTO clients (id, name, region, createdAt) VALUES (?, ?, ?, ?)', [c.id, c.name, c.region, now]);
+    }
+  }
+
+  // ── 8. Contracts (EPC, O&M, Equipment Distribution) ─────────────────────────
+  const contractCount = await db.get('SELECT COUNT(*) as count FROM contracts');
+  if (contractCount && contractCount.count === 0) {
+    const INITIAL_CONTRACTS = [
+      {
+        id: 'ctr-01',
+        contractNumber: 'TL-EPC-2024/001',
+        clientName: 'Công ty TNHH Cocotex',
+        contractName: 'Hợp đồng Tổng thầu EPC Điện mặt trời áp mái 4.5 MWp Cocotex',
+        contractType: 'output',
+        preTaxValue: 59090909091,
+        vatRate: 10,
+        postTaxValue: 65000000000,
+        paidAmount: 65000000000,
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        createdBy: 'u2',
+        status: 'completed',
+        projectId: 'proj-01',
+        signedDate: '2024-03-05',
+        startDate: '2024-03-10',
+        endDate: '2024-11-25',
+        warrantyMonths: 60,
+        createdAt: '2024-03-05T09:00:00.000Z',
+      },
+      {
+        id: 'ctr-02',
+        contractNumber: 'TL-OM-2025/008',
+        clientName: 'Nhà máy May mặc Thiện Hoàng',
+        contractName: 'Hợp đồng Dịch vụ Vận hành & Bảo trì O&M Hệ thống 1.5 MWp Thiện Hoàng',
+        contractType: 'output',
+        preTaxValue: 450000000,
+        vatRate: 10,
+        postTaxValue: 495000000,
+        paidAmount: 495000000,
+        department: 'Trung Tâm Dịch Vụ & Bảo Hành O&M (SAJ Center)',
+        createdBy: 'u3',
+        status: 'approved',
+        projectId: 'proj-04',
+        signedDate: '2025-09-01',
+        startDate: '2025-09-01',
+        endDate: '2027-08-31',
+        warrantyMonths: 24,
+        createdAt: '2025-09-01T09:00:00.000Z',
+      },
+      {
+        id: 'ctr-03',
+        contractNumber: 'TL-PO-2026/012',
+        supplierName: 'SAJ Electric Technology Co., Ltd',
+        clientName: 'Tran Le Electricity',
+        contractName: 'Hợp đồng Nhập khẩu Thiết bị Biến tần & Pin lưu trữ SAJ Quý 1/2026',
+        contractType: 'input',
+        preTaxValue: 12500000000,
+        vatRate: 10,
+        postTaxValue: 13750000000,
+        paidAmount: 13750000000,
+        department: 'Phòng Kinh Doanh & Phân Phối Thiết Bị',
+        createdBy: 'u2',
+        status: 'completed',
+        signedDate: '2026-03-10',
+        startDate: '2026-03-10',
+        endDate: '2026-04-15',
+        warrantyMonths: 60,
+        createdAt: '2026-03-10T09:00:00.000Z',
+      },
+    ];
+
+    for (const c of INITIAL_CONTRACTS) {
+      await db.run(
+        `INSERT INTO contracts (id, contractNumber, clientName, supplierName, contractName, contractType, preTaxValue, vatRate, postTaxValue, paidAmount, department, createdBy, status, projectId, signedDate, startDate, endDate, warrantyMonths, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [c.id, c.contractNumber, c.clientName, c.supplierName || null, c.contractName, c.contractType, c.preTaxValue, c.vatRate, c.postTaxValue, c.paidAmount, c.department, c.createdBy, c.status, c.projectId || null, c.signedDate, c.startDate, c.endDate, c.warrantyMonths, c.createdAt]
+      );
+    }
+  }
+
+  // ── 9. Tasks (Solar Operations & Technical Projects) ────────────────────────
   const taskCount = await db.get('SELECT COUNT(*) as count FROM tasks');
   if (taskCount && taskCount.count === 0) {
-    const todayStr = new Date().toISOString().split('T')[0];
-    await db.run(
-      'INSERT INTO tasks (id, title, description, startDate, estimatedEndAt, priority, status, createdBy, department, recurrence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['t1', 'Design System Review', 'Review the new color palette and component library compatibility.', todayStr, null, 'High', 'In Progress', 'u1', 'Board', 'None']
-    );
-    await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', ['t1', 'u1']);
-    await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', ['t1', 'u2']);
-    await db.run('INSERT INTO task_tags (taskId, tag) VALUES (?, ?)', ['t1', 'Design']);
-    await db.run('INSERT INTO task_tags (taskId, tag) VALUES (?, ?)', ['t1', 'UI/UX']);
-    await db.run('INSERT INTO task_subtasks (id, taskId, title, isCompleted, sortOrder) VALUES (?, ?, ?, ?, ?)', ['st1', 't1', 'Check color contrast ratios', 1, 0]);
+    const INITIAL_TASKS = [
+      {
+        id: 't1',
+        title: 'Khảo sát & Mô phỏng PVSyst hệ thống Hybrid 10kWp Biệt thự KĐT Vạn Phúc',
+        description: 'Khảo sát hướng mái, độ nghiêng, đo đạc mặt bằng lắp đặt ~16 tấm AIKO 650Wp và Inverter SAJ H2-10K kèm pin lưu trữ 7.3kWh.',
+        startDate: todayStr,
+        estimatedEndAt: null,
+        priority: 'High',
+        status: 'In Progress',
+        createdBy: 'u2',
+        department: 'Phòng Tư Vấn & Thiết Kế Kỹ Thuật',
+        recurrence: 'None',
+        assignees: ['u2', 'u3'],
+        tags: ['Solar Hybrid', 'Khảo sát', 'PVSyst'],
+        subtasks: [
+          { id: 'st1', title: 'Thu thập hóa đơn tiền điện 12 tháng gần nhất', isCompleted: 1, sortOrder: 0 },
+          { id: 'st2', title: 'Đo đạc kết cấu giàn khung và độ dốc mái', isCompleted: 1, sortOrder: 1 },
+          { id: 'st3', title: 'Mô phỏng sản lượng PVSyst và xuất bảng ROI', isCompleted: 0, sortOrder: 2 },
+        ]
+      },
+      {
+        id: 't2',
+        title: 'Vận hành quy trình tiếp nhận kỹ thuật tại SAJ Service Center miền Nam',
+        description: 'Triển khai quy trình bảo hành ủy quyền, đào tạo kiểm tra lỗi Inverter SAJ (R5, R6, C6, H2) và chuẩn bị kho linh kiện bo mạch chính hãng.',
+        startDate: todayStr,
+        estimatedEndAt: null,
+        priority: 'Urgent',
+        status: 'In Progress',
+        createdBy: 'u1',
+        department: 'Trung Tâm Dịch Vụ & Bảo Hành O&M (SAJ Center)',
+        recurrence: 'None',
+        assignees: ['u2', 'u3'],
+        tags: ['SAJ Service Center', 'Bảo hành', 'Kỹ thuật'],
+        subtasks: [
+          { id: 'st4', title: 'Thiết lập bàn test tải và công cụ chẩn đoán chuyên dụng', isCompleted: 1, sortOrder: 0 },
+          { id: 'st5', title: 'Kiểm kê linh kiện thay thế bo mạch SAJ', isCompleted: 0, sortOrder: 1 },
+        ]
+      },
+      {
+        id: 't3',
+        title: 'Bảo dưỡng định kỳ O&M & Quét nhiệt hồng ngoại Nhà máy Thiện Hoàng 1.5 MWp',
+        description: 'Vệ sinh chuỗi tấm pin solar, kiểm tra điểm phát nhiệt (hotspot) bằng camera nhiệt FLIR, siết lực bu-lông khung nhôm và kiểm tra tủ điện DC/AC.',
+        startDate: todayStr,
+        estimatedEndAt: null,
+        priority: 'Medium',
+        status: 'Todo',
+        createdBy: 'u2',
+        department: 'Khối Tổng Thầu EPC & Thi Công',
+        recurrence: 'None',
+        assignees: ['u3'],
+        tags: ['O&M', 'Thiện Hoàng', 'Bảo trì'],
+        subtasks: [
+          { id: 'st6', title: 'Kiểm tra đo điện trở cách điện DC', isCompleted: 0, sortOrder: 0 },
+          { id: 'st7', title: 'Lập báo cáo tình trạng vận hành sau bảo dưỡng', isCompleted: 0, sortOrder: 1 },
+        ]
+      },
+      {
+        id: 't4',
+        title: 'Đồng bộ hóa Design System Tran Le Electricity (#16A34A, #F59E0B)',
+        description: 'Áp dụng toàn diện bảng mã màu nhận diện thương hiệu chuẩn: Energy Green (#16A34A), Solar Gold (#F59E0B) và Slate Navy (#0F172A).',
+        startDate: todayStr,
+        estimatedEndAt: null,
+        priority: 'High',
+        status: 'Done',
+        createdBy: 'u1',
+        department: 'Ban Lãnh Đạo',
+        recurrence: 'None',
+        assignees: ['u1', 'u3'],
+        tags: ['Design System', 'UI/UX', 'Thương hiệu'],
+        subtasks: [
+          { id: 'st8', title: 'Cập nhật CSS variables & design tokens', isCompleted: 1, sortOrder: 0 },
+          { id: 'st9', title: 'Kiểm tra độ tương phản chuẩn WCAG', isCompleted: 1, sortOrder: 1 },
+        ]
+      }
+    ];
+
+    for (const t of INITIAL_TASKS) {
+      await db.run(
+        'INSERT INTO tasks (id, title, description, startDate, estimatedEndAt, priority, status, createdBy, department, recurrence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [t.id, t.title, t.description, t.startDate, t.estimatedEndAt, t.priority, t.status, t.createdBy, t.department, t.recurrence]
+      );
+      for (const uid of t.assignees) {
+        await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', [t.id, uid]);
+      }
+      for (const tag of t.tags) {
+        await db.run('INSERT INTO task_tags (taskId, tag) VALUES (?, ?)', [t.id, tag]);
+      }
+      for (const st of t.subtasks) {
+        await db.run('INSERT INTO task_subtasks (id, taskId, title, isCompleted, sortOrder) VALUES (?, ?, ?, ?, ?)', [st.id, t.id, st.title, st.isCompleted, st.sortOrder]);
+      }
+    }
   }
 
-  // Seed Notes
+  // ── 10. Notes ───────────────────────────────────────────────────────────────
   const noteCount = await db.get('SELECT COUNT(*) as count FROM notes');
   if (noteCount && noteCount.count === 0) {
-    await db.run('INSERT INTO notes (id, title, content, color, createdAt) VALUES (?, ?, ?, ?, ?)', ['n1', 'Brainstorming Ideas', '- New UI looks great\n- Need to check contrast ratio', 'bg-yellow-100', new Date().toISOString()]);
+    const INITIAL_NOTES = [
+      {
+        id: 'n1',
+        title: 'Thông số kỹ thuật Tấm pin AIKO 650Wp N-Type ABC',
+        content: '• Công nghệ: N-Type ABC Stellar 1N+ (Dual-Glass)\n• Hiệu suất module: 24,1%\n• Suy hao năm đầu: < 1,0%, suy hao hàng năm: < 0,35%\n• Bảo hành vật lý: 15 năm | Bảo hành hiệu suất: 30 năm (trên 88,85%)\n• Ứng dụng: Dự án điện mặt trời áp mái dân dụng & công nghiệp cao cấp.',
+        color: 'bg-emerald-100',
+        userId: 'u1',
+        createdAt: now
+      },
+      {
+        id: 'n2',
+        title: 'Thông tin Trung Tâm Bảo Hành SAJ Service Center',
+        content: '• Hợp tác chiến lược: 08/03/2026\n• Địa điểm: Số 2 Đường số 27, KDC Vạn Phúc, P. Hiệp Bình, TP.HCM\n• Hotline: 0939 792 428 | Email: info@tranlecorp.com.vn\n• Hỗ trợ kỹ thuật chuyên sâu các dòng biến tần SAJ R5, R6, H2, C6 và pin lưu trữ B2-HV5 LiFePO4.',
+        color: 'bg-amber-100',
+        userId: 'u2',
+        createdAt: now
+      }
+    ];
+    for (const n of INITIAL_NOTES) {
+      await db.run(
+        'INSERT INTO notes (id, title, content, color, userId, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+        [n.id, n.title, n.content, n.color, n.userId, n.createdAt]
+      );
+    }
   }
 
-  // Seed Events (Vietnamese National Holidays)
+  // ── 11. Events (Vietnamese National Holidays) ────────────────────────────────
   const eventCount = await db.get('SELECT COUNT(*) as count FROM events');
   if (eventCount && eventCount.count === 0) {
     const year = new Date().getFullYear();
     const holidays = [
       { id: 'evt-01', title: 'Tết Dương Lịch', date: `${year}-01-01`, type: 'holiday', color: '#ef4444', description: 'Ngày đầu năm mới dương lịch', isRecurringYearly: 1 },
-      { id: 'evt-02', title: 'Tết Nguyên Đán', date: `${year}-01-28`, endDate: `${year}-02-02`, type: 'holiday', color: '#f97316', description: 'Tết Nguyên Đán – nghỉ 7 ngày', isRecurringYearly: 0 },
+      { id: 'evt-02', title: 'Tết Nguyên Đán', date: `${year}-01-28`, endDate: `${year}-02-02`, type: 'holiday', color: '#f97316', description: 'Tết Nguyên Đán – nghỉ Tết cổ truyền', isRecurringYearly: 0 },
       { id: 'evt-03', title: 'Giỗ Tổ Hùng Vương', date: `${year}-04-07`, type: 'holiday', color: '#8b5cf6', description: 'Ngày Giỗ Tổ Hùng Vương (10/3 âm lịch)', isRecurringYearly: 0 },
       { id: 'evt-04', title: 'Ngày Giải phóng Miền Nam', date: `${year}-04-30`, type: 'holiday', color: '#ef4444', description: 'Ngày Giải phóng Miền Nam – thống nhất đất nước', isRecurringYearly: 1 },
       { id: 'evt-05', title: 'Ngày Quốc tế Lao động', date: `${year}-05-01`, type: 'holiday', color: '#ef4444', description: 'Ngày Quốc tế Lao động 1/5', isRecurringYearly: 1 },
       { id: 'evt-06', title: 'Ngày Quốc khánh', date: `${year}-09-02`, endDate: `${year}-09-03`, type: 'holiday', color: '#ef4444', description: 'Quốc khánh nước CHXHCN Việt Nam', isRecurringYearly: 1 },
+      { id: 'evt-07', title: 'Kỷ niệm 10 năm thành lập Tran Le Electricity', date: `${year}-11-25`, type: 'company', color: '#16a34a', description: 'Ngày kỷ niệm 10 năm thành lập Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê (25/11/2015 – 25/11/2025)', isRecurringYearly: 1 },
     ];
     for (const h of holidays) {
       await db.run(
@@ -518,49 +947,6 @@ async function seedIfEmpty(db: MysqlDb) {
       );
     }
   }
-
-  // Seed Clients
-  const clientCount = await db.get('SELECT COUNT(*) as count FROM clients');
-  if (clientCount && clientCount.count === 0) {
-    const vnpts = [
-      { id: 'client-1', name: 'VNPT Hà Nội', region: 'Hà Nội' },
-      { id: 'client-2', name: 'VNPT Cao Bằng', region: 'Cao Bằng' },
-      { id: 'client-3', name: 'VNPT Tuyên Quang', region: 'Tuyên Quang + Hà Giang' },
-      { id: 'client-4', name: 'VNPT Lào Cai', region: 'Lào Cai + Yên Bái' },
-      { id: 'client-5', name: 'VNPT Lai Châu', region: 'Lai Châu' },
-      { id: 'client-6', name: 'VNPT Điện Biên', region: 'Điện Biên' },
-      { id: 'client-7', name: 'VNPT Sơn La', region: 'Sơn La' },
-      { id: 'client-8', name: 'VNPT Thái Nguyên', region: 'Thái Nguyên + Bắc Kạn' },
-      { id: 'client-9', name: 'VNPT Lạng Sơn', region: 'Lạng Sơn' },
-      { id: 'client-10', name: 'VNPT Quảng Ninh', region: 'Quảng Ninh' },
-      { id: 'client-11', name: 'VNPT Phú Thọ', region: 'Phú Thọ + Vĩnh Phúc + Hòa Bình' },
-      { id: 'client-12', name: 'VNPT Bắc Ninh', region: 'Bắc Ninh + Bắc Giang' },
-      { id: 'client-13', name: 'VNPT Hải Phòng', region: 'Hải Phòng + Hải Dương' },
-      { id: 'client-14', name: 'VNPT Hưng Yên', region: 'Hưng Yên + Thái Bình' },
-      { id: 'client-15', name: 'VNPT Ninh Bình', region: 'Ninh Bình + Nam Định + Hà Nam' },
-      { id: 'client-16', name: 'VNPT Thanh Hóa', region: 'Thanh Hóa' },
-      { id: 'client-17', name: 'VNPT Nghệ An', region: 'Nghệ An' },
-      { id: 'client-18', name: 'VNPT Hà Tĩnh', region: 'Hà Tĩnh' },
-      { id: 'client-19', name: 'VNPT Quảng Trị', region: 'Quảng Trị + Quảng Bình' },
-      { id: 'client-20', name: 'VNPT Huế', region: 'Thành phố Huế' },
-      { id: 'client-21', name: 'VNPT Đà Nẵng', region: 'Đà Nẵng + Quảng Nam' },
-      { id: 'client-22', name: 'VNPT Quảng Ngãi', region: 'Quảng Ngãi + Kon Tum' },
-      { id: 'client-23', name: 'VNPT Gia Lai', region: 'Gia Lai + Bình Định' },
-      { id: 'client-24', name: 'VNPT Khánh Hòa', region: 'Khánh Hòa + Ninh Thuận' },
-      { id: 'client-25', name: 'VNPT Lâm Đồng', region: 'Lâm Đồng + Đắk Nông + Bình Thuận' },
-      { id: 'client-26', name: 'VNPT Đắk Lắk', region: 'Đắk Lắk + Phú Yên' },
-      { id: 'client-27', name: 'VNPT TP. Hồ Chí Minh', region: 'TP.HCM + Bình Dương + Bà Rịa - Vũng Tàu' },
-      { id: 'client-28', name: 'VNPT Đồng Nai', region: 'Đồng Nai + Bình Phước' },
-      { id: 'client-29', name: 'VNPT Tây Ninh', region: 'Tây Ninh + Long An' },
-      { id: 'client-30', name: 'VNPT Cần Thơ', region: 'Cần Thơ + Hậu Giang + Sóc Trăng' },
-      { id: 'client-31', name: 'VNPT Vĩnh Long', region: 'Vĩnh Long + Bến Tre + Trà Vinh' },
-      { id: 'client-32', name: 'VNPT Đồng Tháp', region: 'Đồng Tháp + Tiền Giang' },
-      { id: 'client-33', name: 'VNPT Cà Mau', region: 'Cà Mau + Bạc Liêu' },
-      { id: 'client-34', name: 'VNPT An Giang', region: 'An Giang + Kiên Giang' },
-    ];
-    for (const c of vnpts) {
-      await db.run('INSERT INTO clients (id, name, region, createdAt) VALUES (?, ?, ?, ?)', [c.id, c.name, c.region, new Date().toISOString()]);
-    }
-  }
 }
+
 

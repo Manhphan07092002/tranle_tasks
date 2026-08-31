@@ -31,3 +31,4 @@ data/
 backend/.env
 frontend/.env
 uploads/
+mail-server-config/mail-data/

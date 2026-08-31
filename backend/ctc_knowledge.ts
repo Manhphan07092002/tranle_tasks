@@ -104,4 +104,14 @@ CÔNG TY CỔ PHẦN TƯ VẤN XÂY DỰNG ĐIỆN TRẦN LÊ (TRAN LE ELECTRICI
 
 12. CÂU GIỚI THIỆU NHANH DÀNH CHO NHÂN VIÊN TRAN LE:
 "Tran Le Electricity là đơn vị với hơn 10 năm kinh nghiệm chuyên sâu trong lĩnh vực năng lượng tái tạo và điện mặt trời. Chúng tôi cung cấp giải pháp trọn gói từ phân phối thiết bị chính hãng (tấm pin AIKO, Jinko, Canadian; biến tần SAJ, Huawei; pin lưu trữ Dyness, SAJ), tổng thầu EPC đến dịch vụ vận hành & bảo trì O&M chuyên nghiệp và Trung tâm Bảo hành ủy quyền SAJ tại Việt Nam, mang lại giải pháp tiết kiệm năng lượng tối ưu và bền vững cho mọi khách hàng trên toàn quốc."
+
+13. HỆ THỐNG NHẬN DIỆN THƯƠNG HIỆU & DESIGN SYSTEM (TRAN LE DESIGN TOKENS):
+- Triết lý cốt lõi: "Clean Energy, Clean Interface" (Năng lượng sạch, Giao diện tinh gọn, Đáng tin cậy, Kỹ thuật cao).
+- Màu chủ đạo (Primary - Energy Green): #16A34A (Hover: #15803D, Active: #166534, Soft: #F0FDF4).
+- Màu điểm nhấn Solar (Secondary - Solar Gold): #F59E0B (Hover: #D97706, Soft: #FFFBEB).
+- Hệ màu Dark / Navy (Tiêu đề & Độ tương phản cao): #0F172A, #1E293B, #334155.
+- Màu nội dung (Body): #334155 | Màu phụ/Ghi chú (Muted): #64748B | Nền (Surface): #FFFFFF / #F8FAFC | Viền (Border): #E2E8F0.
+- Màu trạng thái: Thành công (Success #22C55E), Cảnh báo (Warning #F59E0B), Lỗi (Error #EF4444), Thông tin (Info #0EA5E9).
+- Font chữ chuẩn: Inter, "Segoe UI", Roboto, sans-serif.
 `;
+
