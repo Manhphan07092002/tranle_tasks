@@ -141,7 +141,27 @@ export const ProjectListTab: React.FC<Props> = ({ projects, contracts, tasks, se
                   </td>
                   <td className="px-5 py-4">
                     <p className="font-semibold text-gray-900 group-hover:text-brand-700 transition-colors line-clamp-1">{p.name}</p>
-                    {p.department && <p className="text-[11px] text-gray-400 mt-0.5">{p.department}</p>}
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                      {p.department && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 rounded font-medium">
+                          {p.department}
+                        </span>
+                      )}
+                      {p.participatingDepartments && p.participatingDepartments.length > 0 && p.participatingDepartments.map(pd => (
+                        <span
+                          key={pd.departmentId}
+                          className="text-[9px] px-1.5 py-0.5 rounded font-bold border"
+                          style={{
+                            backgroundColor: (pd.departmentColor || '#16a34a') + '15',
+                            color: pd.departmentColor || '#16a34a',
+                            borderColor: (pd.departmentColor || '#16a34a') + '30'
+                          }}
+                          title={`Vai trò: ${pd.role || 'Phối hợp'}`}
+                        >
+                          {pd.departmentCode || pd.departmentName || pd.departmentId}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-5 py-4 text-gray-600 text-sm">{p.clientName || p.investor || '-'}</td>
                   <td className="px-5 py-4">

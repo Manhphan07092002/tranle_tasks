@@ -54,7 +54,7 @@ export default function TasksPage({
         return a.dueDate.localeCompare(b.dueDate);
       });
     } else if (sortBy === 'priority') {
-      const pMap = { [TaskPriority.HIGH]: 3, [TaskPriority.MEDIUM]: 2, [TaskPriority.LOW]: 1 };
+      const pMap = { [TaskPriority.URGENT]: 4, [TaskPriority.HIGH]: 3, [TaskPriority.MEDIUM]: 2, [TaskPriority.LOW]: 1 };
       tasks.sort((a, b) => (pMap[b.priority] || 0) - (pMap[a.priority] || 0));
     }
     return tasks;

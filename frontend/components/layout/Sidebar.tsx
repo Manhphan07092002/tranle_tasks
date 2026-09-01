@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard } from 'lucide-react';
+import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, Building2, ShieldCheck, Layers } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Button, Avatar } from '../UI';
@@ -21,9 +21,18 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Tổ chức & Nhân sự',
+    items: [
+      { id: 'organization', icon: Building2, path: '/organization', permission: null },
+      { id: 'department_workspace', icon: Layers, path: '/department-workspace', permission: null },
+      { id: 'team',         icon: Users,     path: '/team',         permission: ['view_dept_users', 'manage_users'] },
+    ],
+  },
+  {
     label: 'Công việc',
     items: [
       { id: 'tasks',    icon: CheckSquare, path: '/tasks',    permission: ['view_all_tasks', 'manage_dept_tasks', 'view_own_tasks'] },
+      { id: 'approvals', icon: ShieldCheck, path: '/approvals', permission: null },
       { id: 'calendar', icon: Calendar,    path: '/calendar', permission: ['view_all_tasks', 'manage_dept_tasks', 'view_own_tasks'] },
       { id: 'reports',  icon: FileText,    path: '/reports',  permission: ['view_all_reports', 'approve_dept_reports', 'create_report', 'director_feedback'] },
       { id: 'documents', icon: FolderOpen,  path: '/documents', permission: null },
@@ -39,10 +48,10 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Kinh doanh',
+    label: 'Kinh doanh & Vận hành',
     items: [
       { id: 'projects', icon: Briefcase, path: '/projects', permission: null },
-      { id: 'contracts', icon: Briefcase, path: '/contracts', permission: null },
+      { id: 'contracts', icon: CreditCard, path: '/contracts', permission: null },
       { id: 'products', icon: Package, path: '/products', permission: null },
       { id: 'revenue',   icon: DollarSign, path: '/revenue',  permission: ['create_revenue_report', 'approve_dept_revenue', 'approve_all_revenue', 'view_all_reports', 'director_feedback'] },
     ],
@@ -50,29 +59,31 @@ const NAV_GROUPS = [
   {
     label: 'Hệ thống',
     items: [
-      { id: 'team',     icon: Users,    path: '/team',     permission: ['view_dept_users', 'manage_users'] },
       { id: 'settings', icon: Settings, path: '/settings', permission: null },
     ],
   },
 ];
 
 const NAV_LABELS: Record<string, string> = {
-  dashboard:     'Tổng quan',
-  tasks:         'Công việc',
-  calendar:      'Lịch',
-  reports:       'Báo cáo CV',
-  documents:     'Tài liệu',
-  project_reports: 'Báo cáo DA',
-  projects:      'Dự án',
-  contracts:     'Hợp đồng',
-  products:      'Kho hàng',
-  revenue:       'Doanh thu',
-  mail:          'Hộp thư',
-  meetings:      'Cuộc họp',
-  notes:         'Ghi chú',
-  notifications: 'Thông báo',
-  team:          'Đội ngũ',
-  settings:      'Cài đặt',
+  dashboard:            'Tổng quan',
+  organization:         'Sơ đồ tổ chức',
+  department_workspace: 'Không gian phòng ban',
+  tasks:                'Công việc',
+  approvals:            'Phê duyệt',
+  calendar:             'Lịch',
+  reports:              'Báo cáo CV',
+  documents:            'Tài liệu',
+  project_reports:      'Báo cáo DA',
+  projects:             'Dự án',
+  contracts:            'Hợp đồng',
+  products:             'Kho & Thiết bị',
+  revenue:              'Doanh thu',
+  mail:                 'Hộp thư',
+  meetings:             'Cuộc họp',
+  notes:                'Ghi chú',
+  notifications:        'Thông báo',
+  team:                 'Đội ngũ',
+  settings:             'Cài đặt',
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen, openCreateModal }) => {

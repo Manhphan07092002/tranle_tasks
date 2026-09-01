@@ -141,7 +141,7 @@ export default function DashboardPage({
 
     const myContracts = user.permissions?.includes('view_all_reports') || user.permissions?.includes('director_feedback') || user.permissions?.includes('admin_panel')
       ? contracts
-      : contracts.filter(c => c.department === user.department);
+      : contracts.filter(c => c.departmentId === user.departmentId || (c.department && c.department === user.department));
 
     const totalContracts = myContracts.length;
     const totalDebt = myContracts.reduce((s, c) => s + Math.max(0, (c.postTaxValue || 0) - (c.paidAmount || 0)), 0);
@@ -172,7 +172,7 @@ export default function DashboardPage({
     const isManagerOrDirector = user.permissions?.includes('view_all_reports') || user.permissions?.includes('director_feedback') || user.permissions?.includes('admin_panel');
     let relevantContracts = contracts;
     if (!isManagerOrDirector) {
-      relevantContracts = contracts.filter(c => c.department === user.department);
+      relevantContracts = contracts.filter(c => c.departmentId === user.departmentId || (c.department && c.department === user.department));
     }
     return relevantContracts
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
@@ -770,14 +770,14 @@ export default function DashboardPage({
           </Card>
 
           {/* Team Widget */}
-          <Card className="p-6 cursor-pointer hover:shadow-xl transition-shadow" onClick={() => setPopup({ title: 'Đội ngũ - ' + (user.department || 'Phòng ban'), navPath: '/team', navLabel: 'Xem đội ngũ', content: <div className="space-y-3">{(() => { const deptUsers = users.filter(u => u.department === user.department); return <div className="space-y-1">{deptUsers.map(u => <div key={u.id} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0"><div className="flex items-center gap-2"><Avatar src={u.avatar} alt={u.name} size={6} /><span className="text-sm font-medium text-gray-700">{u.name}</span></div><span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{u.role}</span></div>)}</div>; })()}</div> })}>
+          <Card className="p-6 cursor-pointer hover:shadow-xl transition-shadow" onClick={() => setPopup({ title: 'Đội ngũ - ' + (user.department || 'Phòng ban'), navPath: '/team', navLabel: 'Xem đội ngũ', content: <div className="space-y-3">{(() => { const deptUsers = users.filter(u => u.departmentId === user.departmentId); return <div className="space-y-1">{deptUsers.map(u => <div key={u.id} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0"><div className="flex items-center gap-2"><Avatar src={u.avatar} alt={u.name} size={6} /><span className="text-sm font-medium text-gray-700">{u.name}</span></div><span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{u.role}</span></div>)}</div>; })()}</div> })}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-gray-800 dark:text-slate-100">{t('team')}</h3>
-              <span className="text-xs font-bold text-brand-600 dark:text-blue-400 bg-brand-50 dark:bg-blue-900/30 px-2 py-1 rounded-full">{users.filter(u => u.department === user.department).length} thành viên</span>
+              <span className="text-xs font-bold text-brand-600 dark:text-blue-400 bg-brand-50 dark:bg-blue-900/30 px-2 py-1 rounded-full">{users.filter(u => u.departmentId === user.departmentId).length} thành viên</span>
             </div>
             <div className="flex flex-col gap-4 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
               {(() => {
-                const myDeptUsers = users.filter(u => u.department === user.department);
+                const myDeptUsers = users.filter(u => u.departmentId === user.departmentId);
                 if (myDeptUsers.length === 0) return <p className="text-sm text-gray-500 text-center py-4">Chưa có thành viên</p>;
                 return (
                   <div>

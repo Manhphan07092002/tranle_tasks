@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function revenueRoutes(db: any) {
   const router = Router();
+
+  router.use(requireAuth);
 
   // GET all revenue reports (not deleted, last 6 months)
   router.get('/', async (_req, res) => {
@@ -34,13 +37,13 @@ export function revenueRoutes(db: any) {
       await db.run(
         `INSERT INTO revenue_reports (id, title, reportType, periodStart, periodEnd, content, totalPreTax, totalDelivered, totalCumulative, authorId, department, status, createdAt, submittedAt, generationMode)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, title, reportType, periodStart, periodEnd, content ?? null, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, authorId, department, status || 'Draft', now, submittedAt ?? null, generationMode || 'manual']
+        [id, title, reportType, periodStart, periodEnd, content ?? null, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, authorId || req.user?.id, department, status || 'Draft', now, submittedAt ?? null, generationMode || 'manual']
       );
 
       // Log activity
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), authorId, 'revenue_report.created', id, 'revenue_report', now]
+        [randomUUID(), authorId || req.user?.id, 'revenue_report.created', id, 'revenue_report', now]
       );
 
       // Notify manager if submitting
@@ -58,8 +61,40 @@ export function revenueRoutes(db: any) {
   // UPDATE (also used for approve/reject)
   router.put('/:id', async (req, res) => {
     const { title, content, reportType, periodStart, periodEnd, totalPreTax, totalDelivered, totalCumulative, status, submittedAt, approvedAt, approvedBy, managerFeedback, directorFeedback, generationMode } = req.body;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
     try {
       const existing = await db.get('SELECT * FROM revenue_reports WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Không tìm thấy báo cáo doanh thu' });
+
+      // RBAC check for status changes:
+      if (status && status !== existing.status) {
+        if (status === 'Pending Director') {
+          // Requires Manager, Director or Admin
+          const isManagerOrAbove = 
+            user.role === 'Admin' ||
+            user.role === 'Director' ||
+            user.role === 'Giám Đốc' ||
+            user.role === 'Manager' ||
+            user.role === 'Trưởng Phòng' ||
+            user.role === 'Phó Phòng';
+
+          if (!isManagerOrAbove) {
+            return res.status(403).json({ error: 'Forbidden: Bạn không có quyền duyệt chuyển cấp báo cáo này' });
+          }
+        } else if (status === 'Approved') {
+          // Final Approval requires Director or Admin
+          const isDirectorOrAdmin = 
+            user.role === 'Admin' ||
+            user.role === 'Director' ||
+            user.role === 'Giám Đốc';
+
+          if (!isDirectorOrAdmin) {
+            return res.status(403).json({ error: 'Forbidden: Chỉ Ban Giám Đốc mới có quyền phê duyệt báo cáo doanh thu cuối cùng' });
+          }
+        }
+      }
 
       await db.run(
         `UPDATE revenue_reports SET title=?, content=?, reportType=?, periodStart=?, periodEnd=?, totalPreTax=?, totalDelivered=?, totalCumulative=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, managerFeedback=?, directorFeedback=?, generationMode=? WHERE id=?`,
@@ -69,7 +104,7 @@ export function revenueRoutes(db: any) {
       // Log
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), approvedBy || 'system', `revenue_report.${status}`, req.params.id, 'revenue_report', new Date().toISOString()]
+        [randomUUID(), approvedBy || user.id, `revenue_report.${status}`, req.params.id, 'revenue_report', new Date().toISOString()]
       );
 
       // Notify on status change
@@ -108,57 +143,47 @@ export function revenueRoutes(db: any) {
           
           const notifiedUserIds = new Set<string>();
 
-          // Send to TP
           if (deptInfo?.managerId) {
+            notifiedUserIds.add(deptInfo.managerId);
             await sendNotification(
               db,
               deptInfo.managerId,
-              'revenue_approved_tp',
-              'Báo cáo doanh thu đã hoàn thành',
-              `Giám đốc đã phê duyệt hoàn tất báo cáo doanh thu "${title}" của phòng ban.`,
+              'revenue_approved',
+              'Báo cáo doanh thu đã duyệt',
+              `Giám đốc đã phê duyệt báo cáo doanh thu "${title}" của phòng bạn.`,
               req.params.id
             );
-            notifiedUserIds.add(deptInfo.managerId);
           }
 
-          // Send to department staff (phòng)
           for (const u of deptUsers) {
-            if (notifiedUserIds.has(u.id)) continue; // avoid duplicates
-            await sendNotification(
-              db,
-              u.id,
-              'revenue_approved_dept',
-              'Báo cáo doanh thu đã hoàn thành',
-              `Báo cáo doanh thu "${title}" của phòng ban đã được phê duyệt hoàn tất.`,
-              req.params.id
-            );
+            if (!notifiedUserIds.has(u.id)) {
+              await sendNotification(
+                db,
+                u.id,
+                'revenue_approved',
+                'Báo cáo doanh thu đã duyệt',
+                `Giám đốc đã phê duyệt báo cáo doanh thu "${title}" của phòng ban bạn.`,
+                req.params.id
+              );
+            }
           }
         }
       }
 
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed to update revenue report' }); }
+    } catch (e: any) { res.status(500).json({ error: 'Failed to update revenue report', detail: e.message }); }
   });
 
-  // SOFT DELETE (only Draft/Rejected, unless Admin/Giám đốc)
+  // SOFT DELETE – Only Admin / Giám đốc
   router.delete('/:id', async (req, res) => {
     try {
-      const report = await db.get('SELECT status FROM revenue_reports WHERE id = ?', [req.params.id]);
-      if (!report) return res.status(404).json({ error: 'Not found' });
-      
-      const isSuperUser = req.user?.role === 'Admin' || req.user?.role === 'Giám đốc';
-      
-      if (!isSuperUser && (report.status === 'Approved' || report.status.startsWith('Pending'))) {
-        return res.status(403).json({ error: 'Cannot delete approved or pending report' });
+      const isSuperUser = req.user?.role === 'Admin' || req.user?.role === 'Director' || req.user?.role === 'Giám Đốc';
+      if (!isSuperUser) {
+        return res.status(403).json({ error: 'Forbidden: Bạn không có quyền xóa báo cáo doanh thu' });
       }
-      
-      if (isSuperUser) {
-        await db.run('DELETE FROM revenue_reports WHERE id = ?', [req.params.id]);
-      } else {
-        await db.run('UPDATE revenue_reports SET isDeleted = 1 WHERE id = ?', [req.params.id]);
-      }
+      await db.run('UPDATE revenue_reports SET isDeleted = 1 WHERE id = ?', [req.params.id]);
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed to delete revenue report' }); }
+    } catch (e: any) { res.status(500).json({ error: 'Failed to delete revenue report', detail: e.message }); }
   });
 
   return router;

@@ -12,38 +12,157 @@ export function userRoutes(db: any, mailer: any) {
 
   router.get('/', async (_req, res) => {
     try {
-      const users = await db.all(`SELECT u.id, u.name, u.email, u.role, u.department, u.avatar, u.bio, u.phone, u.dob, u.hometown, u.cccd, u.gender, u.preferences, u.isLocked, r.permissions FROM users u LEFT JOIN roles r ON u.role = r.name`);
-      res.json(users.map((u: any) => ({ ...u, isLocked: Boolean(u.isLocked), permissions: u.permissions ? JSON.parse(u.permissions) : [], preferences: u.preferences ? JSON.parse(u.preferences) : {} })));
-    } catch (e) { console.error('GET /api/users error:', e); res.status(500).json({ error: 'Failed' }); }
+      const users = await db.all(`
+        SELECT u.id, u.name, u.email, u.role, u.department, u.departmentId, u.teamId, u.positionId, u.managerId,
+               u.avatar, u.bio, u.phone, u.dob, u.hometown, u.cccd, u.gender, u.preferences, u.isLocked,
+               r.permissions,
+               d.name as departmentName, d.code as departmentCode,
+               t.name as teamName, t.code as teamCode,
+               p.name as positionName, p.code as positionCode,
+               m.name as managerName
+        FROM users u
+        LEFT JOIN roles r ON u.role = r.name
+        LEFT JOIN departments d ON (u.departmentId = d.id OR u.department = d.name)
+        LEFT JOIN teams t ON u.teamId = t.id
+        LEFT JOIN positions p ON u.positionId = p.id
+        LEFT JOIN users m ON u.managerId = m.id
+        ORDER BY u.name ASC
+      `);
+      res.json(
+        users.map((u: any) => ({
+          ...u,
+          isLocked: Boolean(u.isLocked),
+          permissions: u.permissions ? (typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions) : [],
+          preferences: u.preferences ? (typeof u.preferences === 'string' ? JSON.parse(u.preferences) : u.preferences) : {},
+        }))
+      );
+    } catch (e) {
+      console.error('GET /api/users error:', e);
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
   });
 
   router.post('/', async (req, res) => {
-    const { id, name, email, password, role, department, avatar, bio, phone, dob, hometown, cccd, gender, preferences } = req.body;
+    const { id, name, email, password, role, department, departmentId, teamId, positionId, managerId, avatar, bio, phone, dob, hometown, cccd, gender, preferences } = req.body;
     try {
+      const userId = id || `u-${Date.now()}`;
       const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-      await db.run('INSERT INTO users (id, name, email, password, role, department, avatar, bio, phone, dob, hometown, cccd, gender, preferences) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, name, email, hashedPassword, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}']);
-      res.json({ id });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+      
+      // Auto-resolve departmentId if missing
+      let resolvedDeptId = departmentId;
+      if (!resolvedDeptId && department) {
+        const d = await db.get('SELECT id FROM departments WHERE name = ?', [department]);
+        if (d) resolvedDeptId = d.id;
+      }
+
+      await db.run(
+        `INSERT INTO users (id, name, email, password, role, department, departmentId, teamId, positionId, managerId, avatar, bio, phone, dob, hometown, cccd, gender, preferences)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          userId,
+          name,
+          email,
+          hashedPassword,
+          role,
+          department || '',
+          resolvedDeptId || null,
+          teamId || null,
+          positionId || null,
+          managerId || null,
+          avatar || '',
+          bio || '',
+          phone || '',
+          dob || '',
+          hometown || '',
+          cccd || '',
+          gender || '',
+          preferences ? JSON.stringify(preferences) : '{}',
+        ]
+      );
+      res.json({ id: userId });
+    } catch (e) {
+      console.error('POST /api/users error:', e);
+      res.status(500).json({ error: 'Failed to create user' });
+    }
   });
 
   router.put('/:id', async (req, res) => {
-    const { name, email, password, role, department, avatar, bio, phone, dob, hometown, cccd, gender, preferences } = req.body;
+    const { name, email, password, role, department, departmentId, teamId, positionId, managerId, avatar, bio, phone, dob, hometown, cccd, gender, preferences } = req.body;
     try {
+      // Auto-resolve departmentId if missing
+      let resolvedDeptId = departmentId;
+      if (!resolvedDeptId && department) {
+        const d = await db.get('SELECT id FROM departments WHERE name = ?', [department]);
+        if (d) resolvedDeptId = d.id;
+      }
+
       if (password) {
         const hashed = await bcrypt.hash(password, 10);
-        await db.run('UPDATE users SET name=?, email=?, password=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, email, hashed, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
+        await db.run(
+          `UPDATE users
+           SET name=?, email=?, password=?, role=?, department=?, departmentId=?, teamId=?, positionId=?, managerId=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=?
+           WHERE id=?`,
+          [
+            name,
+            email,
+            hashed,
+            role,
+            department || '',
+            resolvedDeptId || null,
+            teamId || null,
+            positionId || null,
+            managerId || null,
+            avatar || '',
+            bio || '',
+            phone || '',
+            dob || '',
+            hometown || '',
+            cccd || '',
+            gender || '',
+            preferences ? JSON.stringify(preferences) : '{}',
+            req.params.id,
+          ]
+        );
       } else {
-        await db.run('UPDATE users SET name=?, email=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, email, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
+        await db.run(
+          `UPDATE users
+           SET name=?, email=?, role=?, department=?, departmentId=?, teamId=?, positionId=?, managerId=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=?
+           WHERE id=?`,
+          [
+            name,
+            email,
+            role,
+            department || '',
+            resolvedDeptId || null,
+            teamId || null,
+            positionId || null,
+            managerId || null,
+            avatar || '',
+            bio || '',
+            phone || '',
+            dob || '',
+            hometown || '',
+            cccd || '',
+            gender || '',
+            preferences ? JSON.stringify(preferences) : '{}',
+            req.params.id,
+          ]
+        );
       }
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      console.error('PUT /api/users error:', e);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
   });
 
   router.delete('/:id', async (req, res) => {
     try {
       await db.run('DELETE FROM users WHERE id=?', [req.params.id]);
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete user' });
+    }
   });
 
   router.post('/:id/reset-password', async (req, res) => {
@@ -57,7 +176,10 @@ export function userRoutes(db: any, mailer: any) {
       await db.run("UPDATE password_reset_requests SET status = 'resolved' WHERE userId = ? AND status = 'pending'", [req.params.id]);
       const emailSent = await mailer.sendResetPasswordEmail(user.email, finalPassword);
       return res.json({ success: true, emailSent, generatedPassword: finalPassword });
-    } catch (e) { console.error('reset-password error', e); res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      console.error('reset-password error', e);
+      res.status(500).json({ error: 'Failed' });
+    }
   });
 
   router.put('/:id/lock', async (req, res) => {
@@ -70,7 +192,9 @@ export function userRoutes(db: any, mailer: any) {
         );
       } catch (e) {}
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to lock user' });
+    }
   });
 
   router.put('/:id/unlock', async (req, res) => {
@@ -83,7 +207,9 @@ export function userRoutes(db: any, mailer: any) {
         );
       } catch (e) {}
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to unlock user' });
+    }
   });
 
   return router;

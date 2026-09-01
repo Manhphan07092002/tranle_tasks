@@ -9,6 +9,7 @@ export enum TaskPriority {
   LOW = 'Low',
   MEDIUM = 'Medium',
   HIGH = 'High',
+  URGENT = 'Urgent',
 }
 
 export enum RecurrenceType {
@@ -44,11 +45,25 @@ export interface Task {
   tags?: string[];
   createdBy: string;
   department: string;
+  departmentId?: string;
+  teamId?: string;
+  projectId?: string;
+  milestoneId?: string;
+  customerId?: string;
+  taskType?: string;
+  estimatedHours?: number;
+  actualHours?: number;
+  requiresApproval?: boolean | number;
+  approvalStatus?: string;
+  approvedBy?: string;
+  completedAt?: string;
+  departmentName?: string;
+  teamName?: string;
+  projectName?: string;
   recurrence?: RecurrenceType;
   subtasks?: Subtask[];
   comments?: Comment[];
   contractId?: string;
-  projectId?: string;
 }
 
 export interface Note {
@@ -73,6 +88,7 @@ export interface Report {
   content: string;
   authorId: string;
   department: string;
+  departmentId?: string;
   status: ReportStatus;
   createdAt: string;
   submittedAt?: string;
@@ -90,6 +106,14 @@ export interface User {
   password?: string;
   role: UserRole;
   department: string;
+  departmentId?: string;
+  teamId?: string;
+  positionId?: string;
+  managerId?: string;
+  departmentName?: string;
+  teamName?: string;
+  positionName?: string;
+  managerName?: string;
   avatar: string;
   bio?: string;
   phone?: string;
@@ -141,10 +165,154 @@ export interface Role {
 
 export interface Department {
   id: string;
+  code?: string;
   name: string;
   description?: string;
   color: string;
+  icon?: string;
   managerId?: string;
+  parentId?: string;
+  sortOrder?: number;
+  isActive?: number | boolean;
+  userCount?: number;
+  taskCount?: number;
+  teamCount?: number;
+  projectCount?: number;
+  manager?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatar?: string;
+    phone?: string;
+  } | null;
+}
+
+export interface Team {
+  id: string;
+  departmentId: string;
+  code?: string;
+  name: string;
+  description?: string;
+  managerId?: string;
+  color?: string;
+  isActive?: number | boolean;
+  createdAt?: string;
+  departmentName?: string;
+  departmentCode?: string;
+  userCount?: number;
+  taskCount?: number;
+  manager?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatar?: string;
+  } | null;
+  members?: User[];
+}
+
+export interface Position {
+  id: string;
+  departmentId?: string;
+  teamId?: string;
+  code?: string;
+  name: string;
+  description?: string;
+  level?: number;
+  isManager?: number | boolean;
+  isActive?: number | boolean;
+  createdAt?: string;
+  departmentName?: string;
+  teamName?: string;
+  userCount?: number;
+}
+
+export interface OrganizationTreeDepartment extends Department {
+  members: User[];
+  teams: (Team & {
+    positions?: Position[];
+    memberCount?: number;
+  })[];
+  memberCount?: number;
+}
+
+export interface OrganizationTreeResponse {
+  company: {
+    name: string;
+    brand: string;
+    mission: string;
+    primaryColor: string;
+  };
+  departments: OrganizationTreeDepartment[];
+}
+
+export interface DepartmentRequest {
+  id: string;
+  requestNumber: string;
+  sourceDepartmentId: string;
+  targetDepartmentId: string;
+  requesterId: string;
+  assigneeId?: string;
+  title: string;
+  description?: string;
+  priority: 'Urgent' | 'High' | 'Medium' | 'Low';
+  status: 'pending' | 'in_review' | 'accepted' | 'in_progress' | 'completed' | 'rejected';
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  dueDate?: string;
+  attachments?: string[];
+  outputData?: any;
+  createdAt: string;
+  updatedAt?: string;
+  sourceDepartmentName?: string;
+  sourceDepartmentCode?: string;
+  sourceDepartmentColor?: string;
+  targetDepartmentName?: string;
+  targetDepartmentCode?: string;
+  targetDepartmentColor?: string;
+  requesterName?: string;
+  requesterAvatar?: string;
+  assigneeName?: string;
+  assigneeAvatar?: string;
+}
+
+export interface ApprovalItem {
+  id: string;
+  approvalCode: string;
+  entityType: 'task' | 'request' | 'quotation' | 'discount' | 'purchase_order' | 'payment' | 'project' | 'contract' | 'leave' | 'design';
+  entityId: string;
+  title: string;
+  amount?: number;
+  requestedBy: string;
+  departmentId?: string;
+  approverId: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  comment?: string;
+  requestedAt: string;
+  respondedAt?: string;
+  requesterName?: string;
+  requesterAvatar?: string;
+  requesterEmail?: string;
+  approverName?: string;
+  approverAvatar?: string;
+  departmentName?: string;
+  departmentCode?: string;
+}
+
+export interface TaskTemplate {
+  id: string;
+  departmentId: string;
+  code: string;
+  title: string;
+  description?: string;
+  estimatedHours?: number;
+  priority: string;
+  taskType: string;
+  checklist: Array<{ id?: string; title: string; isCompleted?: boolean | number }>;
+  defaultTags: string[];
+  requiresApproval?: boolean | number;
+  createdAt?: string;
+  departmentName?: string;
+  departmentCode?: string;
 }
 
 export interface PasswordResetRequest {
@@ -165,6 +333,7 @@ export interface Contract {
   invoiceDate?: string;
   invoiceNumber?: string;
   department: string;
+  departmentId?: string;
   status?: string;
   createdBy: string;
   createdAt: string;
@@ -204,6 +373,7 @@ export interface RevenueReport {
   totalCumulative?: number;
   authorId: string;
   department: string;
+  departmentId?: string;
   status: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -217,12 +387,23 @@ export interface RevenueReport {
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
 export type ProjectPhase = 'initiation' | 'planning' | 'execution' | 'monitoring' | 'closure';
 
+export interface ProjectDepartment {
+  projectId?: string;
+  departmentId: string;
+  role?: 'lead' | 'design' | 'procurement' | 'construction' | 'om' | 'legal' | 'member' | string;
+  departmentName?: string;
+  departmentCode?: string;
+  departmentColor?: string;
+}
+
 export interface Project {
   id: string;
   projectCode: string;
   name: string;
   clientName?: string;
   department?: string;
+  departmentId?: string;
+  primaryDepartmentId?: string;
   managerId?: string;
   status: string;
   startDate?: string;
@@ -237,6 +418,7 @@ export interface Project {
   winningPrice?: number;
   priority?: ProjectPriority;
   phase?: ProjectPhase;
+  participatingDepartments?: ProjectDepartment[];
   createdAt: string;
   updatedAt?: string;
   isDeleted?: number;

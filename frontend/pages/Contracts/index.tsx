@@ -22,6 +22,7 @@ import { ContractMetrics } from './ContractMetrics';
 import { ContractTable } from './ContractTable';
 import { ContractDebtTable } from './ContractDebtTable';
 import { ContractForm } from './ContractForm';
+import { SolarFastQuoteModal } from '../../components/solar/SolarFastQuoteModal';
 
 // Toast notification types
 interface Toast {
@@ -65,6 +66,7 @@ const ContractsPage: React.FC = () => {
   const toastIdRef = useRef(0);
   const itemsPerPage = 20;
   const [showCharts, setShowCharts] = useState(false);
+  const [isFastQuoteOpen, setIsFastQuoteOpen] = useState(false);
 
   // Toast notification helper
   const showToast = useCallback((type: Toast['type'], message: string) => {
@@ -193,7 +195,7 @@ const ContractsPage: React.FC = () => {
   const userDept = user?.department || '';
   const canEditContract = useCallback((c: Contract): boolean => {
     if (c.status === 'completed') return false;
-    const isDeptManager = isUserManager && user?.department === c.department;
+    const isDeptManager = isUserManager && (user?.departmentId === c.departmentId || (user?.department && user?.department === c.department));
     return !!(c.createdBy === user?.id || isDeptManager || perms.includes('admin_panel') || perms.includes('director_feedback'));
   }, [isUserManager, user, perms]);
 
@@ -600,6 +602,13 @@ const ContractsPage: React.FC = () => {
           <p className="text-sm text-gray-500 mt-1">Theo dõi và quản lý hợp đồng kinh doanh</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setIsFastQuoteOpen(true)}
+            size="sm"
+            className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold shadow-md shadow-amber-500/20"
+          >
+            ⚡ Tính Nhanh Báo Giá Solar & BOM
+          </Button>
           {activeTab !== 'create' && (
             <Button variant="secondary" onClick={handleExportExcel} size="sm" className="gap-1">
               <Download size={14}/> Xuất Excel
@@ -867,6 +876,7 @@ const ContractsPage: React.FC = () => {
       <ExportInvoiceModal contract={exportInvoiceContract} onClose={() => setExportInvoiceContract(null)} onSave={handleSaveExportInvoice} />
 
       <PrintableQuote ref={printRef} contract={form} user={user} />
+      <SolarFastQuoteModal isOpen={isFastQuoteOpen} onClose={() => setIsFastQuoteOpen(false)} />
 
       {/* Toast Notifications */}
       {toasts.length > 0 && (

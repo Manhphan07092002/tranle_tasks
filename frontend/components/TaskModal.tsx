@@ -46,6 +46,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
   const [assignees, setAssignees] = useState<string[]>([]);
   const [recurrence, setRecurrence] = useState<RecurrenceType>(RecurrenceType.NONE);
   const [contractId, setContractId] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
+  const [department, setDepartment] = useState<string>('');
+  const [teamId, setTeamId] = useState<string>('');
+  const [projectId, setProjectId] = useState<string>('');
+  const [taskType, setTaskType] = useState<string>('general');
   
   // Enhanced Features State
   const [tags, setTags] = useState<string[]>([]);
@@ -61,7 +66,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { contracts } = useData();
+  const { contracts, departments, teams, projects } = useData();
 
   // Determine assignable users based on role/permissions
   const perms = user.permissions || [];
@@ -87,6 +92,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
         setAssignees(initialTask.assignees);
         setRecurrence(initialTask.recurrence || RecurrenceType.NONE);
         setContractId(initialTask.contractId || '');
+        setDepartmentId(initialTask.departmentId || (departments.find(d => d.name === initialTask.department)?.id || ''));
+        setDepartment(initialTask.department || user.department);
+        setTeamId(initialTask.teamId || '');
+        setProjectId(initialTask.projectId || '');
+        setTaskType(initialTask.taskType || 'general');
         setComments(initialTask.comments || []);
         setTags(initialTask.tags || []);
         setSubtasks(initialTask.subtasks || []);
@@ -95,9 +105,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
         if (initialDate) setStartDate(initialDate);
         // Auto-assign creator (always pre-select self)
         setAssignees([user.id]);
+        const userDept = departments.find(d => d.name === user.department || d.id === user.departmentId);
+        setDepartmentId(userDept?.id || user.departmentId || '');
+        setDepartment(user.department || '');
+        setTeamId(user.teamId || '');
       }
     }
-  }, [isOpen, initialTask, initialDate, user.id]);
+  }, [isOpen, initialTask, initialDate, user.id, departments]);
 
   const resetForm = () => {
     setTitle('');
@@ -110,12 +124,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
     setAssignees([]);
     setRecurrence(RecurrenceType.NONE);
     setContractId('');
+    setDepartmentId(user.departmentId || '');
+    setDepartment(user.department || '');
+    setTeamId(user.teamId || '');
+    setProjectId('');
+    setTaskType('general');
     setComments([]);
     setTags([]);
     setSubtasks([]);
     setNewComment('');
     setNewTag('');
     setNewSubtaskTitle('');
+  };
+
+  const handleDepartmentChange = (deptId: string) => {
+    setDepartmentId(deptId);
+    const d = departments.find(item => item.id === deptId);
+    if (d) setDepartment(d.name);
+    setTeamId('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -134,12 +160,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
       assignees,
       recurrence,
       contractId: contractId || undefined,
+      departmentId: departmentId || undefined,
+      department: department || user.department,
+      teamId: teamId || undefined,
+      projectId: projectId || undefined,
+      taskType: taskType || 'general',
       comments,
       tags,
       subtasks,
       // Preserve creation info if editing, else set new
       createdBy: initialTask ? initialTask.createdBy : user.id,
-      department: initialTask ? initialTask.department : user.department,
     };
     onSave(task);
     onClose();
@@ -439,6 +469,75 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, i
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-400 outline-none bg-white appearance-none disabled:bg-gray-50 disabled:text-gray-500"
                 >
                   {Object.values(RecurrenceType).map(r => <option key={r} value={r}>{t(r)}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Organization Assignment: Department & Team */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phòng Ban Phụ Trách</label>
+                <select 
+                  value={departmentId}
+                  disabled={readOnly}
+                  onChange={(e) => handleDepartmentChange(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-400 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 text-sm"
+                >
+                  <option value="">-- Chọn phòng ban --</option>
+                  {departments && departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name} ({d.code || 'DEPT'})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nhóm Chuyên Môn (Team)</label>
+                <select 
+                  value={teamId}
+                  disabled={readOnly}
+                  onChange={(e) => setTeamId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-400 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 text-sm"
+                >
+                  <option value="">-- Không thuộc nhóm cụ thể --</option>
+                  {teams && teams.filter(t => !departmentId || t.departmentId === departmentId).map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Project Link & Task Type */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dự Án Liên Kết (Project)</label>
+                <select 
+                  value={projectId}
+                  disabled={readOnly}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-400 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 text-sm"
+                >
+                  <option value="">-- Không liên kết dự án --</option>
+                  {projects && projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.projectCode || p.id} - {p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Loại Công Việc (Task Type)</label>
+                <select 
+                  value={taskType}
+                  disabled={readOnly}
+                  onChange={(e) => setTaskType(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-400 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 text-sm"
+                >
+                  <option value="general">Chung (General Task)</option>
+                  <option value="survey">Khảo sát hiện trường & Đo đạc</option>
+                  <option value="design">Thiết kế kỹ thuật Solar / PVSyst / AutoCAD</option>
+                  <option value="epc_construction">Thi công xây lắp & Đấu nối EPC</option>
+                  <option value="om_maintenance">Vận hành, bảo trì & Quét nhiệt O&M</option>
+                  <option value="saj_warranty">Bảo hành & Thay thế bo mạch SAJ</option>
+                  <option value="procurement">Mua hàng & Đàm phán nhà cung cấp</option>
+                  <option value="logistics">Kho bãi & Giao nhận thiết bị</option>
+                  <option value="finance">Thanh toán & Nghiệm thu hợp đồng</option>
                 </select>
               </div>
             </div>

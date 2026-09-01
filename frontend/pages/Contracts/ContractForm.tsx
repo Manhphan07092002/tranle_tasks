@@ -143,7 +143,7 @@ export const ContractForm: React.FC<ContractFormProps> = ({
     const perms = currentUser.permissions || [];
     const userRole = currentUser.role || '';
     const isSystemAdmin = perms.includes('admin_panel') || perms.includes('director_feedback') || userRole === 'Admin' || userRole === 'Director' || userRole === 'Giám đốc';
-    const isDeptManager = (userRole === 'Manager' || userRole.startsWith('Trưởng') || userRole.includes('Trưởng')) && currentUser.department === form.department;
+    const isDeptManager = (userRole === 'Manager' || userRole.startsWith('Trưởng') || userRole.includes('Trưởng')) && (currentUser.departmentId === form.departmentId || (currentUser.department && currentUser.department === form.department));
     return isSystemAdmin || isDeptManager;
   }, [currentUser, form.department]);
 

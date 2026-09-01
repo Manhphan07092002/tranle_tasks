@@ -574,7 +574,7 @@ const RevenuePage: React.FC = () => {
       const filtered = contracts.filter(c => {
         return (
           (c.contractType === 'output' || !c.contractType) &&
-          c.department === dept &&
+          (c.departmentId === (editingReport?.departmentId || user?.departmentId) || (c.department && c.department === dept)) &&
           c.invoiceDate &&
           c.invoiceDate >= periodStart &&
           c.invoiceDate <= periodEnd &&
@@ -621,7 +621,7 @@ const RevenuePage: React.FC = () => {
   const visibleReports = useMemo(() => {
     let list = revenueReports;
     if (!canViewAll) {
-      list = list.filter(r => r.department === userDept || r.authorId === user?.id);
+      list = list.filter(r => (r.departmentId === user?.departmentId || (r.department && r.department === userDept)) || r.authorId === user?.id);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -633,7 +633,7 @@ const RevenuePage: React.FC = () => {
   const subTabCounts = useMemo(() => {
     let list = revenueReports;
     if (!canViewAll) {
-      list = list.filter(r => r.department === userDept || r.authorId === user?.id);
+      list = list.filter(r => (r.departmentId === user?.departmentId || (r.department && r.department === userDept)) || r.authorId === user?.id);
     }
 
     const mine = list.filter(r => r.authorId === user?.id && r.status !== 'Approved' && r.status !== 'Rejected').length;

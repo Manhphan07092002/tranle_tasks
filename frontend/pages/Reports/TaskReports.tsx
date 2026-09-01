@@ -121,7 +121,7 @@ export default function ReportsPage() {
     return all
       .filter(r => {
         // Department check – allow when either side is unset
-        const deptOk = !r.department || !user.department || r.department === user.department;
+        const deptOk = !r.departmentId || !user.departmentId || r.departmentId === user.departmentId || r.department === user.department;
         if (!deptOk) return false;
         if (r.authorId === user.id) return false;
         if (r.status !== 'Pending' && r.status !== 'Pending Manager') return false;
@@ -138,7 +138,7 @@ export default function ReportsPage() {
     const all = [...reports, ...revenueReports];
     return all
       .filter(r => {
-        const deptOk = !r.department || !user.department || r.department === user.department;
+        const deptOk = !r.departmentId || !user.departmentId || r.departmentId === user.departmentId || r.department === user.department;
         if (!deptOk) return false;
         if (r.authorId === user.id) return false;
         if (r.status !== 'Approved' && r.status !== 'Pending Director') return false;
@@ -190,7 +190,7 @@ export default function ReportsPage() {
     let list: any[] = [];
     const all = [...reports, ...revenueReports];
     if (canViewAll) list = all;
-    else if (canApprove) list = all.filter(r => r.department === user.department);
+    else if (canApprove) list = all.filter(r => r.departmentId === user.departmentId || (r.department && r.department === user.department));
     else list = all.filter(r => r.authorId === user.id);
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [reports, revenueReports, user, canViewAll, canApprove]);
@@ -250,7 +250,7 @@ export default function ReportsPage() {
     // Find existing consolidated report for this manager + week
     const existing = reports.find(r =>
       r.authorId === user.id &&
-      r.department === user.department &&
+      (r.departmentId === user.departmentId || (r.department && r.department === user.department)) &&
       (() => {
         try { const c = JSON.parse(r.content); return c.weekStart === weekStart && c.weekEnd === weekEnd; }
         catch { return false; }
@@ -302,7 +302,7 @@ export default function ReportsPage() {
     // Find existing consolidated report for this manager + period
     const existing = revenueReports.find(r =>
       r.authorId === user.id &&
-      r.department === user.department &&
+      (r.departmentId === user.departmentId || (r.department && r.department === user.department)) &&
       r.reportType === approvedReport.reportType &&
       r.periodStart === approvedReport.periodStart &&
       r.periodEnd === approvedReport.periodEnd
@@ -407,7 +407,7 @@ export default function ReportsPage() {
 
   // Apply department filter for director
   if (canViewAll && activeTab === 'all' && filterDept !== 'all') {
-    displayedReports = displayedReports.filter(r => r.department === filterDept);
+    displayedReports = displayedReports.filter(r => r.departmentId === filterDept || r.department === filterDept);
   }
 
   // Search & Filter
@@ -450,8 +450,8 @@ export default function ReportsPage() {
   const deptData = canViewAll ? departments.filter(d => !['GIÁM ĐỐC', 'ADMIN', 'Hội đồng quản trị và ban lãnh đạo công ty.'].includes(d.name)).map(dept => {
     return {
       name: dept.name,
-      approved: reports.filter(r => r.department === dept.name && r.status === 'Approved').length,
-      pending: reports.filter(r => r.department === dept.name && r.status === 'Pending').length,
+      approved: reports.filter(r => (r.departmentId === dept.id || r.department === dept.name) && r.status === 'Approved').length,
+      pending: reports.filter(r => (r.departmentId === dept.id || r.department === dept.name) && r.status === 'Pending').length,
     };
   }) : [];
 
@@ -463,9 +463,9 @@ export default function ReportsPage() {
   const submissionProgress = useMemo(() => {
     if (canViewAll || !canApprove || !user) return null;
     const myDept = user.department;
-    const deptEmployees = users.filter(u => u.department === myDept && u.id !== user.id && !managerRoleNames.has(u.role) && u.role !== 'Admin');
+    const deptEmployees = users.filter(u => (u.departmentId === user.departmentId || (u.department && u.department === myDept)) && u.id !== user.id && !managerRoleNames.has(u.role) && u.role !== 'Admin');
     const submittedIds = new Set(
-      reports.filter(r => r.department === myDept && r.authorId !== user.id && getReportWeekInfo(r).start === currentWeekStartStr).map(r => r.authorId)
+      reports.filter(r => (r.departmentId === user.departmentId || (r.department && r.department === myDept)) && r.authorId !== user.id && getReportWeekInfo(r).start === currentWeekStartStr).map(r => r.authorId)
     );
     return { total: deptEmployees.length, submitted: deptEmployees.filter(u => submittedIds.has(u.id)).length };
   }, [canViewAll, canApprove, user, users, reports, currentWeekStartStr, managerRoleNames]);
@@ -489,9 +489,9 @@ export default function ReportsPage() {
     if (canViewAll || !canApprove) return [];
     if (!user) return [];
     const myDept = user.department;
-    const deptUsers = users.filter(u => u.department === myDept && u.role !== 'Admin');
+    const deptUsers = users.filter(u => (u.departmentId === user.departmentId || (u.department && u.department === myDept)) && u.role !== 'Admin');
     const submittedIds = new Set(
-      reports.filter(r => r.department === myDept && new Date(r.createdAt).getTime() >= currentWeekStart).map(r => r.authorId)
+      reports.filter(r => (r.departmentId === user.departmentId || (r.department && r.department === myDept)) && new Date(r.createdAt).getTime() >= currentWeekStart).map(r => r.authorId)
     );
     return deptUsers.filter(u => !submittedIds.has(u.id));
   }, [canViewAll, canApprove, user, users, reports, currentWeekStart]);
@@ -847,7 +847,7 @@ export default function ReportsPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
                 {departments.filter(d => !['GIÁM ĐỐC', 'ADMIN', 'Hội đồng quản trị và ban lãnh đạo công ty.'].includes(d.name)).map(dept => {
-                  const rpt = rpts.find(r => r.department === dept.name);
+                  const rpt = rpts.find(r => r.departmentId === dept.id || r.department === dept.name);
                   return (
                     <div key={dept.id} onClick={() => rpt && handleOpenView(rpt)}
                       className={`p-4 rounded-xl border-2 transition-all ${rpt ? 'border-green-200 bg-green-50/40 hover:bg-green-50 cursor-pointer shadow-sm hover:shadow' : 'border-dashed border-gray-200 bg-gray-50/50'}`}>
@@ -893,7 +893,7 @@ export default function ReportsPage() {
 
         // 3. Dept Filter
         if (historyDeptFilter !== 'all') {
-          filteredHistory = filteredHistory.filter(r => r.department === historyDeptFilter);
+          filteredHistory = filteredHistory.filter(r => r.departmentId === historyDeptFilter || r.department === historyDeptFilter);
         }
 
         // Group by week
@@ -1137,7 +1137,7 @@ export default function ReportsPage() {
             r.status === 'Approved' &&
             canApprove &&
             r.authorId !== user?.id &&
-            r.department === user?.department
+            (r.departmentId === user?.departmentId || (r.department && r.department === user?.department))
           ) {
             await autoConsolidateForManager(r);
           }
@@ -1243,7 +1243,7 @@ export default function ReportsPage() {
             r.status === 'Approved' &&
             canApprove &&
             r.authorId !== user?.id &&
-            r.department === user?.department
+            (r.departmentId === user?.departmentId || (r.department && r.department === user?.department))
           ) {
             await autoConsolidateRevenueForManager(r);
           }

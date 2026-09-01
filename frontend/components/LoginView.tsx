@@ -17,7 +17,7 @@ export const LoginView: React.FC = () => {
     setError('');
     setIsLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email.trim(), password);
       if (!res.success) {
         setError(res.error || 'Tài khoản hoặc mật khẩu không chính xác.');
         setIsLoading(false);

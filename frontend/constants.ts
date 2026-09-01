@@ -27,6 +27,7 @@ export const NAV_ITEMS = [
 ];
 
 export const PRIORITY_COLORS: Record<TaskPriority, string> = {
+  [TaskPriority.URGENT]: 'bg-rose-50 text-rose-700 border-rose-200',
   [TaskPriority.HIGH]: 'bg-red-50 text-red-600 border-red-200',
   [TaskPriority.MEDIUM]: 'bg-orange-50 text-orange-600 border-orange-200',
   [TaskPriority.LOW]: 'bg-green-50 text-green-600 border-green-200',

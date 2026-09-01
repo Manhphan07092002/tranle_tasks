@@ -14,6 +14,7 @@ export interface RevenueReport {
   totalCumulative: number;
   authorId: string;
   department: string;
+  departmentId?: string;
   status: string;
   approvedBy?: string;
   approvedAt?: string;

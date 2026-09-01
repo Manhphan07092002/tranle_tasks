@@ -94,7 +94,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
             
             const perms = currentUser?.permissions || [];
             const isSystemAdmin = perms.includes('admin_panel') || perms.includes('director_feedback') || currentUser?.role === 'Admin' || currentUser?.role === 'Director';
-            const isDeptManager = (currentUser?.role === 'Manager' || currentUser?.role?.startsWith('Trưởng') || currentUser?.role?.includes('Trưởng')) && currentUser?.department === c.department;
+            const isDeptManager = (currentUser?.role === 'Manager' || currentUser?.role?.startsWith('Trưởng') || currentUser?.role?.includes('Trưởng')) && (currentUser?.departmentId === c.departmentId || (currentUser?.department && currentUser?.department === c.department));
             const canApproveThis = isSystemAdmin || isDeptManager;
             return (
               <tr key={c.id} 

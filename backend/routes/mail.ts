@@ -56,9 +56,9 @@ export function mailRoutes(db: any) {
       let targetSmtpPort = Number(config.SMTP_PORT);
 
       if (provider === 'poste') {
-        targetImapHost = 'ctc_mailserver';
+        targetImapHost = 'tranle_mailserver';
         targetImapPort = 993;
-        targetSmtpHost = 'ctc_mailserver';
+        targetSmtpHost = 'tranle_mailserver';
         targetSmtpPort = 587;
       } else if (provider === 'custom') {
         targetImapHost = customImapHost || config.IMAP_HOST;

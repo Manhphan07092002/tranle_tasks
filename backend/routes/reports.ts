@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function reportRoutes(db: any) {
   const router = Router();
+
+  router.use(requireAuth);
 
   router.get('/', async (_req, res) => {
     try {
@@ -56,11 +59,11 @@ export function reportRoutes(db: any) {
 
       await db.run(
         'INSERT INTO reports (id, title, content, authorId, department, status, createdAt, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, title, finalContent ?? null, authorId, department, status, createdAt, submittedAt ?? null, approvedAt ?? null, approvedBy ?? null, directorFeedback ?? null, managerFeedback ?? null],
+        [id, title, finalContent ?? null, authorId || req.user?.id, department, status, createdAt || new Date().toISOString(), submittedAt ?? null, approvedAt ?? null, approvedBy ?? null, directorFeedback ?? null, managerFeedback ?? null],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), authorId, 'report.created', id, 'report', new Date().toISOString()],
+        [randomUUID(), authorId || req.user?.id, 'report.created', id, 'report', new Date().toISOString()],
       );
 
       if (status === 'Pending Manager') {
@@ -76,8 +79,29 @@ export function reportRoutes(db: any) {
 
   router.put('/:id', async (req, res) => {
     const { title, content, status, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback } = req.body;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
     try {
       const existing = await db.get('SELECT * FROM reports WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Không tìm thấy báo cáo' });
+
+      // RBAC check for status transitions:
+      if (status && status !== existing.status) {
+        if (status === 'Approved' || status === 'Pending Director') {
+          const isManagerOrAbove = 
+            user.role === 'Admin' ||
+            user.role === 'Director' ||
+            user.role === 'Giám Đốc' ||
+            user.role === 'Manager' ||
+            user.role === 'Trưởng Phòng' ||
+            user.role === 'Phó Phòng';
+
+          if (!isManagerOrAbove) {
+            return res.status(403).json({ error: 'Forbidden: Bạn không có quyền phê duyệt báo cáo này' });
+          }
+        }
+      }
 
       let finalContent = content;
       try {
@@ -109,7 +133,7 @@ export function reportRoutes(db: any) {
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), approvedBy || 'system', `report.${status}`, req.params.id, 'report', new Date().toISOString()],
+        [randomUUID(), approvedBy || user.id, `report.${status}`, req.params.id, 'report', new Date().toISOString()],
       );
 
       if (existing && existing.status !== status) {
@@ -129,13 +153,13 @@ export function reportRoutes(db: any) {
       const report = await db.get('SELECT status FROM reports WHERE id = ?', [req.params.id]);
       if (!report) return res.status(404).json({ error: 'Report not found' });
       
-      const isSuperUser = req.user?.role === 'Admin' || req.user?.role === 'Giám đốc';
+      const isSuperUser = req.user?.role === 'Admin' || req.user?.role === 'Director' || req.user?.role === 'Giám Đốc';
       
       if (!isSuperUser && (report.status === 'Approved' || report.status === 'Pending')) {
-        return res.status(403).json({ error: 'Cannot delete an approved or pending report' });
+        return res.status(403).json({ error: 'Không thể xóa báo cáo đã duyệt hoặc đang chờ duyệt' });
       }
       
-      if (!req.user || isSuperUser) {
+      if (isSuperUser) {
         await db.run('DELETE FROM reports WHERE id = ?', [req.params.id]);
       } else {
         await db.run('UPDATE reports SET isDeleted = 1 WHERE id = ?', [req.params.id]);

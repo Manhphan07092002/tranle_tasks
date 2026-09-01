@@ -75,7 +75,7 @@ export const createChatSession = async (
 ) => {
   return {
     sendMessageStream: async function* ({ message }: { message: string }) {
-      const token = localStorage.getItem('ctc_token') || '';
+      const token = localStorage.getItem('tranle_token') || localStorage.getItem('ctc_token') || '';
 
       const res = await fetch('/api/ai/chat-stream', {
         method: 'POST',

@@ -76,3 +76,27 @@ export const deleteProjectMilestone = async (projectId: string, milestoneId: str
   });
   if (!res.ok) throw new Error('Failed to delete milestone');
 };
+
+// --- Participating Departments ---
+
+export const getProjectDepartments = async (projectId: string): Promise<any[]> => {
+  const res = await apiFetch(`/api/projects/${projectId}/departments`);
+  if (!res.ok) throw new Error('Failed to fetch project departments');
+  return res.json();
+};
+
+export const addProjectDepartment = async (projectId: string, departmentId: string, role?: string): Promise<void> => {
+  const res = await apiFetch(`/api/projects/${projectId}/departments`, {
+    method: 'POST',
+    body: JSON.stringify({ departmentId, role })
+  });
+  if (!res.ok) throw new Error('Failed to add project department');
+};
+
+export const removeProjectDepartment = async (projectId: string, departmentId: string): Promise<void> => {
+  const res = await apiFetch(`/api/projects/${projectId}/departments/${departmentId}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('Failed to remove project department');
+};
+

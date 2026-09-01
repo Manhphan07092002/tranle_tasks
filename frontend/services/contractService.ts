@@ -52,6 +52,7 @@ export interface Contract {
   invoiceDate?: string;
   invoiceNumber?: string;
   department: string;
+  departmentId?: string;
   createdBy: string;
   createdAt: string;
   updatedAt?: string;

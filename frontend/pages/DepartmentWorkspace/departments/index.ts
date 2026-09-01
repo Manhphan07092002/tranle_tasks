@@ -1,0 +1,13 @@
+export { ExecutiveWorkspace } from './ExecutiveWorkspace';
+export { SalesWorkspace } from './SalesWorkspace';
+export { EngineeringWorkspace } from './EngineeringWorkspace';
+export { EpcWorkspace } from './EpcWorkspace';
+export { OmWorkspace } from './OmWorkspace';
+export { ProcurementWorkspace } from './ProcurementWorkspace';
+export { WarehouseWorkspace } from './WarehouseWorkspace';
+export { MarketingWorkspace } from './MarketingWorkspace';
+export { CustomerCareWorkspace } from './CustomerCareWorkspace';
+export { FinanceWorkspace } from './FinanceWorkspace';
+export { HrWorkspace } from './HrWorkspace';
+export { ItWorkspace } from './ItWorkspace';
+export { LegalWorkspace } from './LegalWorkspace';

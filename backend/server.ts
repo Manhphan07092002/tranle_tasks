@@ -1,9 +1,17 @@
-import 'dotenv/config'; // Trigger restart
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from backend folder or root folder
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 import express from 'express';
 import crypto from 'crypto';
 import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
@@ -18,6 +26,9 @@ import { meetingRoutes } from './routes/meetings.js';
 import { reportRoutes } from './routes/reports.js';
 import { roleRoutes } from './routes/roles.js';
 import { departmentRoutes } from './routes/departments.js';
+import { teamRoutes } from './routes/teams.js';
+import { positionRoutes } from './routes/positions.js';
+import { organizationRoutes } from './routes/organization.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { adminRoutes } from './routes/admin.js';
 import { eventRoutes } from './routes/events.js';
@@ -31,6 +42,10 @@ import { clientRoutes } from './routes/clients.js';
 import { productRoutes } from './routes/products.js';
 import { projectRoutes } from './routes/projects.js';
 import { documentRoutes } from './routes/documents.js';
+import { departmentRequestRoutes } from './routes/departmentRequests.js';
+import { approvalRoutes } from './routes/approvals.js';
+import { taskTemplateRoutes } from './routes/taskTemplates.js';
+import { departmentWorkspaceRoutes } from './routes/departmentWorkspace.js';
 import { aiRoutes, invalidateAiKeyCache } from './routes/ai.js';
 
 import { initSocket } from './socket.js';
@@ -41,9 +56,6 @@ import { scheduleNoteReminders } from './schedulers/noteReminder.js';
 import { scheduleDailyTaskReminder } from './schedulers/dailyTaskReminder.js';
 import { initMailScheduler } from './schedulers/mailScheduler.js';
 import { scheduleRevenueAutoSubmit } from './schedulers/revenueAutoSubmit.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
@@ -102,6 +114,9 @@ async function startServer() {
   app.use('/api/reports', requireAuth, reportRoutes(db));
   app.use('/api/roles', requireAuth, roleRoutes(db));
   app.use('/api/departments', requireAuth, departmentRoutes(db));
+  app.use('/api/teams', requireAuth, teamRoutes(db));
+  app.use('/api/positions', requireAuth, positionRoutes(db));
+  app.use('/api/organization', requireAuth, organizationRoutes(db));
   app.use('/api/notifications', requireAuth, notificationRoutes(db));
 
   app.use('/api/ai', requireAuth, aiRoutes(db));
@@ -116,6 +131,10 @@ async function startServer() {
   app.use('/api/products', requireAuth, productRoutes(db));
   app.use('/api/projects', requireAuth, projectRoutes(db));
   app.use('/api/documents', requireAuth, documentRoutes(db));
+  app.use('/api/department-requests', requireAuth, departmentRequestRoutes(db));
+  app.use('/api/approvals', requireAuth, approvalRoutes(db));
+  app.use('/api/task-templates', requireAuth, taskTemplateRoutes(db));
+  app.use('/api/department-workspace', requireAuth, departmentWorkspaceRoutes(db));
 
   scheduleFridayReminder(db);
   scheduleNoteReminders(db);

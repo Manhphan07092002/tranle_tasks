@@ -19,8 +19,11 @@ import ForgotPasswordPage from './pages/ForgotPassword/index';
 import ResetPasswordPage from './pages/ResetPassword/index';
 import NotificationsPage from './pages/Notifications/index';
 import ProjectsPage from './pages/Projects/index';
-import ProjectReportsPage from './pages/ProjectReports/index';
+const ProjectReportsPage = React.lazy(() => import('./pages/ProjectReports/index'));
 import DocumentsPage from './pages/DocumentAdmin/index';
+const DepartmentWorkspacePage = React.lazy(() => import('./pages/DepartmentWorkspace/index'));
+const ApprovalsPage = React.lazy(() => import('./pages/Approvals/index'));
+const OrganizationPage = React.lazy(() => import('./pages/Organization/index'));
 
 import { Sparkles } from 'lucide-react';
 
@@ -436,6 +439,9 @@ export default function TranLeTaskApp() {
               <Route path="/products" element={<ProductsPage />} />
               <Route path="/revenue" element={<RevenuePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/organization" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Sơ đồ tổ chức...</div>}><OrganizationPage /></React.Suspense>} />
+              <Route path="/department-workspace" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspacePage /></React.Suspense>} />
+              <Route path="/approvals" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Phê duyệt...</div>}><ApprovalsPage /></React.Suspense>} />
               <Route path="/documents" element={<DocumentsPage />} />
 
               <Route path="/meetings" element={<React.Suspense fallback={<div className="p-8 text-center">Loading Meetings...</div>}><MeetingsPage allUsers={users} onJoinMeeting={setActiveMeeting} onCreateMeeting={() => setIsMeetingModalOpen(true)} /></React.Suspense>} />
