@@ -96,6 +96,10 @@ const UserFormModal: React.FC<{
       setError('Tên và email không được để trống.');
       return;
     }
+    if ((!isEdit || form.password.trim()) && form.password.trim().length < 12) {
+      setError('Mật khẩu phải có ít nhất 12 ký tự.');
+      return;
+    }
     setSaving(true);
     try {
       const saved: User = {
@@ -199,6 +203,7 @@ const UserFormModal: React.FC<{
                 <input
                   type="password"
                   required={!isEdit}
+                  minLength={12}
                   value={form.password}
                   onChange={e => handle('password', e.target.value)}
                   placeholder={isEdit ? 'Để trống nếu không đổi mật khẩu' : 'Nhập mật khẩu đăng nhập'}
@@ -269,8 +274,8 @@ const ResetPasswordModal: React.FC<{
   const submit = async () => {
     setError('');
     setResult(null);
-    if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    if (newPassword.length < 12) {
+      setError('Mật khẩu mới phải có ít nhất 12 ký tự.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -433,25 +438,11 @@ export default function AdminUserManagement() {
       }
       if (pr.ok) {
         const requests = await pr.json();
-        const enriched = await Promise.all(
-          requests.map(async (request: PasswordResetRequest) => {
-            try {
-              const res = await apiFetch('/api/auth/forgot-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: request.email }),
-              });
-              const data = await res.json().catch(() => ({}));
-              return {
-                ...request,
-                resetLink: data.resetLink,
-                expiresAt: data.expiresAt,
-              };
-            } catch {
-              return request;
-            }
-          })
-        );
+        // Enrich missing expiresAt client-side (token TTL 30 phút). Không gọi lại forgot-password để tránh N+1 & spam mail.
+        const enriched = (requests as PasswordResetRequest[]).map(r => ({
+          ...r,
+          expiresAt: (r as any).expiresAt || new Date(new Date(r.createdAt).getTime() + 30 * 60 * 1000).toISOString(),
+        }));
         setResetRequests(enriched);
       }
     } catch (e: any) { setError(e.message); }

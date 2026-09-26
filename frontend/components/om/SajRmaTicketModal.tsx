@@ -3,6 +3,7 @@ import { ShieldCheck, X, Wrench, AlertCircle, CheckCircle2, Send, Cpu, Layers } 
 import { Button } from '../UI';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface SajRmaTicketModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface SajRmaTicketModalProps {
 export const SajRmaTicketModal: React.FC<SajRmaTicketModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const { saveTask } = useData();
+  const { showToast } = useNotifications();
 
   const [ticketCode] = useState(`RMA-${new Date().getFullYear()}-SAJ-${Math.floor(100 + Math.random() * 900)}`);
   const [siteName, setSiteName] = useState('Nhà máy May Việt Tiến (Đồng Nai)');
@@ -72,7 +74,7 @@ export const SajRmaTicketModal: React.FC<SajRmaTicketModalProps> = ({ isOpen, on
         onClose();
       }, 1800);
     } catch (err: any) {
-      alert('Lỗi tạo phiếu RMA: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi tạo phiếu RMA: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }

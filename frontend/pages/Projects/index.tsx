@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { Project } from '../../types';
 import { PlusCircle, Search, List, LayoutGrid, BarChart2, Calendar, AlertTriangle, TrendingUp, Briefcase, Clock } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -25,6 +26,7 @@ const TABS: { id: TabType; label: string; icon: any }[] = [
 const ProjectsPage: React.FC = () => {
   const { projects, contracts = [], tasks = [], users = [], departments = [], saveProject, deleteProject, saveContract } = useData();
   const { user } = useAuth();
+  const { showToast } = useNotifications();
   
   const perms = user?.permissions || [];
   const canEditProject = (p: Project) => p.managerId === user?.id || user?.role === 'Manager' || perms.includes('admin_panel') || perms.includes('director_feedback');
@@ -60,7 +62,7 @@ const ProjectsPage: React.FC = () => {
     if (project && canEditProject(project)) {
       await saveProject({ ...project, status: destination.droppableId });
     } else if (project) {
-      alert('Bạn không có quyền chuyển trạng thái dự án này.');
+      showToast({ type: 'error', title: 'Bạn không có quyền chuyển trạng thái dự án này.' });
     }
   };
 

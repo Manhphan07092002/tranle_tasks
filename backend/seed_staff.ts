@@ -12,38 +12,43 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 async function runSeed() {
   const host = process.env.MYSQL_HOST || '127.0.0.1';
   const port = parseInt(process.env.MYSQL_PORT || '3306', 10);
-  const user = process.env.MYSQL_USER || 'root';
-  const password = process.env.MYSQL_ROOT_PASSWORD || process.env.MYSQL_PASSWORD || 'TranLe@Root2026!';
   const database = process.env.MYSQL_DATABASE || 'tranletask';
 
   console.log(`Connecting to MySQL at ${host}:${port}...`);
 
   let conn;
-  try {
+  const rootPassword = process.env.MYSQL_ROOT_PASSWORD;
+  const appUser = process.env.MYSQL_USER;
+  const appPassword = process.env.MYSQL_PASSWORD;
+  if (rootPassword) {
     conn = await mysql.createConnection({
       host,
       port,
       user: 'root',
-      password: process.env.MYSQL_ROOT_PASSWORD || 'TranLe@Root2026!',
+      password: rootPassword,
       database,
       charset: 'utf8mb4',
     });
-  } catch (err: any) {
-    console.log('Trying with tranle user...');
+  } else if (appUser && appPassword) {
     conn = await mysql.createConnection({
       host,
       port,
-      user: process.env.MYSQL_USER || 'tranle',
-      password: process.env.MYSQL_PASSWORD || 'TranLe@Pass2026!',
+      user: appUser,
+      password: appPassword,
       database,
       charset: 'utf8mb4',
     });
+  } else {
+    throw new Error('Set MYSQL_ROOT_PASSWORD or MYSQL_USER and MYSQL_PASSWORD before seeding.');
   }
 
   console.log('Connected to MySQL successfully!');
 
   const now = new Date().toISOString();
-  const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'Tranle@123';
+  let adminPwd = process.env.ADMIN_DEFAULT_PASSWORD;
+  if (!adminPwd) {
+    throw new Error('[SECURITY] ADMIN_DEFAULT_PASSWORD is required before seeding users.');
+  }
   const hashedPassword = await bcrypt.hash(adminPwd, 10);
 
   // 1. Roles

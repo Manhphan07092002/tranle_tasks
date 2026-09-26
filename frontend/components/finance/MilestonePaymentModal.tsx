@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Landmark, X, CheckCircle2, AlertCircle, FileText, Send, ChevronRight, DollarSign } from 'lucide-react';
 import { Button } from '../UI';
 import { useData } from '../../contexts/DataContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface MilestonePaymentModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface MilestonePaymentModalProps {
 
 export const MilestonePaymentModal: React.FC<MilestonePaymentModalProps> = ({ isOpen, onClose }) => {
   const { saveTask, projects } = useData();
+  const { showToast } = useNotifications();
 
   const [selectedProject, setSelectedProject] = useState('P-EPC-1049');
   const [milestone, setMilestone] = useState<'dot_1' | 'dot_2' | 'dot_3' | 'dot_4' | 'dot_5'>('dot_2');
@@ -70,7 +72,7 @@ export const MilestonePaymentModal: React.FC<MilestonePaymentModalProps> = ({ is
         onClose();
       }, 1800);
     } catch (err: any) {
-      alert('Lỗi tạo yêu cầu thanh toán: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi tạo yêu cầu thanh toán: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }

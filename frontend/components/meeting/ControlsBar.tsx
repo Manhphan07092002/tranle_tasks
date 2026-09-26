@@ -7,6 +7,7 @@ import {
   Maximize, Minimize, Info, X, CircleDot, Disc3, Wifi, Sparkles, ChevronUp, Check, AlertTriangle, Search, AppWindow
 } from 'lucide-react';
 import { Meeting } from '../../types';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 export const PRESET_BGS = [
   'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=640',
@@ -69,6 +70,7 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
   setShowReportIssue, setShowReportAbuse, setShowHelp, setShowSettings, onLeave,
   showParticipants, setShowParticipants, showChat, setShowChat, isFullScreen, toggleFullScreen
 }) => {
+  const { showToast } = useNotifications();
   return (
     <div className="h-24 px-8 flex items-center justify-between bg-[#202124] border-t border-white/5 shrink-0 z-40 relative">
       <div className="flex items-center gap-4 w-1/3">
@@ -285,10 +287,10 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
                       if (document.pictureInPictureElement) {
                             document.exitPictureInPicture().catch(() => {});
                       } else {
-                            videoObj.requestPictureInPicture().catch(() => alert('Khởi tạo Hình trong hình thất bại.'));
+                            videoObj.requestPictureInPicture().catch(() => showToast({ type: 'error', title: 'Khởi tạo Hình trong hình thất bại.' }));
                       }
                     } else {
-                      alert('Không tìm thấy luồng video để phát Hình trong hình.');
+                      showToast({ type: 'error', title: 'Không tìm thấy luồng video để phát Hình trong hình.' });
                     }
                     setShowOptionsMenu(false);
                 }} className="flex items-center gap-4 px-4 py-3 hover:bg-white/5 transition-colors text-[15px] font-medium text-left w-full">

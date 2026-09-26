@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, Building2, ShieldCheck, Layers } from 'lucide-react';
+import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, ShieldCheck, Layers } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Button, Avatar } from '../UI';
@@ -23,7 +23,6 @@ const NAV_GROUPS = [
   {
     label: 'Tổ chức & Nhân sự',
     items: [
-      { id: 'organization', icon: Building2, path: '/organization', permission: null },
       { id: 'department_workspace', icon: Layers, path: '/department-workspace', permission: null },
       { id: 'team',         icon: Users,     path: '/team',         permission: ['view_dept_users', 'manage_users'] },
     ],

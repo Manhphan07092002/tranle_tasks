@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/UI';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
 
 interface LegalWorkspaceProps {
   contracts?: any[];
@@ -14,6 +15,7 @@ interface LegalWorkspaceProps {
 
 export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propContracts }) => {
   const navigate = useNavigate();
+  const { showToast } = useNotifications();
   const [activeTab, setActiveTab] = useState<'contracts' | 'approvals' | 'library'>('contracts');
 
   const [contracts, setContracts] = useState<any[]>([]);
@@ -40,19 +42,25 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
   const [approvalRequester, setApprovalRequester] = useState('');
   const [approvalUrgency, setApprovalUrgency] = useState('HIGH');
 
+  // Library Form
+  const [isAddLibraryOpen, setIsAddLibraryOpen] = useState(false);
+  const [libTitle, setLibTitle] = useState('');
+  const [libCategory, setLibCategory] = useState('Biểu mẫu ISO');
+  const [libDate, setLibDate] = useState(new Date().toISOString().slice(0, 10));
+
   const fetchLegalData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'contracts') {
-        const data = await departmentWorkspaceService.getRecords('dept-legal', 'contracts');
-        setContracts(data);
-      } else if (activeTab === 'approvals') {
-        const data = await departmentWorkspaceService.getRecords('dept-legal', 'approvals');
-        setApprovals(data);
-      } else if (activeTab === 'library') {
-        const data = await departmentWorkspaceService.getRecords('dept-legal', 'library');
-        setLibrary(data);
-      }
+      const [contractData, approvalData, libraryData, freshKpis] = await Promise.all([
+        departmentWorkspaceService.getRecords('dept-legal', 'contracts'),
+        departmentWorkspaceService.getRecords('dept-legal', 'approvals'),
+        departmentWorkspaceService.getRecords('dept-legal', 'library'),
+        departmentWorkspaceService.getKpis('dept-legal')
+      ]);
+      setContracts(contractData);
+      setApprovals(approvalData);
+      setLibrary(libraryData);
+      if (freshKpis) setKpis(freshKpis);
     } catch (err) {
       console.error('Error fetching legal records:', err);
     } finally {
@@ -61,12 +69,8 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
   };
 
   useEffect(() => {
-    departmentWorkspaceService.getKpis('dept-legal').then(setKpis).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     fetchLegalData();
-  }, [activeTab]);
+  }, []);
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,12 +89,36 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
       setIsAddContractOpen(false);
       setContractTitle('');
       setContractPartner('');
+      setContractValue('');
+      setContractExpiry('');
       fetchLegalData();
     } catch (err) {
       console.error('Error creating contract:', err);
+      showToast({ type: 'error', title: 'Lưu hợp đồng thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Workflow thẩm định: Đang thẩm định -> Đạt / Yêu cầu bổ sung / Trả về.
+  const handleApprovalStep = async (app: any, step: string) => {
+    try {
+      await departmentWorkspaceService.updateRecord('dept-legal', 'approvals', app.id, {
+        ...app,
+        step
+      });
+      fetchLegalData();
+    } catch (err) {
+      console.error('Error updating approval step:', err);
+      showToast({ type: 'error', title: 'Cập nhật thẩm định thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  const approvalStepMeta = (step: string) => {
+    if (step === 'Đạt') return 'bg-emerald-100 text-emerald-800';
+    if (step === 'Trả về') return 'bg-rose-100 text-rose-700';
+    if (step === 'Yêu cầu bổ sung') return 'bg-blue-100 text-blue-700';
+    return 'bg-amber-100 text-amber-800';
   };
 
   const handleCreateApproval = async (e: React.FormEvent) => {
@@ -103,14 +131,42 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
         title: approvalTitle.trim(),
         entity: approvalEntity,
         requester: approvalRequester,
-        step: 'Thẩm định điều khoản pháp lý',
+        step: 'Đang thẩm định',
         urgency: approvalUrgency
       });
       setIsAddApprovalOpen(false);
       setApprovalTitle('');
+      setApprovalEntity('');
+      setApprovalRequester('');
+      setApprovalUrgency('HIGH');
       fetchLegalData();
     } catch (err) {
       console.error('Error submitting approval:', err);
+      showToast({ type: 'error', title: 'Gửi thẩm định thất bại', message: 'Vui lòng thử lại.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateLibrary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!libTitle.trim()) return;
+
+    try {
+      setIsSubmitting(true);
+      await departmentWorkspaceService.createRecord('dept-legal', 'library', {
+        title: libTitle.trim(),
+        category: libCategory,
+        date: libDate || new Date().toISOString().slice(0, 10)
+      });
+      setIsAddLibraryOpen(false);
+      setLibTitle('');
+      setLibCategory('Biểu mẫu ISO');
+      setLibDate(new Date().toISOString().slice(0, 10));
+      fetchLegalData();
+    } catch (err) {
+      console.error('Error creating library doc:', err);
+      showToast({ type: 'error', title: 'Lưu văn bản thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -151,6 +207,18 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
         </div>
       </div>
 
+      {/* KPI strip (server) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-slate-800 px-5 py-4 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500 uppercase">Hợp đồng theo dõi</span>
+          <span className="text-2xl font-black text-slate-800 dark:text-white">{kpis.totalContracts ?? contracts.length}</span>
+        </div>
+        <div className="bg-white dark:bg-slate-800 px-5 py-4 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500 uppercase">Thẩm định chờ xử lý</span>
+          <span className="text-2xl font-black text-amber-600">{kpis.pendingApprovals ?? approvals.length}</span>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm w-fit">
         <button
@@ -174,6 +242,17 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
         >
           <CheckSquare size={18} />
           Thẩm Định Pháp Lý ({approvals.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('library')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'library'
+              ? 'bg-slate-800 text-white dark:bg-slate-700 shadow-sm'
+              : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <BookOpen size={18} />
+          Thư Viện Pháp Quy ({library.length})
         </button>
       </div>
 
@@ -214,7 +293,7 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
               </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === 'approvals' ? (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">
@@ -230,13 +309,57 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
             ) : (
               <div className="space-y-3">
                 {approvals.map(app => (
-                  <div key={app.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">{app.title}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Đơn vị trình: {app.requester} • Dự án: {app.entity}</div>
+                  <div key={app.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-slate-900 dark:text-white">{app.title}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">Đơn vị trình: {app.requester} • Dự án: {app.entity} • Khẩn: {app.urgency}</div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 ${approvalStepMeta(app.step)}`}>
+                        {app.step}
+                      </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-800">
-                      {app.step}
+                    {app.step !== 'Đạt' && app.step !== 'Trả về' && (
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => handleApprovalStep(app, 'Đạt')} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white">
+                          Đạt
+                        </button>
+                        <button onClick={() => handleApprovalStep(app, 'Yêu cầu bổ sung')} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200">
+                          Yêu cầu bổ sung
+                        </button>
+                        <button onClick={() => handleApprovalStep(app, 'Trả về')} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200">
+                          Trả về
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">
+                Thư Viện Văn Bản Pháp Quy & Biểu Mẫu
+              </h3>
+              <Button size="sm" onClick={() => setIsAddLibraryOpen(true)} className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl">
+                <Plus size={14} className="mr-1" /> Thêm Văn Bản
+              </Button>
+            </div>
+
+            {library.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 text-sm">Chưa có văn bản pháp quy nào trong thư viện</div>
+            ) : (
+              <div className="space-y-3">
+                {library.map((doc: any) => (
+                  <div key={doc.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center">
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">{doc.title}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">Phân loại: <span className="font-semibold text-slate-700 dark:text-slate-200">{doc.category}</span></div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200">
+                      {doc.date}
                     </span>
                   </div>
                 ))}
@@ -390,6 +513,20 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
                     className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-slate-500"
                   />
                 </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Mức Độ Khẩn
+                  </label>
+                  <select
+                    value={approvalUrgency}
+                    onChange={(e) => setApprovalUrgency(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-slate-500"
+                  >
+                    <option value="LOW">Thấp</option>
+                    <option value="MEDIUM">Trung bình</option>
+                    <option value="HIGH">Khẩn</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-slate-700">
@@ -398,6 +535,74 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
                 </Button>
                 <Button type="submit" disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-900 text-white font-bold">
                   {isSubmitting ? 'Đang gửi...' : 'Gửi Thẩm Định'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: THÊM VĂN BẢN THƯ VIỆN */}
+      {isAddLibraryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-slate-900 text-white">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <BookOpen size={18} /> Thêm Văn Bản Pháp Quy
+              </h3>
+              <button onClick={() => setIsAddLibraryOpen(false)} className="text-white/80 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateLibrary} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Tên Văn Bản / Biểu Mẫu *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={libTitle}
+                  onChange={(e) => setLibTitle(e.target.value)}
+                  placeholder="VD: Luật Điện lực 2024, Mẫu HĐ EPC..."
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-slate-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Phân Loại
+                  </label>
+                  <select
+                    value={libCategory}
+                    onChange={(e) => setLibCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-slate-500"
+                  >
+                    <option value="Biểu mẫu ISO">Biểu mẫu ISO</option>
+                    <option value="Luật & Nghị định">Luật & Nghị định</option>
+                    <option value="Hợp đồng mẫu">Hợp đồng mẫu</option>
+                    <option value="PCCC & An toàn">PCCC & An toàn</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Ngày Ban Hành
+                  </label>
+                  <input
+                    type="date"
+                    value={libDate}
+                    onChange={(e) => setLibDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-slate-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-slate-700">
+                <Button type="button" variant="ghost" onClick={() => setIsAddLibraryOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-900 text-white font-bold">
+                  {isSubmitting ? 'Đang lưu...' : 'Lưu Văn Bản'}
                 </Button>
               </div>
             </form>

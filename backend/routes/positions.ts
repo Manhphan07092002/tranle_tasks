@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function positionRoutes(db: any) {
   const router = Router();
@@ -65,7 +66,7 @@ export function positionRoutes(db: any) {
   });
 
   // POST /api/positions
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, departmentId, teamId, code, name, description, level, isManager } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Tên chức danh không được để trống' });
 
@@ -83,7 +84,7 @@ export function positionRoutes(db: any) {
   });
 
   // PUT /api/positions/:id
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { departmentId, teamId, code, name, description, level, isManager, isActive } = req.body;
     try {
       const existing = await db.get('SELECT * FROM positions WHERE id = ?', [req.params.id]);
@@ -110,7 +111,7 @@ export function positionRoutes(db: any) {
   });
 
   // DELETE /api/positions/:id
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       const userCountRow = await db.get('SELECT COUNT(*) as count FROM users WHERE positionId = ?', [req.params.id]);
       if (userCountRow?.count > 0) {

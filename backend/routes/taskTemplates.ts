@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { canManageDepartment } from '../middleware/auth.js';
 
 export function taskTemplateRoutes(db: any) {
   const router = Router();
@@ -69,6 +70,7 @@ export function taskTemplateRoutes(db: any) {
     if (!departmentId || !title?.trim() || !taskType) {
       return res.status(400).json({ error: 'Phòng ban, tiêu đề và loại công việc là bắt buộc' });
     }
+    if (!canManageDepartment(req.user, departmentId)) return res.status(403).json({ error: 'Forbidden' });
 
     try {
       const id = `tpl-${randomUUID().slice(0, 8)}`;
@@ -105,11 +107,12 @@ export function taskTemplateRoutes(db: any) {
 
   // POST /api/task-templates/:id/instantiate - Instantiate into a Task
   router.post('/:id/instantiate', async (req, res) => {
-    const { userId, projectId, contractId, customTitle, dueDate } = req.body;
+    const { projectId, contractId, customTitle, dueDate } = req.body;
 
     try {
       const tpl = await db.get('SELECT * FROM task_templates WHERE id = ?', [req.params.id]);
       if (!tpl) return res.status(404).json({ error: 'Template not found' });
+      if (!canManageDepartment(req.user, tpl.departmentId)) return res.status(403).json({ error: 'Forbidden' });
 
       const dept = await db.get('SELECT name FROM departments WHERE id = ?', [tpl.departmentId]);
       const taskId = `t-${Date.now()}`;
@@ -131,7 +134,7 @@ export function taskTemplateRoutes(db: any) {
           tpl.estimatedHours || 0,
           tpl.priority || 'Medium',
           'Todo',
-          userId || 'u1',
+           req.user!.id,
           dept?.name || '',
           tpl.departmentId,
           projectId || null,
@@ -142,9 +145,7 @@ export function taskTemplateRoutes(db: any) {
       );
 
       // Assign creator
-      if (userId) {
-        await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', [taskId, userId]);
-      }
+       await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', [taskId, req.user!.id]);
 
       // Add subtasks from checklist
       const subtasks = tpl.checklist ? JSON.parse(tpl.checklist) : [];
@@ -173,6 +174,9 @@ export function taskTemplateRoutes(db: any) {
   // DELETE /api/task-templates/:id
   router.delete('/:id', async (req, res) => {
     try {
+      const template = await db.get('SELECT departmentId FROM task_templates WHERE id = ?', [req.params.id]);
+      if (!template) return res.status(404).json({ error: 'Template not found' });
+      if (!canManageDepartment(req.user, template.departmentId)) return res.status(403).json({ error: 'Forbidden' });
       await db.run('DELETE FROM task_templates WHERE id = ?', [req.params.id]);
       res.json({ success: true });
     } catch (e: any) {

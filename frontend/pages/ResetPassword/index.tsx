@@ -59,8 +59,8 @@ export default function ResetPasswordPage() {
     setError('');
     setSuccess('');
 
-    if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    if (newPassword.length < 12) {
+      setError('Mật khẩu mới phải có ít nhất 12 ký tự.');
       return;
     }
     if (newPassword !== confirmPassword) {

@@ -6,6 +6,7 @@ import {
 import { Button } from '../UI';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface DailySiteLogModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface DailySiteLogModalProps {
 export const DailySiteLogModal: React.FC<DailySiteLogModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const { projects, saveTask } = useData();
+  const { showToast } = useNotifications();
 
   // Form states
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
@@ -80,7 +82,7 @@ export const DailySiteLogModal: React.FC<DailySiteLogModalProps> = ({ isOpen, on
         onClose();
       }, 1800);
     } catch (err: any) {
-      alert('Lỗi lưu nhật trình: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi lưu nhật trình: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }

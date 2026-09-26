@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-import { initDbMysql } from './db_mysql';
+import { initDbMysql } from './db_mysql.js';
 
 interface DeptRecord {
   id: string;

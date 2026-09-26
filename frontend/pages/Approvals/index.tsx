@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { ApprovalItem } from '../../types';
 import {
   ShieldCheck, CheckCircle2, XCircle, Clock, FileText,
@@ -13,6 +14,7 @@ import { Button } from '../../components/UI';
 export default function ApprovalsPage() {
   const { user, isAdmin, isDirector, isManager } = useAuth();
   const { approvals, decideApproval, saveApproval, departments, users } = useData();
+  const { showToast } = useNotifications();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'my_requests'>('pending');
   const [filterType, setFilterType] = useState<string>('all');
@@ -90,14 +92,14 @@ export default function ApprovalsPage() {
       await decideApproval(decisionModal.item.id, decisionModal.decision, decisionModal.comment);
       setDecisionModal({ isOpen: false, item: null, decision: 'approved', comment: '' });
     } catch (err: any) {
-      alert('Lỗi khi duyệt phiếu: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi khi duyệt phiếu: ' + err.message });
     }
   };
 
   const handleCreateApproval = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newApproval.title || !newApproval.approverId) {
-      alert('Vui lòng nhập đầy đủ tiêu đề và chọn người phê duyệt.');
+      showToast({ type: 'error', title: 'Vui lòng nhập đầy đủ tiêu đề và chọn người phê duyệt.' });
       return;
     }
 
@@ -123,7 +125,7 @@ export default function ApprovalsPage() {
       setAmountInputStr('');
       setActiveTab('my_requests');
     } catch (err: any) {
-      alert('Lỗi tạo tờ trình: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi tạo tờ trình: ' + err.message });
     }
   };
 

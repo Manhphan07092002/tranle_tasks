@@ -38,8 +38,9 @@ export function adminRoutes(db: any, mailer: any) {
       const tables = await db.all(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name ASC`);
       const data = [] as { name: string; count: number | null }[];
       for (const table of tables) {
+        if (!/^[a-zA-Z0-9_]+$/.test(table.name)) { data.push({ name: table.name, count: null }); continue; }
         try {
-          const row = await db.get(`SELECT COUNT(*) as count FROM ${table.name}`);
+          const row = await db.get(`SELECT COUNT(*) as count FROM \`${table.name}\``);
           data.push({ name: table.name, count: row?.count ?? 0 });
         } catch { data.push({ name: table.name, count: null }); }
       }
@@ -51,11 +52,14 @@ export function adminRoutes(db: any, mailer: any) {
     try {
       const { table } = req.params;
       if (!/^[a-zA-Z0-9_]+$/.test(table)) return res.status(400).json({ error: 'Tên bảng không hợp lệ' });
+      // Whitelist against information_schema để chắc chắn bảng tồn tại
+      const exists = await db.get(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`, [table]);
+      if (!exists) return res.status(404).json({ error: 'Bảng không tồn tại' });
 
       const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
       const offset = Math.max(Number(req.query.offset || 0), 0);
-      const totalRow = await db.get(`SELECT COUNT(*) as count FROM ${table}`);
-      const rows = await db.all(`SELECT * FROM ${table} LIMIT ? OFFSET ?`, [limit, offset]);
+      const totalRow = await db.get(`SELECT COUNT(*) as count FROM \`${table}\``);
+      const rows = await db.all(`SELECT * FROM \`${table}\` LIMIT ? OFFSET ?`, [limit, offset]);
       res.json({ table, total: totalRow?.count ?? 0, rows });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
@@ -64,8 +68,10 @@ export function adminRoutes(db: any, mailer: any) {
     try {
       const { table } = req.params;
       if (!/^[a-zA-Z0-9_]+$/.test(table)) return res.status(400).json({ error: 'Tên bảng không hợp lệ' });
+      const exists = await db.get(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`, [table]);
+      if (!exists) return res.status(404).json({ error: 'Bảng không tồn tại' });
 
-      await db.run(`DELETE FROM ${table} WHERE id = ?`, [req.params.id]);
+      await db.run(`DELETE FROM \`${table}\` WHERE id = ?`, [req.params.id]);
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
@@ -83,13 +89,7 @@ export function adminRoutes(db: any, mailer: any) {
 
   router.get('/database/export', async (req: any, res) => {
     try {
-      // MySQL: xuất dữ liệu dạng JSON (không hỗ trợ file export như SQLite)
       const tables = await db.all(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name ASC`);
-      const exportData: Record<string, any[]> = {};
-      for (const t of tables) {
-        exportData[t.name] = await db.all(`SELECT * FROM \`${t.name}\``);
-      }
-
       appendHistory({
         id: Math.random().toString(36).slice(2) + Date.now().toString(36),
         action: 'export',
@@ -101,8 +101,24 @@ export function adminRoutes(db: any, mailer: any) {
 
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', 'attachment; filename="database-export.json"');
-      res.json(exportData);
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+      // Stream JSON để tránh OOM: ghi từng bảng thay vì gom toàn bộ vào RAM rồi mới json-stringify
+      res.write('{');
+      let first = true;
+      for (const t of tables) {
+        if (!/^[a-zA-Z0-9_]+$/.test(t.name)) continue;
+        const rows = await db.all(`SELECT * FROM \`${t.name}\``);
+        if (!first) res.write(',');
+        first = false;
+        res.write(JSON.stringify(t.name) + ':' + JSON.stringify(rows));
+        // Cho phép GC giữa các bảng lớn
+        if ((res as any).flush) (res as any).flush();
+      }
+      res.write('}');
+      res.end();
+    } catch (e) { 
+      if (!res.headersSent) res.status(500).json({ error: 'Failed' });
+      else try { res.end(); } catch {}
+    }
   });
 
   router.post('/database/import', upload.single('file'), async (req: any, res) => {
@@ -123,24 +139,54 @@ export function adminRoutes(db: any, mailer: any) {
         createdAt: new Date().toISOString(),
       });
 
-      // Import data table by table
-      for (const [tableName, rows] of Object.entries(importData)) {
-        if (!Array.isArray(rows) || rows.length === 0) continue;
-        if (!/^[a-zA-Z0-9_]+$/.test(tableName)) continue;
-        // Clear existing data
-        await db.run(`DELETE FROM \`${tableName}\``);
-        // Insert rows
-        for (const row of rows) {
-          const cols = Object.keys(row);
-          const placeholders = cols.map(() => '?').join(', ');
-          const values = cols.map(c => row[c]);
-          await db.run(`INSERT INTO \`${tableName}\` (${cols.map(c => '\`' + c + '\`').join(', ')}) VALUES (${placeholders})`, values);
+      // Build whitelist từ information_schema để tránh import bảng lạ / injection
+      const allowedTablesRows = await db.all(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE()`);
+      const allowedSet = new Set(allowedTablesRows.map((r: any) => r.name));
+
+      await db.run('START TRANSACTION');
+      try {
+        // Import data table by table
+        for (const [tableName, rows] of Object.entries(importData)) {
+          if (!Array.isArray(rows)) continue;
+          if (!/^[a-zA-Z0-9_]+$/.test(tableName)) continue;
+          if (!allowedSet.has(tableName)) continue;
+          // An empty exported table means the destination table must also be empty.
+          if (rows.length === 0) {
+            await db.run('SET FOREIGN_KEY_CHECKS=0');
+            await db.run(`DELETE FROM \`${tableName}\``);
+            await db.run('SET FOREIGN_KEY_CHECKS=1');
+            continue;
+          }
+          // Validate columns: chỉ giữ key hợp lệ
+          const sampleRow = rows[0] as Record<string, any>;
+          const validCols = Object.keys(sampleRow).filter(c => /^[a-zA-Z0-9_]+$/.test(c));
+          if (validCols.length === 0) continue;
+
+          // Clear existing data — tạm tắt FK check để tránh lỗi thứ tự bảng
+          await db.run('SET FOREIGN_KEY_CHECKS=0');
+          await db.run(`DELETE FROM \`${tableName}\``);
+          await db.run('SET FOREIGN_KEY_CHECKS=1');
+
+          // Insert rows — batch từng bảng
+          for (const row of rows as Record<string, any>[]) {
+            const cols = Object.keys(row).filter(c => validCols.includes(c));
+            if (cols.length === 0) continue;
+            const placeholders = cols.map(() => '?').join(', ');
+            const values = cols.map(c => row[c]);
+            await db.run(`INSERT INTO \`${tableName}\` (${cols.map(c => '\`' + c + '\`').join(', ')}) VALUES (${placeholders})`, values);
+          }
         }
+        await db.run('COMMIT');
+      } catch (txErr: any) {
+        try { await db.run('ROLLBACK'); } catch {}
+        try { await db.run('SET FOREIGN_KEY_CHECKS=1'); } catch {}
+        throw txErr;
       }
 
       await fs.promises.unlink(req.file.path).catch(() => { });
       res.json({ success: true, message: 'Import thành công.' });
     } catch (e: any) {
+      await fs.promises.unlink((req as any).file?.path).catch(() => { });
       res.status(500).json({ error: 'Import thất bại: ' + e.message });
     }
   });

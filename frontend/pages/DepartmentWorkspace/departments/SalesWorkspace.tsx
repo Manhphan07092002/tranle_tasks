@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/UI';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
 
 interface SalesWorkspaceProps {
   contracts: any[];
@@ -27,8 +28,14 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
   onOpenFastQuote
 }) => {
   const navigate = useNavigate();
-  const [boardData, setBoardData] = useState<any>({ lead: [], qualified: [], quote: [], won: [] });
+  const { showToast } = useNotifications();
+  const [boardData, setBoardData] = useState<any>({ lead: [], qualified: [], quote: [], won: [], lost: [] });
   const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<any[]>([]);
+  const [isAddQuoteOpen, setIsAddQuoteOpen] = useState(false);
+  const [quoteLead, setQuoteLead] = useState<any>(null);
+  const [quoteAmount, setQuoteAmount] = useState<number | ''>('');
+  const [quoteItems, setQuoteItems] = useState('');
   const [loading, setLoading] = useState(true);
   const [salesKpis, setSalesKpis] = useState<any>({ winRate: 0, totalLeads: 0, wonLeads: 0, totalContractValue: 0 });
 
@@ -52,22 +59,32 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
   const fetchSalesData = async () => {
     setLoading(true);
     try {
-      const [leads, perf] = await Promise.all([
+      const [leads, perf, quoteData, freshKpis] = await Promise.all([
         departmentWorkspaceService.getRecords('dept-sales', 'leads'),
-        departmentWorkspaceService.getRecords('dept-sales', 'performance')
+        departmentWorkspaceService.getRecords('dept-sales', 'performance'),
+        departmentWorkspaceService.getRecords('dept-sales', 'quotes'),
+        departmentWorkspaceService.getKpis('dept-sales')
       ]);
       
-      const newBoard: any = { lead: [], qualified: [], quote: [], won: [] };
+      const newBoard: any = { lead: [], qualified: [], quote: [], won: [], lost: [] };
+      const dropped: string[] = [];
       leads.forEach((l: any) => {
         if (newBoard[l.stage]) {
           newBoard[l.stage].push({
             ...l,
             sent: l.sent === 1 || l.sent === true
           });
+        } else {
+          dropped.push(`${l.name || l.id} (stage="${l.stage}")`);
         }
       });
+      if (dropped.length > 0) {
+        console.warn(`[Sales] ${dropped.length} lead có stage lạ, tạm ẩn khỏi kanban:`, dropped);
+      }
       setBoardData(newBoard);
-      setPerformanceData(perf.reverse());
+      setPerformanceData([...perf].reverse());
+      setQuotes(quoteData);
+      if (freshKpis) setSalesKpis(freshKpis);
     } catch (err) {
       console.error('Error fetching sales records:', err);
     } finally {
@@ -76,7 +93,6 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
   };
 
   useEffect(() => {
-    departmentWorkspaceService.getKpis('dept-sales').then(setSalesKpis).catch(console.error);
     fetchSalesData();
   }, []);
 
@@ -88,18 +104,22 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
       setIsSubmitting(true);
       await departmentWorkspaceService.createRecord('dept-sales', 'leads', {
         name: leadName.trim(),
-        capacity: leadCapacity,
-        value: Number(leadValue),
-        contact: leadContact.trim() || 'Chưa có SĐT',
+        capacity: leadCapacity.trim(),
+        value: leadValue === '' ? 0 : Number(leadValue),
+        contact: leadContact.trim(),
         stage: leadStage,
         sent: false
       });
       setIsAddLeadOpen(false);
       setLeadName('');
+      setLeadCapacity('');
+      setLeadValue('');
       setLeadContact('');
+      setLeadStage('lead');
       fetchSalesData();
     } catch (err) {
       console.error('Error creating lead:', err);
+      showToast({ type: 'error', title: 'Tạo lead thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -116,6 +136,11 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
           value: Number(item.value) || 0,
           notes: `Khách hàng: ${item.name} (${item.contact})`
         });
+      } else if (nextStage === 'lost') {
+        await departmentWorkspaceService.updateRecord('dept-sales', 'leads', item.id, {
+          ...item,
+          stage: 'lost'
+        });
       } else {
         await departmentWorkspaceService.updateRecord('dept-sales', 'leads', item.id, {
           ...item,
@@ -125,6 +150,77 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
       fetchSalesData();
     } catch (err) {
       console.error('Error moving lead stage:', err);
+      showToast({ type: 'error', title: 'Chuyển giai đoạn thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  // Handoff sang Kỹ thuật: tạo yêu cầu khảo sát mái từ lead (liên phòng ban).
+  const handleHandoffSurvey = async (item: any) => {
+    try {
+      await departmentWorkspaceService.createRecord('dept-eng', 'requests', {
+        project: item.name,
+        type: 'Khảo Sát Mái',
+        priority: 'MEDIUM',
+        date: new Date().toISOString().slice(0, 10),
+        status: 'pending'
+      });
+      showToast({ type: 'success', title: 'Đã chuyển khảo sát', message: `Yêu cầu khảo sát "${item.name}" đã sang P. Kỹ thuật.` });
+    } catch (err) {
+      console.error('Error handing off survey:', err);
+      showToast({ type: 'error', title: 'Chuyển khảo sát thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  const quotesOf = (leadId: string) =>
+    quotes.filter((q: any) => q.leadId === leadId).sort((a: any, b: any) => a.version - b.version);
+
+  const handleCreateQuote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(quoteAmount);
+    if (!quoteLead || !Number.isFinite(amount) || amount <= 0) return;
+
+    try {
+      setIsSubmitting(true);
+      const version = quotesOf(quoteLead.id).reduce((m: number, q: any) => Math.max(m, Number(q.version) || 0), 0) + 1;
+      await departmentWorkspaceService.createRecord('dept-sales', 'quotes', {
+        leadId: quoteLead.id,
+        version,
+        amount,
+        items: quoteItems.trim(),
+        status: 'draft'
+      });
+      setIsAddQuoteOpen(false);
+      setQuoteLead(null);
+      setQuoteAmount('');
+      setQuoteItems('');
+      fetchSalesData();
+    } catch (err) {
+      console.error('Error creating quote:', err);
+      showToast({ type: 'error', title: 'Lưu bản báo giá thất bại', message: 'Vui lòng thử lại.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Chốt theo bản báo giá: đánh dấu accepted + chuyển lead thành won với giá trị bản đó.
+  const handleAcceptQuote = async (lead: any, q: any) => {
+    try {
+      for (const other of quotesOf(lead.id)) {
+        if (other.id !== q.id && other.status !== 'accepted') {
+          await departmentWorkspaceService.updateRecord('dept-sales', 'quotes', other.id, {
+            ...other,
+            status: 'superseded'
+          });
+        }
+      }
+      await departmentWorkspaceService.updateRecord('dept-sales', 'quotes', q.id, {
+        ...q,
+        status: 'accepted'
+      });
+      await handleAdvanceStage({ ...lead, value: q.amount }, 'won');
+    } catch (err) {
+      console.error('Error accepting quote:', err);
+      showToast({ type: 'error', title: 'Chốt báo giá thất bại', message: 'Vui lòng thử lại.' });
     }
   };
 
@@ -185,10 +281,10 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
             <Target size={20} className="text-blue-500" />
           </div>
           <div className="text-2xl font-black text-slate-800 dark:text-white">
-            {formatVND(salesKpis.totalContractValue || 0)}
+            {formatVND(salesKpis.totalContractValue ?? 0)}
           </div>
           <div className="text-xs text-blue-500 font-semibold mt-2">
-            {salesKpis.totalLeads || 0} cơ hội đang theo đuổi
+            {salesKpis.totalLeads ?? 0} cơ hội đang theo đuổi
           </div>
         </div>
 
@@ -198,10 +294,10 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
             <Award size={20} className="text-emerald-500" />
           </div>
           <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-            {salesKpis.winRate || 0}%
+            {salesKpis.winRate ?? 0}%
           </div>
           <div className="text-xs text-emerald-500 font-semibold mt-2">
-            {salesKpis.wonLeads || 0} hợp đồng đã ký thành công
+            {salesKpis.wonLeads ?? 0} hợp đồng đã ký thành công
           </div>
         </div>
 
@@ -272,7 +368,7 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                 ) : (boardData.lead || []).map((item: any) => (
                   <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-600 shadow-sm hover:shadow-md transition-shadow">
                     <div className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</div>
-                    <div className="text-xs text-blue-600 font-bold mt-1">{formatVND(Number(item.value))} • {item.capacity}</div>
+                    <div className="text-xs text-blue-600 font-bold mt-1">{formatVND(Number(item.value) || 0)} • {item.capacity}</div>
                     <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-3 border-t border-gray-100 dark:border-slate-600 pt-2">
                       <Phone size={10} /> {item.contact}
                     </div>
@@ -303,7 +399,13 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                 ) : (boardData.qualified || []).map((item: any) => (
                   <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-blue-200 dark:border-blue-700/50 shadow-sm hover:shadow-md transition-shadow">
                     <div className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</div>
-                    <div className="text-xs text-blue-600 font-bold mt-1">{formatVND(Number(item.value))} • {item.capacity}</div>
+                    <div className="text-xs text-blue-600 font-bold mt-1">{formatVND(Number(item.value) || 0)} • {item.capacity}</div>
+                    <button
+                      onClick={() => handleHandoffSurvey(item)}
+                      className="mt-2 w-full flex items-center justify-center gap-1 bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold py-1.5 rounded-lg border border-teal-200 transition-colors"
+                    >
+                      Tạo YC Khảo Sát <ArrowRight size={10} />
+                    </button>
                     <button
                       onClick={() => handleAdvanceStage(item, 'quote')}
                       className="mt-3 w-full flex items-center justify-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold py-1.5 rounded-lg border border-amber-200 transition-colors"
@@ -331,12 +433,47 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                 ) : (boardData.quote || []).map((item: any) => (
                   <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-amber-200 dark:border-amber-700/50 shadow-sm hover:shadow-md transition-shadow">
                     <div className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</div>
-                    <div className="text-xs text-amber-600 font-bold mt-1">{formatVND(Number(item.value))} • {item.capacity}</div>
+                    <div className="text-xs text-amber-600 font-bold mt-1">{formatVND(Number(item.value) || 0)} • {item.capacity}</div>
+                    {quotesOf(item.id).map((q: any) => (
+                      <div key={q.id} className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px]">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-slate-700 dark:text-slate-200">Bản v{q.version} • {formatVND(Number(q.amount) || 0)}</span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
+                            q.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
+                            q.status === 'superseded' ? 'bg-slate-200 text-slate-500' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {q.status === 'accepted' ? 'Đã chốt' : q.status === 'superseded' ? 'Hết hiệu lực' : 'Nháp'}
+                          </span>
+                        </div>
+                        {q.items && <div className="text-slate-500 mt-1 line-clamp-2">{q.items}</div>}
+                        {q.status !== 'accepted' && (
+                          <button
+                            onClick={() => handleAcceptQuote(item, q)}
+                            className="mt-1.5 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 rounded-md transition-colors"
+                          >
+                            Chốt theo bản này
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => { setQuoteLead(item); setQuoteAmount(Number(item.value) || ''); setIsAddQuoteOpen(true); }}
+                      className="mt-2 w-full flex items-center justify-center gap-1 bg-white hover:bg-amber-50 text-amber-700 text-[10px] font-bold py-1.5 rounded-lg border border-amber-200 transition-colors"
+                    >
+                      <Plus size={10} /> Thêm bản báo giá ({quotesOf(item.id).length})
+                    </button>
                     <button
                       onClick={() => handleAdvanceStage(item, 'won')}
                       className="mt-3 w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded-lg transition-colors shadow-sm"
                     >
                       <CheckCircle size={12} /> Chốt Hợp Đồng (Won)
+                    </button>
+                    <button
+                      onClick={() => handleAdvanceStage(item, 'lost')}
+                      className="mt-2 w-full flex items-center justify-center gap-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 text-[10px] font-bold py-1.5 rounded-lg transition-colors"
+                    >
+                      Đánh dấu Thua (Lost)
                     </button>
                   </div>
                 ))}
@@ -359,12 +496,40 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                 ) : (boardData.won || []).map((item: any) => (
                   <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-emerald-200 dark:border-emerald-700/50 shadow-sm">
                     <div className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</div>
-                    <div className="text-xs text-emerald-600 font-bold mt-1">{formatVND(Number(item.value))} • {item.capacity}</div>
+                    <div className="text-xs text-emerald-600 font-bold mt-1">{formatVND(Number(item.value) || 0)} • {item.capacity}</div>
                     <button 
                       onClick={() => navigate('/contracts')}
                       className="mt-3 w-full flex items-center justify-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-md transition-colors"
                     >
                       <FileText size={10} /> Xem Hợp Đồng
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Column 5: Lost */}
+            <div className="flex-shrink-0 w-80 bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-4 border border-rose-100 dark:border-rose-800/30 flex flex-col max-h-[600px] snap-center">
+              <div className="flex items-center justify-between mb-4 px-1">
+                <h4 className="font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Thua / Dừng (Lost)
+                </h4>
+                <span className="bg-rose-100 dark:bg-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {(boardData.lost || []).length}
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
+                {(boardData.lost || []).length === 0 ? (
+                  <div className="text-center py-8 text-rose-400/80 text-xs">Chưa có lead thua</div>
+                ) : (boardData.lost || []).map((item: any) => (
+                  <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-rose-200 dark:border-rose-700/50 shadow-sm opacity-80">
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</div>
+                    <div className="text-xs text-rose-600 font-bold mt-1">{formatVND(Number(item.value) || 0)} • {item.capacity}</div>
+                    <button
+                      onClick={() => handleAdvanceStage(item, 'lead')}
+                      className="mt-3 w-full flex items-center justify-center gap-1 bg-white hover:bg-rose-100 text-rose-700 text-[10px] font-bold py-1.5 rounded-lg border border-rose-200 transition-colors"
+                    >
+                      Mở lại Lead
                     </button>
                   </div>
                 ))}
@@ -421,7 +586,7 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                   <input
                     type="number"
                     value={leadValue}
-                    onChange={(e) => setLeadValue(Number(e.target.value))}
+                    onChange={(e) => setLeadValue(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                 </div>
@@ -462,6 +627,59 @@ export const SalesWorkspace: React.FC<SalesWorkspaceProps> = ({
                 </Button>
                 <Button type="submit" disabled={isSubmitting} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold">
                   {isSubmitting ? 'Đang lưu...' : 'Tạo Cơ Hội'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: THÊM BẢN BÁO GIÁ */}
+      {isAddQuoteOpen && quoteLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-amber-600 to-orange-700 text-white">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <FileText size={18} /> Báo Giá v{quotesOf(quoteLead.id).length + 1} — {quoteLead.name}
+              </h3>
+              <button onClick={() => { setIsAddQuoteOpen(false); setQuoteLead(null); }} className="text-white/80 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateQuote} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Giá Trị Báo Giá (VNĐ) *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={quoteAmount}
+                  onChange={(e) => setQuoteAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="VD: 8200000000"
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Cấu Hình / Thiết Bị Báo Giá
+                </label>
+                <textarea
+                  rows={3}
+                  value={quoteItems}
+                  onChange={(e) => setQuoteItems(e.target.value)}
+                  placeholder="VD: 500x AIKO 650Wp + 5x SAJ C6-100K + tủ AC/DC..."
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-slate-700">
+                <Button type="button" variant="ghost" onClick={() => { setIsAddQuoteOpen(false); setQuoteLead(null); }}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                  {isSubmitting ? 'Đang lưu...' : 'Lưu Bản Báo Giá'}
                 </Button>
               </div>
             </form>

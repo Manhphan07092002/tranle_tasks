@@ -13,6 +13,9 @@ import { createMailer } from '../mailer.js';
 export function mailRoutes(db: any) {
   const router = Router();
 
+  const approvedHosts = new Set((process.env.MAIL_ALLOWED_HOSTS || '').split(',').map(host => host.trim().toLowerCase()).filter(Boolean));
+  const isAllowedMailHost = (host: unknown) => typeof host === 'string' && approvedHosts.has(host.trim().toLowerCase());
+
   const getDynamicConfig = async () => {
     const mailer = createMailer(db);
     return await mailer.getSystemConfig();
@@ -61,14 +64,17 @@ export function mailRoutes(db: any) {
         targetSmtpHost = 'tranle_mailserver';
         targetSmtpPort = 587;
       } else if (provider === 'custom') {
-        targetImapHost = customImapHost || config.IMAP_HOST;
+        if (!isAllowedMailHost(customImapHost) || !isAllowedMailHost(customSmtpHost)) {
+          return res.status(400).json({ error: 'Máy chủ mail tùy chỉnh không được phép' });
+        }
+        targetImapHost = customImapHost;
         targetImapPort = Number(customImapPort) || Number(config.IMAP_PORT);
-        targetSmtpHost = customSmtpHost || config.SMTP_HOST;
+        targetSmtpHost = customSmtpHost;
         targetSmtpPort = Number(customSmtpPort) || Number(config.SMTP_PORT);
       }
 
       const authResult = await new Promise<{ success: boolean, reason?: string }>((resolve, reject) => {
-        const socket = tls.connect(targetImapPort, targetImapHost, { rejectUnauthorized: false });
+        const socket = tls.connect(targetImapPort, targetImapHost);
 
         // Timeout after 15s
         const timer = setTimeout(() => {
@@ -82,7 +88,6 @@ export function mailRoutes(db: any) {
 
         socket.on('data', (data: any) => {
           buffer += data.toString();
-          console.log('[IMAP RAW]', data.toString().trim());
 
           // Wait for greeting
           if (!greetingReceived && buffer.includes('* OK')) {
@@ -180,9 +185,7 @@ export function mailRoutes(db: any) {
       secure: true,
       auth: { user: email, pass: password },
       logger: false as any,
-      tls: {
-        rejectUnauthorized: false
-      }
+        tls: { rejectUnauthorized: process.env.MAIL_ALLOW_SELF_SIGNED !== 'true' }
     });
 
     try {
@@ -198,7 +201,7 @@ export function mailRoutes(db: any) {
           secure: true,
           auth: { user: usernameOnly, pass: password },
           logger: false as any,
-          tls: { rejectUnauthorized: false }
+          tls: { rejectUnauthorized: process.env.MAIL_ALLOW_SELF_SIGNED !== 'true' }
         });
         await client.connect();
       } else {
@@ -248,7 +251,7 @@ export function mailRoutes(db: any) {
       port: finalSmtpPort,
       secure: finalSmtpPort === 465 || config.SMTP_SECURE === 'true',
       auth: { user, pass: password },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.MAIL_ALLOW_SELF_SIGNED !== 'true' },
       connectionTimeout: 60000,
       greetingTimeout: 60000,
       socketTimeout: 60000,
@@ -761,7 +764,7 @@ export function mailRoutes(db: any) {
   });
 
   // Setup multer for file uploads in memory
-  const upload = multer({ storage: multer.memoryStorage() });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { files: 10, fileSize: 5 * 1024 * 1024, fields: 20, fieldSize: 100 * 1024 } });
 
   // 6. Send Email + Save to Sent folder
   router.post('/send', requireAuth, upload.array('attachments', 10), async (req: any, res: any) => {
@@ -921,7 +924,7 @@ export function mailRoutes(db: any) {
         port: Number(config.SMTP_PORT || 587),
         secure: config.SMTP_SECURE === 'true',
         auth: { user: senderEmail, pass: password },
-        tls: { rejectUnauthorized: false }
+        tls: { rejectUnauthorized: process.env.MAIL_ALLOW_SELF_SIGNED !== 'true' }
       });
 
       const mailAttachments = req.files ? (req.files as any[]).map(f => ({

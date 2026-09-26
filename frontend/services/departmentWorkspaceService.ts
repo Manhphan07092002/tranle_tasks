@@ -63,6 +63,7 @@ export const departmentWorkspaceService = {
 
   convertMilestoneToAr: async (payload: {
     milestoneId?: string;
+    projectId?: string;
     projectName: string;
     milestoneTitle: string;
     amount: number | string;
@@ -70,6 +71,46 @@ export const departmentWorkspaceService = {
     dueDate?: string;
   }) => {
     const response = await apiFetch(`${API_BASE}/department-workspace/automation/milestone-to-ar`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return response.json();
+  },
+
+  prToPo: async (prId: string) => {
+    const response = await apiFetch(`${API_BASE}/department-workspace/automation/pr-to-po`, {
+      method: 'POST',
+      body: JSON.stringify({ prId }),
+    });
+    return response.json();
+  },
+
+  poToInbound: async (poId: string) => {
+    const response = await apiFetch(`${API_BASE}/department-workspace/automation/po-to-inbound`, {
+      method: 'POST',
+      body: JSON.stringify({ poId }),
+    });
+    return response.json();
+  },
+
+  codToOm: async (projectId: string) => {
+    const response = await apiFetch(`${API_BASE}/department-workspace/automation/cod-to-om`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId }),
+    });
+    return response.json();
+  },
+
+  requestApproval: async (payload: {
+    entityType: string;
+    entityId: string;
+    title: string;
+    amount?: number;
+    requestedBy?: string;
+    departmentId?: string;
+    reason?: string;
+  }) => {
+    const response = await apiFetch(`${API_BASE}/department-workspace/automation/request-approval`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });

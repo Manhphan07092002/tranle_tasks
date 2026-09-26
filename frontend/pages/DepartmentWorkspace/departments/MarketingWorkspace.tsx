@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Megaphone, Loader2, Plus, Calendar, BarChart3, X } from 'lucide-react';
 import { Button } from '../../../components/UI';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
 
 export const MarketingWorkspace: React.FC = () => {
+  const { showToast } = useNotifications();
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,13 +23,18 @@ export const MarketingWorkspace: React.FC = () => {
   // Lead Source Form State
   const [sourceName, setSourceName] = useState('');
   const [sourcePct, setSourcePct] = useState('');
+  const [sourceCount, setSourceCount] = useState<number | ''>('');
+  const [sourceConversion, setSourceConversion] = useState<number | ''>('');
+
+  // Tổng số lead để tính tỷ trọng thật (thay vì chuỗi % tự do).
+  const totalLeadCount = leads.reduce((s: number, l: any) => s + (Number(l.leadCount) || 0), 0);
 
   const fetchMktData = async () => {
     setLoading(true);
     try {
       const [campsData, leadsData] = await Promise.all([
-        departmentWorkspaceService.getRecords('dept-marketing', 'campaigns'),
-        departmentWorkspaceService.getRecords('dept-marketing', 'leads')
+        departmentWorkspaceService.getRecords('dept-mkt', 'campaigns'),
+        departmentWorkspaceService.getRecords('dept-mkt', 'leads')
       ]);
       setCampaigns(campsData);
       setLeads(leadsData);
@@ -48,18 +55,66 @@ export const MarketingWorkspace: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      await departmentWorkspaceService.createRecord('dept-marketing', 'campaigns', {
+      await departmentWorkspaceService.createRecord('dept-mkt', 'campaigns', {
         title: campTitle.trim(),
         channels: campChannels,
         status: campStatus
       });
       setIsAddCampaignOpen(false);
       setCampTitle('');
+      setCampChannels('');
+      setCampStatus('Đang Lên Kế Hoạch');
       fetchMktData();
     } catch (err) {
       console.error('Error creating campaign:', err);
+      showToast({ type: 'error', title: 'Tạo chiến dịch thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const CAMP_STAGES = ['Đang Lên Kế Hoạch', 'Đang Dựng Media', 'Đã Phát Hành'];
+  const nextCampStage = (s: string) => {
+    const i = CAMP_STAGES.indexOf(s);
+    return i >= 0 && i < CAMP_STAGES.length - 1 ? CAMP_STAGES[i + 1] : null;
+  };
+
+  const handleAdvanceCampaign = async (camp: any) => {
+    const next = nextCampStage(camp.status);
+    if (!next) return;
+    try {
+      await departmentWorkspaceService.updateRecord('dept-mkt', 'campaigns', camp.id, {
+        ...camp,
+        status: next
+      });
+      fetchMktData();
+    } catch (err) {
+      console.error('Error advancing campaign:', err);
+      showToast({ type: 'error', title: 'Chuyển trạng thái thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  // Chuỗi Marketing -> Sales: giao lead từ chiến dịch (chống trùng theo tên).
+  const handleHandoffToSales = async (camp: any) => {
+    try {
+      const existing = await departmentWorkspaceService.getRecords('dept-sales', 'leads');
+      const leadName = `Lead từ chiến dịch ${camp.title}`;
+      if ((existing || []).some((l: any) => l.name === leadName)) {
+        showToast({ type: 'info', title: 'Đã giao trước đó', message: 'Chiến dịch này đã có lead bên Kinh doanh.' });
+        return;
+      }
+      await departmentWorkspaceService.createRecord('dept-sales', 'leads', {
+        name: leadName,
+        value: 0,
+        capacity: '',
+        contact: '',
+        stage: 'lead',
+        sent: false
+      });
+      showToast({ type: 'success', title: 'Đã giao Sales', message: 'Lead đã chuyển sang pipeline Kinh doanh.' });
+    } catch (err) {
+      console.error('Error handing off to sales:', err);
+      showToast({ type: 'error', title: 'Giao Sales thất bại', message: 'Vui lòng thử lại.' });
     }
   };
 
@@ -69,15 +124,21 @@ export const MarketingWorkspace: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      await departmentWorkspaceService.createRecord('dept-marketing', 'leads', {
+      await departmentWorkspaceService.createRecord('dept-mkt', 'leads', {
         source: sourceName.trim(),
-        percentage: sourcePct
+        percentage: sourcePct.trim(),
+        leadCount: Number(sourceCount) || 0,
+        conversion: Number(sourceConversion) || 0
       });
       setIsAddLeadSourceOpen(false);
       setSourceName('');
+      setSourcePct('');
+      setSourceCount('');
+      setSourceConversion('');
       fetchMktData();
     } catch (err) {
       console.error('Error creating lead source:', err);
+      showToast({ type: 'error', title: 'Thêm nguồn lead thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -131,15 +192,33 @@ export const MarketingWorkspace: React.FC = () => {
             ) : campaigns.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-sm">Chưa có kế hoạch nội dung / chiến dịch nào</div>
             ) : campaigns.map(camp => (
-              <div key={camp.id} className="p-4 bg-gray-50 dark:bg-slate-700/40 rounded-2xl border border-gray-100 dark:border-slate-600 flex justify-between items-center">
+              <div key={camp.id} className="p-4 bg-gray-50 dark:bg-slate-700/40 rounded-2xl border border-gray-100 dark:border-slate-600 flex justify-between items-center gap-2">
                 <div>
                   <div className="font-bold text-sm text-gray-900 dark:text-white">{camp.title}</div>
                   <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Kênh: {camp.channels}</div>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                  camp.status === 'Đang Dựng Media' ? 'bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-300' :
-                  'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
-                }`}>{camp.status}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleHandoffToSales(camp)}
+                    title="Giao lead sang pipeline Kinh doanh"
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded-lg border border-blue-200"
+                  >
+                    Giao Sales
+                  </button>
+                  {nextCampStage(camp.status) && (
+                    <button
+                      onClick={() => handleAdvanceCampaign(camp)}
+                      title={`Chuyển sang ${nextCampStage(camp.status)}`}
+                      className="text-[11px] font-bold text-pink-600 hover:text-pink-800 hover:bg-pink-50 px-2 py-1 rounded-lg border border-pink-200"
+                    >
+                      Tiếp →
+                    </button>
+                  )}
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    camp.status === 'Đang Dựng Media' ? 'bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-300' :
+                    'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                  }`}>{camp.status}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -160,16 +239,28 @@ export const MarketingWorkspace: React.FC = () => {
               <div className="py-12 text-center"><Loader2 className="animate-spin inline text-pink-500" size={24} /></div>
             ) : leads.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-sm">Chưa có dữ liệu nguồn lead</div>
-            ) : leads.map((lead, index) => (
-              <div key={lead.id} className="p-3 bg-gray-50 dark:bg-slate-700/30 rounded-xl flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-800 dark:text-slate-200">{lead.source}</span>
-                <span className={`font-black text-sm ${
-                  index % 3 === 0 ? 'text-emerald-600' :
-                  index % 3 === 1 ? 'text-blue-600' :
-                  'text-purple-600'
-                }`}>{lead.percentage}</span>
+            ) : leads.map((lead) => {
+              const count = Number(lead.leadCount) || 0;
+              const conv = Number(lead.conversion) || 0;
+              const share = totalLeadCount > 0 ? Math.round((count / totalLeadCount) * 100) : 0;
+              const tone = conv >= 20 ? 'text-emerald-600' : conv >= 10 ? 'text-blue-600' : 'text-purple-600';
+              const bar = conv >= 20 ? 'bg-emerald-500' : conv >= 10 ? 'bg-blue-500' : 'bg-purple-500';
+              return (
+              <div key={lead.id} className="p-3 bg-gray-50 dark:bg-slate-700/30 rounded-xl space-y-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{lead.source}</span>
+                  <span className={`font-black text-sm ${tone}`}>{count} lead • {share}%</span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-slate-600 h-1.5 rounded-full overflow-hidden">
+                  <div className={`h-full ${bar}`} style={{ width: `${share}%` }} />
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>Tỷ lệ chốt: {conv}%</span>
+                  {lead.percentage && <span>Ghi chú cũ: {lead.percentage}</span>}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -269,7 +360,7 @@ export const MarketingWorkspace: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                  Tỷ Trọng Chuyển Đổi (%)
+                  Tỷ Trọng Chuyển Đổi (ghi chú cũ, tùy chọn)
                 </label>
                 <input
                   type="text"
@@ -278,6 +369,37 @@ export const MarketingWorkspace: React.FC = () => {
                   placeholder="VD: 25%"
                   className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Số Lead Thu Được *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={sourceCount}
+                    onChange={(e) => setSourceCount(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="VD: 120"
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Tỷ Lệ Chốt (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={sourceConversion}
+                    onChange={(e) => setSourceConversion(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="VD: 15"
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-slate-700">

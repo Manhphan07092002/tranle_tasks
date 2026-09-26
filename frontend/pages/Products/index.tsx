@@ -3,6 +3,7 @@ import { PlusCircle, Search, Edit2, Trash2, X, Save, Package, TrendingUp, AlertC
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { Card } from '../../components/UI';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import * as productService from '../../services/productService';
@@ -13,6 +14,7 @@ export default function ProductsPage() {
   const { t } = useLanguage();
   const { contracts } = useData();
   const { user } = useAuth();
+  const { showToast } = useNotifications();
   const perms = user?.permissions || [];
   const canManage = perms.includes('manage_warehouse') || perms.includes('admin_panel');
   const [products, setProducts] = useState<productService.Product[]>([]);
@@ -181,7 +183,7 @@ export default function ProductsPage() {
       }
     } catch (err) {
       console.error(err);
-      alert('Không thể tự động tạo mã từ database.');
+      showToast({ type: 'error', title: 'Không thể tự động tạo mã từ database.' });
     }
   };
 
@@ -344,7 +346,7 @@ export default function ProductsPage() {
         const importPriceNum = Number(form.importPrice.replace(/\D/g, '')) || 0;
         const salePriceNum = Number(form.salePrice.replace(/\D/g, '')) || 0;
         if (salePriceNum <= importPriceNum) {
-          alert('Giá bán gợi ý không được bằng hoặc nhỏ hơn giá nhập (giá mua)!');
+          showToast({ type: 'error', title: 'Giá bán gợi ý không được bằng hoặc nhỏ hơn giá nhập (giá mua)!' });
           return;
         }
 
@@ -352,7 +354,7 @@ export default function ProductsPage() {
         if (formImportCode) {
           const isDuplicate = products.some(p => p.id !== editingId && p.importCode && p.importCode.trim().toLowerCase() === formImportCode.toLowerCase());
           if (isDuplicate) {
-            alert(`Mã nhập kho '${formImportCode}' đã tồn tại trong hệ thống! Vui lòng chọn mã khác.`);
+            showToast({ type: 'error', title: `Mã nhập kho '${formImportCode}' đã tồn tại trong hệ thống! Vui lòng chọn mã khác.` });
             return;
           }
         }
@@ -395,15 +397,15 @@ export default function ProductsPage() {
         for (let i = 0; i < productsPayload.length; i++) {
           const p = productsPayload[i];
           if (!p.name) {
-            alert(`Sản phẩm dòng ${i + 1} chưa nhập tên!`);
+            showToast({ type: 'error', title: `Sản phẩm dòng ${i + 1} chưa nhập tên!` });
             return;
           }
           if (p.importQuantity <= 0) {
-            alert(`Sản phẩm dòng ${i + 1} ("${p.name}"): Số lượng nhập phải lớn hơn 0!`);
+            showToast({ type: 'error', title: `Sản phẩm dòng ${i + 1} ("${p.name}"): Số lượng nhập phải lớn hơn 0!` });
             return;
           }
           if (p.salePrice <= p.importPrice) {
-            alert(`Sản phẩm dòng ${i + 1} ("${p.name}"): Giá bán gợi ý không được bằng hoặc nhỏ hơn giá nhập (giá mua)!`);
+            showToast({ type: 'error', title: `Sản phẩm dòng ${i + 1} ("${p.name}"): Giá bán gợi ý không được bằng hoặc nhỏ hơn giá nhập (giá mua)!` });
             return;
           }
 
@@ -411,7 +413,7 @@ export default function ProductsPage() {
             const lowerCode = p.importCode.toLowerCase();
             // Check duplicate in same batch
             if (codesInBatch.has(lowerCode)) {
-              alert(`Mã nhập kho '${p.importCode}' bị trùng lặp ở dòng ${i + 1}! Vui lòng nhập các mã nhập kho khác nhau.`);
+              showToast({ type: 'error', title: `Mã nhập kho '${p.importCode}' bị trùng lặp ở dòng ${i + 1}! Vui lòng nhập các mã nhập kho khác nhau.` });
               return;
             }
             codesInBatch.add(lowerCode);
@@ -419,7 +421,7 @@ export default function ProductsPage() {
             // Check duplicate against DB (pre-loaded list)
             const existingProduct = products.find(existing => existing.importCode && existing.importCode.trim().toLowerCase() === lowerCode);
             if (existingProduct) {
-              alert(`Mã nhập kho '${p.importCode}' đã tồn tại trong hệ thống (sản phẩm '${existingProduct.name}')! Vui lòng chọn mã khác.`);
+              showToast({ type: 'error', title: `Mã nhập kho '${p.importCode}' đã tồn tại trong hệ thống (sản phẩm '${existingProduct.name}')! Vui lòng chọn mã khác.` });
               return;
             }
           }
@@ -431,7 +433,7 @@ export default function ProductsPage() {
       closeModal();
       loadProducts();
     } catch (error: any) {
-      alert(error.message || 'Có lỗi xảy ra');
+      showToast({ type: 'error', title: error.message || 'Có lỗi xảy ra' });
     }
   };
 
@@ -482,7 +484,7 @@ export default function ProductsPage() {
       loadProducts();
     } catch (error) {
       console.error('Failed to delete product', error);
-      alert('Lỗi khi xóa sản phẩm');
+      showToast({ type: 'error', title: 'Lỗi khi xóa sản phẩm' });
     }
   };
 

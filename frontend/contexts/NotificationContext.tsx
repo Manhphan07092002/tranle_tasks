@@ -228,7 +228,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     });
 
     socket.on('connect', () => {
-      socket.emit('join', user.id);
+      const token = localStorage.getItem('tranle_token') || localStorage.getItem('ctc_token');
+      socket.emit('join', { userId: user.id, token });
+    });
+
+    socket.on('join_error', (err: { error?: string }) => {
+      console.warn('[Socket] join rejected:', err?.error);
     });
 
     socket.on('new_notification', (data: AppNotification) => {

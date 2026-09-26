@@ -1,6 +1,28 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { sendNotification } from '../utils/notify.js';
+import { validate } from '../middleware/validate.js';
+
+// P1: chặn payload rác/quá khổ trước khi chạm DB (các field khác cho qua — validate chỉ kiểm tra, không strip body).
+const TaskPayloadSchema = z.object({
+  title: z.string().trim().min(1, 'Tiêu đề không được để trống').max(500),
+  description: z.string().max(20000).optional().nullable(),
+  priority: z.string().max(32).optional().nullable(),
+  status: z.string().max(32).optional().nullable(),
+  assignees: z.array(z.string().max(191)).max(50).optional(),
+  tags: z.array(z.string().max(191)).max(20).optional(),
+  subtasks: z.array(z.object({
+    id: z.string().max(191).optional(),
+    title: z.string().min(1).max(500),
+    isCompleted: z.boolean().optional(),
+  }).passthrough()).max(100).optional(),
+  comments: z.array(z.object({
+    id: z.string().max(191).optional(),
+    userId: z.string().max(191),
+    content: z.string().min(1).max(5000),
+  }).passthrough()).max(100).optional(),
+}).passthrough();
 
 export function taskRoutes(db: any) {
   const router = Router();
@@ -12,7 +34,14 @@ export function taskRoutes(db: any) {
     }, {});
   }
 
-  async function buildTasks(thresholdDate?: string, filters?: { departmentId?: string; teamId?: string; projectId?: string }) {
+  // P2: related tables chỉ load theo task IDs trả về (trước đây full-scan 4 bảng mỗi GET).
+  // limit/offset tùy chọn — không truyền thì giữ hành vi cũ (trả tất cả) để tương thích frontend.
+  async function buildTasks(
+    thresholdDate?: string,
+    filters?: { departmentId?: string; teamId?: string; projectId?: string },
+    paging?: { limit?: number; offset?: number },
+    requester?: any,
+  ) {
     let tasksQuery = `
       SELECT t.*,
              d.name as departmentName, d.code as departmentCode,
@@ -41,16 +70,37 @@ export function taskRoutes(db: any) {
       tasksQuery += ' AND t.projectId = ?';
       params.push(filters.projectId);
     }
+    const canViewAll = requester?.role === 'Admin' || requester?.role === 'Director' || requester?.role === 'Giám Đốc'
+      || (requester?.permissions || []).includes('view_all_tasks');
+    if (!canViewAll && requester) {
+      tasksQuery += ' AND (t.createdBy = ? OR t.assigneeId = ? OR t.id IN (SELECT taskId FROM task_assignees WHERE userId = ?))';
+      params.push(requester.id, requester.id, requester.id);
+    }
 
     tasksQuery += ' ORDER BY t.startDate DESC, t.id DESC';
 
-    const [tasks, assignees, tags, subtasks, comments] = await Promise.all([
-      db.all(tasksQuery, params),
-      db.all('SELECT taskId, userId FROM task_assignees'),
-      db.all('SELECT taskId, tag FROM task_tags'),
-      db.all('SELECT id, taskId, title, isCompleted FROM task_subtasks ORDER BY sortOrder'),
-      db.all('SELECT id, taskId, userId, content, createdAt FROM task_comments ORDER BY createdAt'),
-    ]);
+    if (paging?.limit) {
+      const limit = Math.min(Math.max(1, Math.floor(paging.limit)), 500);
+      const offset = Math.max(0, Math.floor(paging.offset ?? 0));
+      tasksQuery += ' LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+    }
+
+    const tasks = await db.all(tasksQuery, params);
+    const ids = tasks.map((t: any) => t.id);
+
+    let assignees: any[] = [];
+    let tags: any[] = [];
+    let subtasks: any[] = [];
+    let comments: any[] = [];
+    if (ids.length > 0) {
+      [assignees, tags, subtasks, comments] = await Promise.all([
+        db.all('SELECT taskId, userId FROM task_assignees WHERE taskId IN (?)', [ids]),
+        db.all('SELECT taskId, tag FROM task_tags WHERE taskId IN (?)', [ids]),
+        db.all('SELECT id, taskId, title, isCompleted FROM task_subtasks WHERE taskId IN (?) ORDER BY sortOrder', [ids]),
+        db.all('SELECT id, taskId, userId, content, createdAt FROM task_comments WHERE taskId IN (?) ORDER BY createdAt', [ids]),
+      ]);
+    }
 
     const aMap = groupByKey(assignees, 'taskId');
     const tMap = groupByKey(tags, 'taskId');
@@ -75,7 +125,7 @@ export function taskRoutes(db: any) {
     }));
   }
 
-  async function saveRelated(taskId: string, t: any) {
+  async function saveRelated(taskId: string, t: any, actorId: string) {
     await db.run('DELETE FROM task_assignees WHERE taskId = ?', [taskId]);
     await db.run('DELETE FROM task_tags WHERE taskId = ?', [taskId]);
     await db.run('DELETE FROM task_subtasks WHERE taskId = ?', [taskId]);
@@ -98,22 +148,26 @@ export function taskRoutes(db: any) {
     for (const c of t.comments ?? []) {
       await db.run(
         'INSERT INTO task_comments (id, taskId, userId, content, createdAt) VALUES (?, ?, ?, ?, ?)',
-        [c.id ?? randomUUID(), taskId, c.userId, c.content, c.createdAt ?? new Date().toISOString()]
+        [c.id ?? randomUUID(), taskId, actorId, c.content, c.createdAt ?? new Date().toISOString()]
       );
     }
   }
 
   router.get('/', async (req, res) => {
     try {
-      const { departmentId, teamId, projectId } = req.query;
+      const { departmentId, teamId, projectId, limit, offset } = req.query;
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      // P2: limit/offset tùy chọn (VD: ?limit=50&offset=0); không truyền = hành vi cũ.
+      const paging = limit !== undefined
+        ? { limit: Number(limit), offset: offset !== undefined ? Number(offset) : 0 }
+        : undefined;
       res.json(
         await buildTasks(sixMonthsAgo.toISOString(), {
           departmentId: departmentId as string,
           teamId: teamId as string,
           projectId: projectId as string,
-        })
+        }, paging, req.user)
       );
     } catch (e: any) {
       console.error('GET /api/tasks error:', e);
@@ -121,17 +175,18 @@ export function taskRoutes(db: any) {
     }
   });
 
-  router.get('/archive', async (_req, res) => {
+  router.get('/archive', async (req, res) => {
     try {
-      res.json(await buildTasks());
+      res.json(await buildTasks(undefined, undefined, undefined, req.user));
     } catch (e) {
       res.status(500).json({ error: 'Failed to fetch tasks archive' });
     }
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', validate(TaskPayloadSchema), async (req, res) => {
     const t = req.body;
     try {
+      const requester = req.user!;
       const taskId = t.id || `t-${Date.now()}`;
       
       // Auto-resolve departmentId
@@ -156,7 +211,7 @@ export function taskRoutes(db: any) {
           t.estimatedEndAt ?? null,
           t.priority ?? 'Medium',
           t.status ?? 'Todo',
-          t.createdBy ?? null,
+          requester.id,
           t.department ?? null,
           resolvedDeptId ?? null,
           t.teamId ?? null,
@@ -171,17 +226,17 @@ export function taskRoutes(db: any) {
           t.approvalStatus ?? 'none',
         ]
       );
-      await saveRelated(taskId, t);
+      await saveRelated(taskId, t, requester.id);
 
-      if (t.createdBy) {
+      if (requester.id) {
         await db.run(
           'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-          [randomUUID(), t.createdBy, 'task.created', taskId, 'task', new Date().toISOString()]
+          [randomUUID(), requester.id, 'task.created', taskId, 'task', new Date().toISOString()]
         );
       }
       if (Array.isArray(t.assignees)) {
         for (const assigneeId of t.assignees) {
-          if (assigneeId !== t.createdBy) {
+          if (assigneeId !== requester.id) {
             await sendNotification(
               db,
               assigneeId,
@@ -200,9 +255,19 @@ export function taskRoutes(db: any) {
     }
   });
 
-  router.put('/:id', async (req, res) => {
+  // PUT cho phép cập nhật từng phần nên dùng bản partial (title không bắt buộc).
+  router.put('/:id', validate(TaskPayloadSchema.partial()), async (req, res) => {
     const t = req.body;
     try {
+      const requester = req.user!;
+      const existing = await db.get('SELECT id, createdBy FROM tasks WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Task not found' });
+      const canManageAll = requester.role === 'Admin' || requester.role === 'Director' || requester.role === 'Giám Đốc'
+        || (requester.permissions || []).includes('view_all_tasks');
+      const assignment = await db.get('SELECT 1 FROM task_assignees WHERE taskId = ? AND userId = ?', [req.params.id, requester.id]);
+      if (!canManageAll && existing.createdBy !== requester.id && !assignment) {
+        return res.status(403).json({ error: 'Forbidden: Bạn chỉ được cập nhật công việc của mình hoặc được giao' });
+      }
       let resolvedDeptId = t.departmentId;
       if (!resolvedDeptId && t.department) {
         const d = await db.get('SELECT id FROM departments WHERE name = ?', [t.department]);
@@ -242,12 +307,13 @@ export function taskRoutes(db: any) {
           req.params.id,
         ]
       );
-      await saveRelated(req.params.id, t);
+      // Route '/:id' luôn cho single string; cast vì Express 5 widen type khi có nhiều middlewares.
+      await saveRelated(req.params.id as string, t, requester.id);
 
-      if (t.updatedBy || t.createdBy) {
+      if (requester.id) {
         await db.run(
           'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-          [randomUUID(), t.updatedBy ?? t.createdBy ?? 'system', 'task.updated', req.params.id, 'task', new Date().toISOString()]
+          [randomUUID(), requester.id, 'task.updated', req.params.id, 'task', new Date().toISOString()]
         );
       }
       res.json({ success: true });
@@ -257,8 +323,20 @@ export function taskRoutes(db: any) {
     }
   });
 
+  // P0 RBAC: chỉ người tạo task hoặc Admin (role Admin hoặc quyền admin_panel/manage_users) mới được xóa.
+  // Khớp checkPermission('delete') ở frontend/App.tsx (isCreator || isAdmin theo permission flags).
   router.delete('/:id', async (req, res) => {
     try {
+      const requester = (req as any).user;
+      const perms: string[] = requester?.permissions || [];
+      const isAdminLike = requester?.role === 'Admin' || perms.includes('admin_panel') || perms.includes('manage_users');
+      if (!isAdminLike) {
+        const existing = await db.get('SELECT id, createdBy FROM tasks WHERE id = ?', [req.params.id]);
+        if (!existing) return res.status(404).json({ error: 'Task not found' });
+        if (!existing.createdBy || existing.createdBy !== requester?.id) {
+          return res.status(403).json({ error: 'Forbidden: Chỉ người tạo task hoặc Admin được xóa' });
+        }
+      }
       await db.run('DELETE FROM task_assignees WHERE taskId = ?', [req.params.id]);
       await db.run('DELETE FROM task_tags WHERE taskId = ?', [req.params.id]);
       await db.run('DELETE FROM task_subtasks WHERE taskId = ?', [req.params.id]);

@@ -7,6 +7,7 @@ import { AIAssistantHandle } from '../../components/AIAssistant';
 import { Pagination } from '../../components/Pagination';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import * as XLSX from 'xlsx-js-style';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface TasksPageProps {
   t: (key: string) => string;
@@ -40,6 +41,7 @@ export default function TasksPage({
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const { showToast } = useNotifications();
 
   useEffect(() => {
     setCurrentPage(1);
@@ -73,7 +75,7 @@ export default function TasksPage({
     const canEdit = checkPermission('edit', task, user);
     const isAssignee = task.assignees.includes(user.id);
     if (!canEdit && !isAssignee) {
-      alert("You do not have permission to edit this task's status.");
+      showToast({ type: 'error', title: "You do not have permission to edit this task's status." });
       return;
     }
 

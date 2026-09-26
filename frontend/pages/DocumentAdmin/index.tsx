@@ -10,7 +10,7 @@ import { useData } from '../../contexts/DataContext';
 import { Button, Card, Input, Modal, Avatar } from '../../components/UI';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { 
-  getDocuments, createDocument, updateDocument, deleteDocument, uploadFiles, Document 
+  getDocuments, createDocument, updateDocument, deleteDocument, downloadFile, uploadFiles, Document
 } from '../../services/documentService';
 
 export default function DocumentsPage() {
@@ -723,16 +723,14 @@ export default function DocumentsPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             
                             {/* Nút tải xuống */}
-                            <a 
-                              href={doc.url} 
-                              download={doc.name}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => void downloadFile(doc.url, doc.name).catch((e: any) => setError(e.message || 'Không thể tải tệp tin'))}
                               className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 hover:text-gray-800 dark:hover:text-white rounded-lg transition-all"
                               title="Tải tệp"
                             >
                               <Download size={14} />
-                            </a>
+                            </button>
 
                             {/* Nút sửa */}
                             <button
@@ -883,16 +881,14 @@ export default function DocumentsPage() {
                                           </div>
 
                                           <div className="flex items-center gap-1 flex-shrink-0">
-                                            <a 
-                                              href={doc.url} 
-                                              download={doc.name}
-                                              target="_blank"
-                                              rel="noreferrer"
+                                            <button
+                                              type="button"
+                                              onClick={() => void downloadFile(doc.url, doc.name).catch((e: any) => setError(e.message || 'Không thể tải tệp tin'))}
                                               className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-md transition-colors"
                                               title="Tải tệp"
                                             >
                                               <Download size={13} />
-                                            </a>
+                                            </button>
                                             <button
                                               onClick={() => handleOpenEdit(doc)}
                                               className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-400 hover:text-brand-500 rounded-md transition-colors"

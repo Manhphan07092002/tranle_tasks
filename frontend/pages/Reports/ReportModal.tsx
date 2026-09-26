@@ -366,7 +366,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         setRows(prev => [...prev, ...newRows]);
       }
     } else {
-      alert('Không có báo cáo nào đã được duyệt trong tuần này của phòng để tổng hợp.');
+      showToast({ type: 'error', title: 'Không có báo cáo nào đã được duyệt trong tuần này của phòng để tổng hợp.' });
     }
   };
 

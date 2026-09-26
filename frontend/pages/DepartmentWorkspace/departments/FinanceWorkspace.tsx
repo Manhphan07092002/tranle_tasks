@@ -8,10 +8,17 @@ import { Button } from '../../../components/UI';
 import { MilestonePaymentModal } from '../../../components/finance/MilestonePaymentModal';
 import { ArAgingDetailModal } from '../../../components/finance/ArAgingDetailModal';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
+import { statusLabel } from '../../../utils/workspaceStatus';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useData } from '../../../contexts/DataContext';
 
 export const FinanceWorkspace: React.FC = () => {
   const { user, isAdmin, isDirector, isManager } = useAuth();
+  const { departments = [] } = useData();
+  const { showToast } = useNotifications();
+  // Nhân viên thường không được lập/duyệt lệnh tài chính (quy chuẩn RBAC).
+  const canManageFinance = !!(isAdmin || isDirector || isManager);
   const [activeTab, setActiveTab] = useState<'ap' | 'ar'>('ap');
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isArAgingOpen, setIsArAgingOpen] = useState(false);
@@ -26,6 +33,47 @@ export const FinanceWorkspace: React.FC = () => {
   const [isAddArOpen, setIsAddArOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Edit State (dùng chung cho AP/AR)
+  const [editing, setEditing] = useState<null | { kind: 'ap' | 'ar'; rec: any }>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editParty, setEditParty] = useState('');
+  const [editDate, setEditDate] = useState('');
+
+  const openEdit = (kind: 'ap' | 'ar', rec: any) => {
+    setEditing({ kind, rec });
+    setEditDesc(kind === 'ap' ? rec.desc_text || '' : rec.desc_text || '');
+    setEditAmount(String(rec.amount ?? ''));
+    setEditParty(kind === 'ap' ? rec.vendor || '' : rec.customer || '');
+    setEditDate(kind === 'ap' ? rec.date || '' : rec.dueDate || '');
+  };
+
+  const handleUpdateRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    const amount = Number(editAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast({ type: 'error', title: 'Số tiền không hợp lệ', message: 'Nhập số tiền lớn hơn 0 (VNĐ).' });
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const { kind, rec } = editing;
+      const payload = kind === 'ap'
+        ? { ...rec, desc_text: editDesc.trim(), amount, vendor: editParty.trim(), date: editDate || rec.date }
+        : { ...rec, desc_text: editDesc.trim(), amount, customer: editParty.trim(), dueDate: editDate || rec.dueDate };
+      await departmentWorkspaceService.updateRecord('dept-fin', kind, rec.id, payload);
+      setEditing(null);
+      fetchFinanceData();
+      showToast({ type: 'success', title: 'Đã cập nhật', message: 'Lưu thay đổi thành công.' });
+    } catch (err) {
+      console.error('Error updating finance record:', err);
+      showToast({ type: 'error', title: 'Cập nhật thất bại', message: 'Vui lòng thử lại.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // AP Form
   const [apDept, setApDept] = useState('P. Mua Hàng & Cung Ứng');
   const [apDesc, setApDesc] = useState('');
@@ -39,18 +87,27 @@ export const FinanceWorkspace: React.FC = () => {
   const [arAmount, setArAmount] = useState('');
   const [arDueDate, setArDueDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const formatTy = (num: number) => (num / 1e9).toFixed(2);
+  const formatMoney = (v: any) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n === 0) return v || '—';
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
+  };
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isOverdue = (dueDate: string) => !!dueDate && dueDate < todayStr;
+  // Ngưỡng duyệt chéo: AP vượt ngưỡng cần Giám đốc (khớp backend automation).
+  const HIGH_VALUE_THRESHOLD = 2000000000;
 
   const fetchFinanceData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'ap') {
-        const data = await departmentWorkspaceService.getRecords('dept-finance', 'ap');
-        setApRecords(data);
-      } else if (activeTab === 'ar') {
-        const data = await departmentWorkspaceService.getRecords('dept-finance', 'ar');
-        setArRecords(data);
-      }
+      const [ap, ar, freshKpis] = await Promise.all([
+        departmentWorkspaceService.getRecords('dept-fin', 'ap'),
+        departmentWorkspaceService.getRecords('dept-fin', 'ar'),
+        departmentWorkspaceService.getKpis('dept-fin'),
+      ]);
+      setApRecords(ap);
+      setArRecords(ar);
+      if (freshKpis) setKpis(freshKpis);
     } catch (err) {
       console.error('Error fetching finance records:', err);
     } finally {
@@ -59,33 +116,32 @@ export const FinanceWorkspace: React.FC = () => {
   };
 
   useEffect(() => {
-    departmentWorkspaceService.getKpis('dept-finance').then(setKpis).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     fetchFinanceData();
-  }, [activeTab]);
+  }, []);
 
   const handleCreateAp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apDesc.trim() || !apVendor.trim()) return;
+    const amount = Number(apAmount);
+    if (!apDesc.trim() || !apVendor.trim() || !Number.isFinite(amount) || amount <= 0) return;
 
     try {
       setIsSubmitting(true);
-      await departmentWorkspaceService.createRecord('dept-finance', 'ap', {
+      await departmentWorkspaceService.createRecord('dept-fin', 'ap', {
         dept: apDept,
         desc_text: apDesc.trim(),
-        amount: apAmount,
+        amount,
         vendor: apVendor.trim(),
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toISOString().slice(0, 10),
         status: 'pending'
       });
       setIsAddApOpen(false);
       setApDesc('');
       setApVendor('');
+      setApAmount('');
       fetchFinanceData();
     } catch (err) {
       console.error('Error creating AP:', err);
+      showToast({ type: 'error', title: 'Lập lệnh chi thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -93,26 +149,76 @@ export const FinanceWorkspace: React.FC = () => {
 
   const handleCreateAr = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!arProject.trim() || !arCustomer.trim()) return;
+    const amount = Number(arAmount);
+    if (!arProject.trim() || !arCustomer.trim() || !Number.isFinite(amount) || amount <= 0) return;
 
     try {
       setIsSubmitting(true);
-      await departmentWorkspaceService.createRecord('dept-finance', 'ar', {
+      await departmentWorkspaceService.createRecord('dept-fin', 'ar', {
         project: arProject.trim(),
         customer: arCustomer.trim(),
-        desc_text: arDesc,
-        amount: arAmount,
-        dueDate: arDueDate,
+        desc_text: arDesc.trim(),
+        amount,
+        dueDate: arDueDate || new Date().toISOString().slice(0, 10),
         status: 'pending'
       });
       setIsAddArOpen(false);
       setArProject('');
       setArCustomer('');
+      setArDesc('');
+      setArAmount('');
+      setArDueDate(new Date().toISOString().slice(0, 10));
       fetchFinanceData();
     } catch (err) {
       console.error('Error creating AR:', err);
+      showToast({ type: 'error', title: 'Lưu khoản thu thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleApStatus = async (ap: any, status: 'approved' | 'paid' | 'rejected') => {
+    try {
+      // AP vượt ngưỡng mà người duyệt không phải Giám đốc/Admin -> trình lên thay vì duyệt trực tiếp.
+      if (status === 'approved' && Number(ap.amount) > HIGH_VALUE_THRESHOLD && !(isAdmin || isDirector)) {
+        try {
+          await departmentWorkspaceService.requestApproval({
+            entityType: 'finance_ap',
+            entityId: ap.id,
+            title: `Lệnh chi ${ap.desc_text} — ${formatMoney(ap.amount)} cần duyệt Giám đốc`,
+            amount: Number(ap.amount),
+            requestedBy: (user as any)?.id,
+            departmentId: (user as any)?.departmentId,
+            reason: `Lệnh chi vượt ngưỡng ${formatMoney(HIGH_VALUE_THRESHOLD)}`
+          });
+          showToast({ type: 'info', title: 'Đã trình Giám đốc', message: 'Lệnh chi vượt ngưỡng đã gửi phê duyệt cấp cao.' });
+        } catch (e) {
+          console.error(e);
+          showToast({ type: 'error', title: 'Trình duyệt thất bại', message: 'Vui lòng thử lại.' });
+        }
+        return;
+      }
+      await departmentWorkspaceService.updateRecord('dept-fin', 'ap', ap.id, {
+        ...ap,
+        status
+      });
+      fetchFinanceData();
+    } catch (err) {
+      console.error('Error updating AP status:', err);
+      showToast({ type: 'error', title: 'Cập nhật lệnh chi thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  const handleArStatus = async (ar: any, status: 'approved' | 'collected' | 'rejected') => {
+    try {
+      await departmentWorkspaceService.updateRecord('dept-fin', 'ar', ar.id, {
+        ...ar,
+        status
+      });
+      fetchFinanceData();
+    } catch (err) {
+      console.error('Error updating AR status:', err);
+      showToast({ type: 'error', title: 'Cập nhật khoản thu thất bại', message: 'Vui lòng thử lại.' });
     }
   };
 
@@ -136,18 +242,24 @@ export const FinanceWorkspace: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={() => setIsAddApOpen(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black text-xs px-4 py-2.5 shadow-lg rounded-xl transition-all"
-            >
-              <Plus size={16} className="mr-1.5" /> Lập Lệnh Chi (AP)
-            </Button>
-            <Button
-              onClick={() => setIsAddArOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 shadow-lg rounded-xl transition-all"
-            >
-              <Plus size={16} className="mr-1.5" /> Ghi Nhận Phải Thu (AR)
-            </Button>
+            {canManageFinance ? (
+              <>
+                <Button
+                  onClick={() => setIsAddApOpen(true)}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black text-xs px-4 py-2.5 shadow-lg rounded-xl transition-all"
+                >
+                  <Plus size={16} className="mr-1.5" /> Lập Lệnh Chi (AP)
+                </Button>
+                <Button
+                  onClick={() => setIsAddArOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 shadow-lg rounded-xl transition-all"
+                >
+                  <Plus size={16} className="mr-1.5" /> Ghi Nhận Phải Thu (AR)
+                </Button>
+              </>
+            ) : (
+              <div className="text-[11px] text-blue-200/70 font-medium">Quyền xem — chỉ Quản lý trở lên được lập lệnh tài chính.</div>
+            )}
           </div>
         </div>
       </div>
@@ -162,7 +274,10 @@ export const FinanceWorkspace: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-black text-slate-800 dark:text-white">
-            {arRecords.length} <span className="text-lg font-medium text-slate-500">khoản phải thu</span>
+            {formatMoney(kpis.pendingArAmount ?? 0)}
+          </div>
+          <div className="text-xs text-slate-500 font-medium mt-1">
+            {kpis.pendingArCount ?? arRecords.length} khoản chờ thu
           </div>
           <div className="text-xs text-emerald-600 font-bold mt-2">
             Thu tiền theo các mốc nghiệm thu hợp đồng EPC
@@ -177,7 +292,10 @@ export const FinanceWorkspace: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-black text-slate-800 dark:text-white">
-            {apRecords.length} <span className="text-lg font-medium text-slate-500">lệnh chi</span>
+            {formatMoney(kpis.pendingApAmount ?? 0)}
+          </div>
+          <div className="text-xs text-slate-500 font-medium mt-1">
+            {kpis.pendingApCount ?? apRecords.length} lệnh chờ chi
           </div>
           <div className="text-xs text-rose-500 font-bold mt-2">
             Ủy nhiệm chi thanh toán vật tư tấm pin, biến tần
@@ -222,9 +340,16 @@ export const FinanceWorkspace: React.FC = () => {
             <div className="space-y-3">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Danh Sách Lệnh Chi Thanh Toán (AP)</span>
-                <Button size="sm" onClick={() => setIsAddApOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl">
-                  <Plus size={14} className="mr-1" /> Lập Lệnh Chi Mới
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setIsMilestoneOpen(true)} className="text-xs font-bold rounded-xl">
+                    Đề Nghị Xuất HĐ Theo Mốc
+                  </Button>
+                  {canManageFinance && (
+                    <Button size="sm" onClick={() => setIsAddApOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl">
+                      <Plus size={14} className="mr-1" /> Lập Lệnh Chi Mới
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {apRecords.length === 0 ? (
@@ -236,9 +361,21 @@ export const FinanceWorkspace: React.FC = () => {
                       <div className="font-bold text-sm text-slate-900 dark:text-white">{ap.desc_text}</div>
                       <div className="text-xs text-slate-400 mt-0.5">Đối tượng: {ap.vendor} • Phòng ban: {ap.dept}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-sm text-rose-600">{ap.amount}</div>
-                      <div className="text-[11px] text-slate-400">{ap.date}</div>
+                    <div className="text-right space-y-1">
+                      <div className="font-black text-sm text-rose-600">{formatMoney(ap.amount)}</div>
+                      <div className="text-[11px] text-slate-400">{ap.date} • {statusLabel(ap.status)}</div>
+                      {canManageFinance && ap.status === 'pending' && (
+                        <div className="flex gap-1 justify-end">
+                          <Button size="sm" onClick={() => handleApStatus(ap, 'approved')} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg">Duyệt</Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleApStatus(ap, 'rejected')} className="text-[11px] font-bold rounded-lg">Từ chối</Button>
+                        </div>
+                      )}
+                      {canManageFinance && ap.status === 'approved' && (
+                        <Button size="sm" onClick={() => handleApStatus(ap, 'paid')} className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg">Đã chi</Button>
+                      )}
+                      {canManageFinance && (
+                        <Button size="sm" variant="ghost" onClick={() => openEdit('ap', ap)} className="text-[11px] font-bold rounded-lg">Sửa</Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -248,9 +385,16 @@ export const FinanceWorkspace: React.FC = () => {
             <div className="space-y-3">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Danh Sách Các Khoản Thu Hồi Công Nợ (AR)</span>
-                <Button size="sm" onClick={() => setIsAddArOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl">
-                  <Plus size={14} className="mr-1" /> Ghi Nhận Khoản Thu
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setIsArAgingOpen(true)} className="text-xs font-bold rounded-xl">
+                    Sổ Theo Dõi Tuổi Nợ
+                  </Button>
+                  {canManageFinance && (
+                    <Button size="sm" onClick={() => setIsAddArOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl">
+                      <Plus size={14} className="mr-1" /> Ghi Nhận Khoản Thu
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {arRecords.length === 0 ? (
@@ -262,9 +406,26 @@ export const FinanceWorkspace: React.FC = () => {
                       <div className="font-bold text-sm text-slate-900 dark:text-white">Dự án: {ar.project}</div>
                       <div className="text-xs text-slate-400 mt-0.5">Khách hàng: {ar.customer} • {ar.desc_text}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-sm text-emerald-600">{ar.amount}</div>
-                      <div className="text-[11px] text-slate-400">Hạn TT: {ar.dueDate}</div>
+                    <div className="text-right space-y-1">
+                      <div className="font-black text-sm text-emerald-600">{formatMoney(ar.amount)}</div>
+                      <div className="text-[11px] text-slate-400">
+                        Hạn TT: {ar.dueDate} • {statusLabel(ar.status)}
+                        {ar.status === 'pending' && isOverdue(ar.dueDate) && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">Quá hạn</span>
+                        )}
+                      </div>
+                      {canManageFinance && ar.status === 'pending' && (
+                        <div className="flex gap-1 justify-end">
+                          <Button size="sm" onClick={() => handleArStatus(ar, 'approved')} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg">Duyệt</Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleArStatus(ar, 'rejected')} className="text-[11px] font-bold rounded-lg">Từ chối</Button>
+                        </div>
+                      )}
+                      {canManageFinance && ar.status === 'approved' && (
+                        <Button size="sm" onClick={() => handleArStatus(ar, 'collected')} className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg">Đã thu</Button>
+                      )}
+                      {canManageFinance && (
+                        <Button size="sm" variant="ghost" onClick={() => openEdit('ar', ar)} className="text-[11px] font-bold rounded-lg">Sửa</Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -316,12 +477,15 @@ export const FinanceWorkspace: React.FC = () => {
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                    Số Tiền Chi
+                    Số Tiền Chi (VNĐ) *
                   </label>
                   <input
-                    type="text"
+                    type="number"
+                    min={1}
+                    required
                     value={apAmount}
                     onChange={(e) => setApAmount(e.target.value)}
+                    placeholder="VD: 1500000000"
                     className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -336,10 +500,18 @@ export const FinanceWorkspace: React.FC = () => {
                   onChange={(e) => setApDept(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="P. Mua Hàng & Cung Ứng">P. Mua Hàng & Cung Ứng</option>
-                  <option value="Khối Tổng Thầu EPC">Khối Tổng Thầu EPC</option>
-                  <option value="Trung Tâm Dịch Vụ O&M">Trung Tâm Dịch Vụ O&M</option>
-                  <option value="P. Hành Chính Nhân Sự">P. Hành Chính Nhân Sự</option>
+                  {departments.length > 0 ? (
+                    departments.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="P. Mua Hàng & Cung Ứng">P. Mua Hàng & Cung Ứng</option>
+                      <option value="Khối Tổng Thầu EPC">Khối Tổng Thầu EPC</option>
+                      <option value="Trung Tâm Dịch Vụ O&M">Trung Tâm Dịch Vụ O&M</option>
+                      <option value="P. Hành Chính Nhân Sự">P. Hành Chính Nhân Sự</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -396,15 +568,31 @@ export const FinanceWorkspace: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Diễn Giải / Đợt Thanh Toán
+                </label>
+                <input
+                  type="text"
+                  value={arDesc}
+                  onChange={(e) => setArDesc(e.target.value)}
+                  placeholder="VD: Đợt 2 — Nghiệm thu đóng điện COD..."
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                    Số Tiền Phải Thu
+                    Số Tiền Phải Thu (VNĐ) *
                   </label>
                   <input
-                    type="text"
+                    type="number"
+                    min={1}
+                    required
                     value={arAmount}
                     onChange={(e) => setArAmount(e.target.value)}
+                    placeholder="VD: 2500000000"
                     className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
@@ -443,6 +631,82 @@ export const FinanceWorkspace: React.FC = () => {
         isOpen={isArAgingOpen}
         onClose={() => setIsArAgingOpen(false)}
       />
+
+      {/* MODAL: SỬA AP/AR */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-slate-800 to-slate-900 text-white">
+              <h3 className="text-base font-bold">
+                Sửa {editing.kind === 'ap' ? 'Lệnh Chi (AP)' : 'Khoản Thu (AR)'}
+              </h3>
+              <button onClick={() => setEditing(null)} className="text-white/80 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleUpdateRecord} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Diễn Giải
+                </label>
+                <input
+                  type="text"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    {editing.kind === 'ap' ? 'Nhà Cung Cấp' : 'Khách Hàng'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editParty}
+                    onChange={(e) => setEditParty(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                    Số Tiền (VNĐ) *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  {editing.kind === 'ap' ? 'Ngày Chi' : 'Hạn Thanh Toán'}
+                </label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-slate-700">
+                <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                  {isSubmitting ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

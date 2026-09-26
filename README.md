@@ -17,18 +17,19 @@ Hệ thống **Tran Le Tasks** là giải pháp quản trị công việc, dự 
 
 ## 💻 Tech Stack
 
-- **Frontend:** React 18, Vite, Tailwind CSS, Lucide React (Icons), React Router v6.
-- **Backend:** Node.js, Express.js, SQLite (hoặc PostgreSQL), Prisma/Knex (Tùy chọn).
+- **Frontend:** React 19, Vite 6, Tailwind CSS 4, Lucide React, React Router 7.
+- **Backend:** Node.js 22, Express 5, MySQL 8 qua `mysql2`.
 - **Real-time:** Socket.io (Hỗ trợ chat, meeting room, cập nhật dữ liệu realtime).
-- **Khác:** Nodemailer & node-imap (Hệ thống Mail), Google Gemini API (AI).
+- **Khác:** Nodemailer, `imapflow` + `mailparser` (Hệ thống Mail), Google Gemini API (AI).
 
 ---
 
 ## 🚀 Hướng dẫn cài đặt (Run Locally)
 
 **Yêu cầu hệ thống (Prerequisites):** 
-- [Node.js](https://nodejs.org/en/) (phiên bản v18 trở lên)
-- Npm hoặc Yarn
+- [Node.js](https://nodejs.org/en/) 22 trở lên
+- npm
+- MySQL 8, hoặc Docker Desktop để chạy toàn bộ stack
 
 ### Bước 1: Cài đặt Dependencies
 
@@ -40,10 +41,11 @@ npm install
 
 ### Bước 2: Thiết lập biến môi trường (Environment Variables)
 
-Hệ thống đi kèm với các file `.env` mặc định để phục vụ cho việc phát triển (Development). Tuy nhiên, để cấu hình AI hoặc database tùy chỉnh, bạn có thể thiết lập:
+Sao chép `backend/.env.example` thành `backend/.env` (hoặc cấu hình `.env` ở thư mục gốc khi chạy Docker), sau đó đặt ít nhất `DATABASE_URL`, `JWT_SECRET`, `MAIL_ENCRYPTION_KEY` và `ADMIN_DEFAULT_PASSWORD`.
 
-- **Frontend:** Đặt `GEMINI_API_KEY` trong file `.env.local` nếu bạn muốn tích hợp Trợ lý AI.
-- **Backend:** Cơ sở dữ liệu mặc định là `SQLite` lưu tại thư mục `backend/database.sqlite`.
+- **Frontend:** `frontend/.env.example` chỉ cấu hình Vite/proxy phát triển.
+- **Backend:** Cơ sở dữ liệu duy nhất là MySQL 8; không dùng SQLite, PostgreSQL hay Prisma.
+- **Docker:** Adminer và phpMyAdmin chỉ có profile `debug` và chỉ bind `localhost`; không được mở chúng ra Internet.
 
 ### Bước 3: Khởi chạy hệ thống
 

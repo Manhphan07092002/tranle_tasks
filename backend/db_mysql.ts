@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(191) PRIMARY KEY, name TEXT NOT NULL, email VARCHAR(255) NOT NULL,
   password TEXT, role VARCHAR(64) NOT NULL, department VARCHAR(191) NOT NULL, avatar TEXT NOT NULL,
   mailPassword TEXT,
-  failedLogins INT NOT NULL DEFAULT 0, lockedUntil TEXT, isLocked TINYINT NOT NULL DEFAULT 0,
+  failedLogins INT NOT NULL DEFAULT 0, lockedUntil TEXT, isLocked TINYINT NOT NULL DEFAULT 0, sessionVersion INT NOT NULL DEFAULT 0,
   phone TEXT, dob TEXT, hometown TEXT, bio TEXT, cccd TEXT, gender TEXT,
   preferences TEXT DEFAULT ('{}')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -310,7 +310,8 @@ CREATE TABLE IF NOT EXISTS projects (
   biddingCode TEXT, biddingDate TEXT, procurementMethod TEXT, investor TEXT,
   biddingPrice DOUBLE DEFAULT 0, winningPrice DOUBLE DEFAULT 0,
   createdAt TEXT NOT NULL, updatedAt TEXT, isDeleted TINYINT DEFAULT 0,
-  priority VARCHAR(64) DEFAULT 'medium', phase VARCHAR(64) DEFAULT 'initiation'
+  priority VARCHAR(64) DEFAULT 'medium', phase VARCHAR(64) DEFAULT 'initiation',
+  leadId VARCHAR(191)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS project_reports (
@@ -438,6 +439,8 @@ CREATE TABLE IF NOT EXISTS customer_tickets (
   time TEXT,
   agent VARCHAR(191),
   avatar TEXT,
+  csat INT,
+  category VARCHAR(64),
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -471,6 +474,7 @@ CREATE TABLE IF NOT EXISTS engineering_designs (
   progress INT DEFAULT 0,
   tasks TEXT,
   status VARCHAR(64) NOT NULL,
+  project TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -481,6 +485,30 @@ CREATE TABLE IF NOT EXISTS epc_subcontractors (
   task TEXT NOT NULL,
   rating DECIMAL(3, 1),
   status VARCHAR(64) NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS epc_hse_logs (
+  id VARCHAR(191) PRIMARY KEY,
+  site TEXT NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  title TEXT NOT NULL,
+  severity VARCHAR(64) NOT NULL,
+  date TEXT NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  action TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS epc_attendance (
+  id VARCHAR(191) PRIMARY KEY,
+  site TEXT NOT NULL,
+  date TEXT NOT NULL,
+  team TEXT NOT NULL,
+  workers INT NOT NULL,
+  note TEXT NOT NULL,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -535,6 +563,8 @@ CREATE TABLE IF NOT EXISTS finance_ar (
   customer TEXT NOT NULL,
   dueDate TEXT NOT NULL,
   status VARCHAR(64) NOT NULL,
+  milestoneId VARCHAR(191),
+  projectId VARCHAR(191),
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -558,6 +588,17 @@ CREATE TABLE IF NOT EXISTS hr_employees (
   status VARCHAR(64) NOT NULL,
   pto INT NOT NULL,
   timesheet TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS hr_leaves (
+  id VARCHAR(191) PRIMARY KEY,
+  employeeName TEXT NOT NULL,
+  type VARCHAR(64) NOT NULL,
+  startDate TEXT NOT NULL,
+  days INT NOT NULL,
+  status VARCHAR(64) NOT NULL,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -638,6 +679,8 @@ CREATE TABLE IF NOT EXISTS marketing_leads (
   id VARCHAR(191) PRIMARY KEY,
   source TEXT NOT NULL,
   percentage VARCHAR(64) NOT NULL,
+  leadCount INT DEFAULT 0,
+  conversion DOUBLE DEFAULT 0,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -665,6 +708,26 @@ CREATE TABLE IF NOT EXISTS om_schedules (
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS om_production (
+  id VARCHAR(191) PRIMARY KEY,
+  site TEXT NOT NULL,
+  date TEXT NOT NULL,
+  kwh DOUBLE NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS om_sites (
+  id VARCHAR(191) PRIMARY KEY,
+  name TEXT NOT NULL,
+  capacityKwp DOUBLE NOT NULL,
+  location TEXT NOT NULL,
+  sunHours DOUBLE DEFAULT 4.5,
+  warrantyExpiry TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS procurement_prs (
   id VARCHAR(191) PRIMARY KEY,
   project TEXT NOT NULL,
@@ -672,6 +735,7 @@ CREATE TABLE IF NOT EXISTS procurement_prs (
   date TEXT NOT NULL,
   status VARCHAR(64) NOT NULL,
   priority VARCHAR(64) NOT NULL,
+  designId VARCHAR(191),
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -684,6 +748,29 @@ CREATE TABLE IF NOT EXISTS procurement_pos (
   stage VARCHAR(64) NOT NULL,
   progress INTEGER NOT NULL,
   eta TEXT NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  prId VARCHAR(191),
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS procurement_rfqs (
+  id VARCHAR(191) PRIMARY KEY,
+  title TEXT NOT NULL,
+  items TEXT NOT NULL,
+  deadline TEXT NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS procurement_quotes (
+  id VARCHAR(191) PRIMARY KEY,
+  rfqId VARCHAR(191) NOT NULL,
+  supplier TEXT NOT NULL,
+  price DOUBLE NOT NULL,
+  warranty TEXT NOT NULL,
+  leadTime TEXT NOT NULL,
   status VARCHAR(64) NOT NULL,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
@@ -698,6 +785,7 @@ CREATE TABLE IF NOT EXISTS warehouse_inventory (
   minStock INTEGER NOT NULL,
   unit TEXT NOT NULL,
   image TEXT NOT NULL,
+  serials TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -708,6 +796,7 @@ CREATE TABLE IF NOT EXISTS warehouse_inbound (
   items TEXT NOT NULL,
   date TEXT NOT NULL,
   status VARCHAR(64) NOT NULL,
+  poId VARCHAR(191),
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -719,6 +808,7 @@ CREATE TABLE IF NOT EXISTS warehouse_outbound (
   date TEXT NOT NULL,
   status VARCHAR(64) NOT NULL,
   requestedBy TEXT NOT NULL,
+  projectId VARCHAR(191),
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -735,6 +825,17 @@ CREATE TABLE IF NOT EXISTS sales_leads (
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS sales_quotes (
+  id VARCHAR(191) PRIMARY KEY,
+  leadId VARCHAR(191) NOT NULL,
+  version INT NOT NULL,
+  amount DOUBLE NOT NULL,
+  items TEXT NOT NULL,
+  status VARCHAR(64) NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS sales_performance (
   id VARCHAR(191) PRIMARY KEY,
   name TEXT NOT NULL,
@@ -743,6 +844,20 @@ CREATE TABLE IF NOT EXISTS sales_performance (
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
+
+async function ensureIndexExists(db: MysqlDb, tableName: string, indexName: string, columns: string) {
+  try {
+    const row = await db.get(
+      `SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+      [tableName, indexName]
+    );
+    if (!row) {
+      await db.exec(`CREATE INDEX \`${indexName}\` ON \`${tableName}\` (${columns})`);
+    }
+  } catch (err: any) {
+    console.warn(`[Migration] Notice ensuring index ${tableName}.${indexName}:`, err.message);
+  }
+}
 
 async function ensureColumnExists(db: MysqlDb, tableName: string, columnName: string, columnDef: string) {
   try {
@@ -848,7 +963,9 @@ export async function initDbMysql(): Promise<MysqlDb> {
   await ensureColumnExists(db, 'users', 'employmentStatus', "VARCHAR(64) DEFAULT 'full_time'");
 
   await ensureColumnExists(db, 'tasks', 'departmentId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'users', 'sessionVersion', 'INT NOT NULL DEFAULT 0');
   await ensureColumnExists(db, 'tasks', 'teamId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'customer_tickets', 'csat', 'INT');
   await ensureColumnExists(db, 'tasks', 'assigneeId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'tasks', 'milestoneId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'tasks', 'customerId', 'VARCHAR(191)');
@@ -863,9 +980,28 @@ export async function initDbMysql(): Promise<MysqlDb> {
 
   await ensureColumnExists(db, 'projects', 'primaryDepartmentId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'projects', 'departmentId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'projects', 'leadId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'procurement_prs', 'designId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'procurement_pos', 'prId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'warehouse_inbound', 'poId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'warehouse_outbound', 'projectId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'finance_ar', 'milestoneId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'finance_ar', 'projectId', 'VARCHAR(191)');
+  await ensureColumnExists(db, 'engineering_designs', 'project', 'TEXT');
+  await ensureColumnExists(db, 'customer_tickets', 'category', 'VARCHAR(64)');
+  await ensureColumnExists(db, 'warehouse_inventory', 'serials', 'TEXT');
+  await ensureColumnExists(db, 'marketing_leads', 'leadCount', 'INT DEFAULT 0');
+  await ensureColumnExists(db, 'marketing_leads', 'conversion', 'DOUBLE DEFAULT 0');
+  await ensureColumnExists(db, 'om_sites', 'sunHours', 'DOUBLE DEFAULT 4.5');
+  await ensureColumnExists(db, 'om_sites', 'warrantyExpiry', 'TEXT');
   await ensureColumnExists(db, 'contracts', 'departmentId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'revenue_reports', 'departmentId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'reports', 'departmentId', 'VARCHAR(191)');
+
+  // P2: indexes cho related lookups của GET /tasks (tránh full-scan khi DB lớn).
+  await ensureIndexExists(db, 'task_subtasks', 'idx_task_subtasks_taskId', '`taskId`');
+  await ensureIndexExists(db, 'task_comments', 'idx_task_comments_taskId', '`taskId`');
+  await ensureIndexExists(db, 'tasks', 'idx_tasks_startDate', '`startDate`');
 
   // ─── Seeds (only when empty or updating) ──────────────────────────────────
   await seedIfEmpty(db);
@@ -1113,9 +1249,30 @@ async function seedIfEmpty(db: MysqlDb) {
     }
   }
 
-  // ── 6. Users: 5-7 Personnel per Department (13 Departments) ─────────────────
-  const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'TranLe@dmin2026!';
-  const hashedPassword = await bcrypt.hash(adminPwd, 10);
+  // ── 6. Users: demo data only, never inserted during a normal or production boot ─
+  if (process.env.SEED_SAMPLE_USERS !== 'true' || process.env.NODE_ENV === 'production') {
+    // A fresh production database gets one operator account only when its credentials are explicitly supplied.
+    // Staff/demo accounts are never created implicitly.
+    if (process.env.NODE_ENV === 'production') {
+      const { count } = await db.get('SELECT COUNT(*) AS count FROM users');
+      if (Number(count) === 0) {
+        const email = process.env.INITIAL_ADMIN_EMAIL;
+        const password = process.env.INITIAL_ADMIN_PASSWORD;
+        if (!email || !password || password.length < 12) {
+          throw new Error('[SECURITY] A fresh production database requires INITIAL_ADMIN_EMAIL and an INITIAL_ADMIN_PASSWORD of at least 12 characters.');
+        }
+        await db.run(
+          'INSERT INTO users (id, name, email, password, role, department, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ['admin-bootstrap', process.env.INITIAL_ADMIN_NAME || 'System Administrator', email, await bcrypt.hash(password, 10), 'Admin', 'Ban Giám Đốc', '']
+        );
+      }
+    }
+    console.info('[Seed] Sample user seeding is disabled. Set SEED_SAMPLE_USERS=true only for local development.');
+    return;
+  }
+  // Seed credentials are required only when an initial account must be inserted.
+  // Existing installations can start without a seed secret and never fall back to a default password.
+  let hashedPassword: string | null = null;
 
   const INITIAL_USERS = [
     // 1. BAN GIÁM ĐỐC (dept-exec)
@@ -1220,6 +1377,13 @@ async function seedIfEmpty(db: MysqlDb) {
   for (const u of INITIAL_USERS) {
     const existing = await db.get('SELECT id FROM users WHERE id = ? OR email = ?', [u.id, u.email]);
     if (!existing) {
+      if (!hashedPassword) {
+        const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD;
+        if (!adminPwd) {
+          throw new Error('[SECURITY] ADMIN_DEFAULT_PASSWORD is required before seeding initial users.');
+        }
+        hashedPassword = await bcrypt.hash(adminPwd, 10);
+      }
       await db.run(
         'INSERT INTO users (id, name, email, password, role, department, departmentId, teamId, positionId, managerId, avatar, phone, dob, hometown, bio, status, employmentStatus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [u.id, u.name, u.email, hashedPassword, u.role, u.department, u.departmentId, u.teamId, u.positionId, u.managerId, u.avatar, u.phone, u.dob, u.hometown, u.bio, 'active', 'full_time']

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function teamRoutes(db: any) {
   const router = Router();
@@ -66,7 +67,7 @@ export function teamRoutes(db: any) {
   });
 
   // POST /api/teams - Create team
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, departmentId, code, name, description, managerId, color } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Tên nhóm không được để trống' });
     if (!departmentId) return res.status(400).json({ error: 'Phải chọn phòng ban trực thuộc' });
@@ -85,7 +86,7 @@ export function teamRoutes(db: any) {
   });
 
   // PUT /api/teams/:id - Update team
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { departmentId, code, name, description, managerId, color, isActive } = req.body;
     try {
       const existing = await db.get('SELECT * FROM teams WHERE id = ?', [req.params.id]);
@@ -113,7 +114,7 @@ export function teamRoutes(db: any) {
   });
 
   // DELETE /api/teams/:id - Archive or delete team
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       const userCountRow = await db.get('SELECT COUNT(*) as count FROM users WHERE teamId = ?', [req.params.id]);
       if (userCountRow?.count > 0) {

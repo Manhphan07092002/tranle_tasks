@@ -69,35 +69,37 @@ tranle_tasks/
 │   │   ├── finance/          # MilestonePaymentModal, ArAgingDetailModal
 │   │   ├── epc/              # DailySiteLogModal (Nhật ký công trường)
 │   │   ├── om/               # SajRmaTicketModal, FlirThermalScanModal
+│   │   ├── solar/            # Components năng lượng mặt trời dùng chung
 │   │   ├── workflow/         # WorkQueue, DepartmentRequestPanel
 │   │   └── meeting/          # WebRTC Video Room
-│   ├── pages/                # 20 module trang:
-│   │   ├── DepartmentWorkspace/ # 13 Workspaces phòng ban + 6 universal tabs
+│   ├── pages/                # 22 module trang:
+│   │   ├── DepartmentWorkspace/ # index.tsx + DepartmentDomainView.tsx + 13 departments/ + 6 tabs/
 │   │   ├── Dashboard/        # Tổng quan toàn công ty
 │   │   ├── Tasks/            # Kanban, List, Calendar
 │   │   ├── Contracts/        # Quản lý Hợp đồng đầu vào/ra & Bán lẻ
-│   │   ├── Projects/         # Quản lý Dự án EPC & Đấu thầu
+│   │   ├── Projects/ + ProjectReports/ # Dự án EPC & Đấu thầu + Báo cáo dự án
 │   │   ├── Revenue/          # Báo cáo Doanh thu & Dòng tiền
 │   │   ├── Products/         # Kho hàng & Thiết bị Solar
 │   │   ├── Mail/             # Webmail nội bộ IMAP/SMTP
 │   │   ├── Meetings/         # Phòng họp trực tuyến
-│   │   ├── Reports/          # Báo cáo công việc tuần
+│   │   ├── Reports/ + Approvals/ # Báo cáo tuần + Trung tâm phê duyệt số
+│   │   ├── Calendar/Notes/Team/Settings/Notifications/Organization # Lịch, Ghi chú, Nhân sự, Cài đặt, Thông báo, Orgchart
 │   │   ├── DocumentAdmin/    # Quản lý tài liệu số
 │   │   └── Admin/            # Quản trị hệ thống, RBAC & Backup/Restore JSON
-│   ├── contexts/             # AuthContext, DataContext, LanguageContext, NotificationContext
-│   └── services/             # 17 API service files (departmentWorkspaceService, taskService, etc.)
+│   ├── contexts/             # 4 contexts: AuthContext, DataContext, LanguageContext, NotificationContext
+│   └── services/             # 23 API service files (api, departmentWorkspaceService, taskService, contractService, projectService, productService, aiService, approvalService, ...)
 └── backend/                  # Express 5 + TypeScript (tsx runtime)
-    ├── server.ts             # Entry point — Express setup + mount 23 routes
-    ├── db_mysql.ts           # MySQL 8 adapter + DDL 40+ tables + seeds + SQL normalizer
+    ├── server.ts             # Entry point — Express setup + mount 29 routes (server.ts:108-137)
+    ├── db_mysql.ts           # MySQL 8 adapter + DDL 68 tables + seeds + SQL normalizer (~1285 dòng)
     ├── socket.ts             # Socket.io realtime server
     ├── mailer.ts             # Nodemailer transporter
-    ├── middleware/           # auth.ts (requireAuth/requireAdmin), validate.ts (zod)
-    ├── routes/               # 23 route modules (departmentWorkspace.ts, tasks, contracts...)
-    ├── schedulers/           # 5 cron jobs nhắc việc và báo cáo
+    ├── middleware/           # 2 files: auth.ts (requireAuth/requireAdmin), validate.ts (zod)
+    ├── routes/               # 29 route modules: auth, users, roles, departments, teams, positions, organization, tasks, taskTemplates, notes, meetings, reports, notifications, events, activity, mail, upload, contracts, contractLinks, revenue, clients, products, projects, documents, departmentRequests, approvals, admin, ai, departmentWorkspace
+    ├── schedulers/           # 5 cron jobs: fridayReminder, noteReminder, dailyTaskReminder, mailScheduler, revenueAutoSubmit
     └── utils/                # cryptoUtils.ts, notify.ts
 ```
 
-Chi tiết đầy đủ (danh sách 23 route, 40+ bảng): xem [phan_tich.MD](phan_tich.MD).
+Chi tiết đầy đủ (danh sách 29 routes, 68 bảng, 22 pages, 23 services): xem [phan_tich.MD](phan_tich.MD).
 
 ---
 
@@ -157,4 +159,4 @@ docker logs -f tranle_task_app
 
 ---
 
-> **Lưu ý:** Tài liệu được đồng bộ tự động từ source code dự án ngày 01/09/2026. Mọi thay đổi về kiến trúc, bảng database hoặc API endpoints cần được cập nhật đồng thời tại [CLAUDE.md](CLAUDE.md) và [phan_tich.MD](phan_tich.MD).
+> **Lưu ý:** Tài liệu được đồng bộ tự động từ source code dự án ngày 13/09/2026. Mọi thay đổi về kiến trúc, bảng database hoặc API endpoints cần được cập nhật đồng thời tại [CLAUDE.md](CLAUDE.md) và [phan_tich.MD](phan_tich.MD).

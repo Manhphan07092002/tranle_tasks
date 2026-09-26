@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Building2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiFetch } from '../../services/api';
@@ -185,7 +186,21 @@ export const DepartmentDomainView: React.FC<DepartmentDomainViewProps> = ({
         );
 
       default:
-        return null;
+        return (
+          <div className="bg-white dark:bg-slate-800 p-10 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm text-center space-y-3">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-gray-100 dark:bg-slate-700 flex items-center justify-center text-gray-400">
+              <Building2 size={28} />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {departmentName || 'Phòng ban'} chưa có không gian nghiệp vụ đặc thù
+            </h3>
+            <p className="text-xs text-slate-500 max-w-xl mx-auto leading-relaxed">
+              Mã phòng ban <span className="font-bold">{departmentCode || departmentId}</span> chưa được cấu hình
+              workspace riêng. Vui lòng dùng các tab Tổng quan, Công việc, Yêu cầu và Tài liệu, hoặc liên hệ
+              quản trị viên để bổ sung.
+            </p>
+          </div>
+        );
     }
   };
 

@@ -28,7 +28,7 @@ export interface AIAssistantHandle {
 export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
   const { t } = useLanguage();
   const { tasks, notes, revenueReports, saveTask, saveReport, saveContract, deleteTask, saveNote, deleteNote, users } = useData();
-  const { notifications, markRead } = useNotifications();
+  const { notifications, markRead, showToast } = useNotifications();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -117,7 +117,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      alert('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Khuyên dùng Google Chrome).');
+      showToast({ type: 'error', title: 'Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Khuyên dùng Google Chrome).' });
       return;
     }
 

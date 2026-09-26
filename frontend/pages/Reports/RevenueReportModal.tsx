@@ -283,7 +283,7 @@ export const RevenueReportModal: React.FC<RevenueReportModalProps> = ({ isOpen, 
       onClose();
     } catch (e) {
       console.error(e);
-      alert('Không thể lưu báo cáo doanh thu');
+      showToast({ type: 'error', title: 'Không thể lưu báo cáo doanh thu' });
     } finally {
       setIsSubmitting(false);
     }

@@ -3,24 +3,25 @@ import { Route, Routes, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopHeader } from './components/layout/TopHeader';
 
-import DashboardPage from './pages/Dashboard/index';
-import TasksPage from './pages/Tasks/index';
-import NotesPage from './pages/Notes/index';
-import TeamPage from './pages/Team/index';
-import { CalendarView as CalendarPage } from './pages/Calendar/index';
+// P2: lazy-load các trang chính để giảm bundle đầu (giữ eager cho màn hình login/first-paint).
+const DashboardPage = React.lazy(() => import('./pages/Dashboard/index'));
+const TasksPage = React.lazy(() => import('./pages/Tasks/index'));
+const NotesPage = React.lazy(() => import('./pages/Notes/index'));
+const TeamPage = React.lazy(() => import('./pages/Team/index'));
+const CalendarPage = React.lazy(() => import('./pages/Calendar/index').then(module => ({ default: module.CalendarView })));
 const MeetingsPage = React.lazy(() => import('./pages/Meetings/index').then(module => ({ default: module.MeetingView })));
 const JoinMeetingPage = React.lazy(() => import('./pages/Meetings/JoinMeeting').then(module => ({ default: module.JoinMeetingPage })));
-import { SettingsView as SettingsPage } from './pages/Settings/index';
-import ReportsPage from './pages/Reports/TaskReports';
-import ContractsPage from './pages/Contracts/index';
-import RevenuePage from './pages/Revenue/index';
-import ProductsPage from './pages/Products/index';
+const SettingsPage = React.lazy(() => import('./pages/Settings/index').then(module => ({ default: module.SettingsView })));
+const ReportsPage = React.lazy(() => import('./pages/Reports/TaskReports'));
+const ContractsPage = React.lazy(() => import('./pages/Contracts/index'));
+const RevenuePage = React.lazy(() => import('./pages/Revenue/index'));
+const ProductsPage = React.lazy(() => import('./pages/Products/index'));
 import ForgotPasswordPage from './pages/ForgotPassword/index';
 import ResetPasswordPage from './pages/ResetPassword/index';
-import NotificationsPage from './pages/Notifications/index';
-import ProjectsPage from './pages/Projects/index';
+const NotificationsPage = React.lazy(() => import('./pages/Notifications/index'));
+const ProjectsPage = React.lazy(() => import('./pages/Projects/index'));
 const ProjectReportsPage = React.lazy(() => import('./pages/ProjectReports/index'));
-import DocumentsPage from './pages/DocumentAdmin/index';
+const DocumentsPage = React.lazy(() => import('./pages/DocumentAdmin/index'));
 const DepartmentWorkspacePage = React.lazy(() => import('./pages/DepartmentWorkspace/index'));
 const ApprovalsPage = React.lazy(() => import('./pages/Approvals/index'));
 const OrganizationPage = React.lazy(() => import('./pages/Organization/index'));
@@ -33,7 +34,7 @@ import { NoteModal } from './components/NoteModal';
 import { UserModal } from './components/UserModal';
 import { InviteModal } from './components/InviteModal';
 import { TaskSuggestionModal } from './components/TaskSuggestionModal';
-import MailPage from './pages/Mail';
+const MailPage = React.lazy(() => import('./pages/Mail'));
 const MeetingModal = React.lazy(() => import('./components/MeetingModal').then(module => ({ default: module.MeetingModal })));
 const MeetingRoom = React.lazy(() => import('./components/MeetingRoom').then(module => ({ default: module.MeetingRoom })));
 import { AIAssistant, AIAssistantHandle } from './components/AIAssistant';
@@ -43,6 +44,10 @@ import { useData } from './contexts/DataContext';
 import { useNotifications } from './contexts/NotificationContext';
 import { LoginView } from './components/LoginView';
 import { ConfirmDialog } from './components/ConfirmDialog';
+
+const PageLoading = ({ label }: { label: string }) => (
+  <div className="p-8 text-center text-slate-400">Đang tải {label}...</div>
+);
 
 const getNextDate = (dateStr: string, type: RecurrenceType): string => {
   const d = new Date(dateStr + 'T12:00:00Z');
@@ -368,17 +373,20 @@ export default function TranLeTaskApp() {
           <div className="w-full flex-1 space-y-8">
             <Routes>
               <Route path="/" element={
+                <React.Suspense fallback={<PageLoading label="Tổng quan" />}>
                  <DashboardPage
-                 roleBasedTasks={roleBasedTasks} filteredTasks={filteredTasks} filteredNotes={filteredNotes} 
-                 notes={notes} users={users} user={user} reports={reports} contracts={contracts} searchQuery={searchQuery} 
-                 openCreateModal={openCreateModal} openEditModal={openEditModal} 
-                 handleStatusToggle={handleStatusToggle} handleDeleteTask={handleDeleteTask} 
-                 checkPermission={checkPermission}
-               />
+                  roleBasedTasks={roleBasedTasks} filteredTasks={filteredTasks} filteredNotes={filteredNotes}
+                  notes={notes} users={users} user={user} reports={reports} contracts={contracts} searchQuery={searchQuery}
+                  openCreateModal={openCreateModal} openEditModal={openEditModal}
+                  handleStatusToggle={handleStatusToggle} handleDeleteTask={handleDeleteTask}
+                  checkPermission={checkPermission}
+                />
+                </React.Suspense>
               } />
               
               <Route path="/tasks" element={
-                <TasksPage 
+                <React.Suspense fallback={<PageLoading label="Công việc" />}>
+                <TasksPage
                   t={t}
                   rawTodaysTasks={rawTodaysTasks}
                   filteredTasks={filteredTasks}
@@ -398,31 +406,39 @@ export default function TranLeTaskApp() {
                   setIsSuggestionModalOpen={setIsSuggestionModalOpen}
                   handleSaveTask={handleSaveTask}
                 />
+                </React.Suspense>
               } />
 
               <Route path="/calendar" element={
+                <React.Suspense fallback={<PageLoading label="Lịch" />}>
                 <div className="h-[calc(100vh-8rem)]">
                   <CalendarPage tasks={roleBasedTasks} contracts={contracts} onDateClick={(date) => openCreateModal(date)} onTaskClick={(task) => openEditModal(task)} />
                 </div>
+                </React.Suspense>
               } />
 
               <Route path="/mail" element={
+                <React.Suspense fallback={<PageLoading label="Hòm thư" />}>
                 <div className="h-[calc(100vh-8rem)]">
                   <MailPage />
                 </div>
+                </React.Suspense>
               } />
 
               <Route path="/notes" element={
-                <NotesPage 
+                <React.Suspense fallback={<PageLoading label="Ghi chú" />}>
+                <NotesPage
                   t={t}
                   filteredNotes={filteredNotes}
                   openCreateNoteModal={openCreateNoteModal}
                   openEditNoteModal={openEditNoteModal}
                 />
+                </React.Suspense>
               } />
 
               <Route path="/team" element={
-                <TeamPage 
+                <React.Suspense fallback={<PageLoading label="Nhân sự" />}>
+                <TeamPage
                   t={t}
                   user={user}
                   users={users}
@@ -430,23 +446,24 @@ export default function TranLeTaskApp() {
                   openEditUserModal={openEditUserModal}
                   handleDeleteUser={handleDeleteUser}
                 />
+                </React.Suspense>
               } />
 
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/reports" element={<React.Suspense fallback={<PageLoading label="Báo cáo" />}><ReportsPage /></React.Suspense>} />
+              <Route path="/projects" element={<React.Suspense fallback={<PageLoading label="Dự án" />}><ProjectsPage /></React.Suspense>} />
               <Route path="/project-reports" element={<ProjectReportsPage />} />
-              <Route path="/contracts" element={<ContractsPage />} />
-              <Route path="/products" element={<ProductsPage />} />
-              <Route path="/revenue" element={<RevenuePage />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/contracts" element={<React.Suspense fallback={<PageLoading label="Hợp đồng" />}><ContractsPage /></React.Suspense>} />
+              <Route path="/products" element={<React.Suspense fallback={<PageLoading label="Kho hàng" />}><ProductsPage /></React.Suspense>} />
+              <Route path="/revenue" element={<React.Suspense fallback={<PageLoading label="Doanh thu" />}><RevenuePage /></React.Suspense>} />
+              <Route path="/notifications" element={<React.Suspense fallback={<PageLoading label="Thông báo" />}><NotificationsPage /></React.Suspense>} />
               <Route path="/organization" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Sơ đồ tổ chức...</div>}><OrganizationPage /></React.Suspense>} />
               <Route path="/department-workspace" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspacePage /></React.Suspense>} />
               <Route path="/approvals" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Phê duyệt...</div>}><ApprovalsPage /></React.Suspense>} />
-              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/documents" element={<React.Suspense fallback={<PageLoading label="Tài liệu" />}><DocumentsPage /></React.Suspense>} />
 
               <Route path="/meetings" element={<React.Suspense fallback={<div className="p-8 text-center">Loading Meetings...</div>}><MeetingsPage allUsers={users} onJoinMeeting={setActiveMeeting} onCreateMeeting={() => setIsMeetingModalOpen(true)} /></React.Suspense>} />
               <Route path="/meetings/join/:meetingId" element={<React.Suspense fallback={<div className="p-8 text-center">Loading Meeting Room...</div>}><JoinMeetingPage onJoinMeeting={setActiveMeeting} /></React.Suspense>} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings" element={<React.Suspense fallback={<PageLoading label="Cài đặt" />}><SettingsPage /></React.Suspense>} />
               <Route path="/forgot-password" element={<Navigate to="/" replace />} />
               <Route path="/reset-password" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />

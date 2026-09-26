@@ -18,9 +18,15 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3500/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.42
     container_name: tranle_mysql
     restart: unless-stopped
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
@@ -31,7 +37,7 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - TZ=Asia/Ho_Chi_Minh
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
     healthcheck:
@@ -64,11 +70,12 @@ services:
       - ./mail-server-config/mail-data:/data
 
   adminer:
-    image: adminer:latest
+    image: adminer:4.8.1
     container_name: tranle_adminer
     restart: unless-stopped
+    profiles: ["debug"]
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - ./adminer.css:/var/www/html/adminer.css:ro
     environment:
@@ -77,11 +84,12 @@ services:
       - mysql
 
   phpmyadmin:
-    image: phpmyadmin:latest
+    image: phpmyadmin:5.2.1
     container_name: tranle_phpmyadmin
     restart: unless-stopped
+    profiles: ["debug"]
     ports:
-      - "8082:80"
+      - "127.0.0.1:8082:80"
     environment:
       - PMA_HOST=mysql
       - PMA_PORT=3306

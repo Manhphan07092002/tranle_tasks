@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { User as UserType, Team, Position, Task, TaskStatus, TaskPriority } from '../../types';
 import { useData } from '../../contexts/DataContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { UserProfilePopup } from '../../components/UserProfilePopup';
 
 interface TeamPageProps {
@@ -24,6 +25,7 @@ export default function TeamPage({
   t, user, users, openCreateUserModal, openEditUserModal, handleDeleteUser
 }: TeamPageProps) {
   const { roles, departments, teams, positions, tasks, saveTeam, deleteTask } = useData();
+  const { showToast } = useNotifications();
   const perms = user.permissions || [];
   const canViewTeam = perms.includes('view_dept_users') || perms.includes('manage_users');
   const canManageTeam = perms.includes('manage_users') || user.role === 'Admin' || user.role === 'Director';
@@ -175,7 +177,7 @@ export default function TeamPage({
       await saveTeam(editTeamModal.team as Team);
       setEditTeamModal({ isOpen: false, team: null });
     } catch (err: any) {
-      alert('Lỗi lưu thông tin nhóm: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi lưu thông tin nhóm: ' + err.message });
     }
   };
 

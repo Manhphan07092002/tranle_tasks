@@ -2,6 +2,7 @@ import { apiFetch } from '../../services/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Mail, Server, ShieldCheck, Save, Eye, EyeOff } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface SmtpConfig {
   IMAP_HOST: string;
@@ -14,7 +15,19 @@ interface SmtpConfig {
   SMTP_FROM: string;
 }
 
+// Helper chuẩn hoá email từ Poste.io (backend đã normalize về .email nhưng vẫn fallback để tương thích)
+const getBoxEmail = (b: any): string => {
+  let e = b.email || b.emailAddress || b.address || b.login || b.id || '';
+  if (typeof e === 'string' && e.includes('<') && e.includes('>')) {
+    const m = e.match(/<([^>]+)>/);
+    if (m) e = m[1];
+  }
+  return String(e).trim().toLowerCase();
+};
+const getAliasEmail = (a: any): string => String(a.email || a.address || a.login || a.id || '').trim().toLowerCase();
+
 export default function AdminMailServerConfig() {
+  const { showToast } = useNotifications();
   const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>({
     IMAP_HOST: '',
     IMAP_PORT: '993',
@@ -188,8 +201,9 @@ export default function AdminMailServerConfig() {
     e.preventDefault();
     if (!posteFormData.name || !posteFormData.email) return;
     try {
-      const isUpdate = posteBoxes.some(b => (b.email || b.emailAddress || b.address || b.login || b.id) === posteFormData.email);
-      const url = isUpdate ? `/api/admin/mail-server/boxes/${encodeURIComponent(posteFormData.email)}` : '/api/admin/mail-server/boxes';
+      const normalizedEmail = posteFormData.email.trim().toLowerCase();
+      const isUpdate = posteBoxes.some(b => getBoxEmail(b) === normalizedEmail);
+      const url = isUpdate ? `/api/admin/mail-server/boxes/${encodeURIComponent(normalizedEmail)}` : '/api/admin/mail-server/boxes';
       const method = isUpdate ? 'PATCH' : 'POST';
       const payload: any = { ...posteFormData };
       if (isUpdate) {
@@ -210,9 +224,9 @@ export default function AdminMailServerConfig() {
     } catch (e: any) {
       const msg = e.message || '';
       if (msg.includes('<!DOCTYPE') || msg.includes('Zimbra') || msg.includes('404')) {
-        alert('Lỗi: Cấu hình URL API hiện tại đang trỏ về máy chủ không hỗ trợ Poste.io (Có thể là Zimbra cũ). Vui lòng kiểm tra lại URL API hoặc trỏ đúng DNS.');
+        showToast({ type: 'error', title: 'Lỗi: Cấu hình URL API hiện tại đang trỏ về máy chủ không hỗ trợ Poste.io (Có thể là Zimbra cũ). Vui lòng kiểm tra lại URL API hoặc trỏ đúng DNS.' });
       } else {
-        alert('Lỗi: ' + msg);
+        showToast({ type: 'error', title: 'Lỗi: ' + msg });
       }
     }
   };
@@ -230,7 +244,7 @@ export default function AdminMailServerConfig() {
           fetchPosteBoxes();
         } catch (e: any) {
           const msg = e.message || '';
-          alert('Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+          showToast({ type: 'error', title: 'Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
         }
       }
     });
@@ -248,7 +262,7 @@ export default function AdminMailServerConfig() {
       fetchPosteBoxes();
     } catch (e: any) {
       const msg = e.message || '';
-      alert('Lỗi khóa/mở: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+      showToast({ type: 'error', title: 'Lỗi khóa/mở: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
     }
   };
 
@@ -256,8 +270,9 @@ export default function AdminMailServerConfig() {
     e.preventDefault();
     if (!aliasFormData.email || !aliasFormData.goto) return;
     try {
-      const isUpdate = posteAliases.some(a => (a.email || a.address || a.login || a.id) === aliasFormData.email);
-      const url = isUpdate ? `/api/admin/mail-server/aliases/${encodeURIComponent(aliasFormData.email)}` : '/api/admin/mail-server/aliases';
+      const normalizedEmail = aliasFormData.email.trim().toLowerCase();
+      const isUpdate = posteAliases.some(a => getAliasEmail(a) === normalizedEmail);
+      const url = isUpdate ? `/api/admin/mail-server/aliases/${encodeURIComponent(normalizedEmail)}` : '/api/admin/mail-server/aliases';
       const method = isUpdate ? 'PATCH' : 'POST';
       
       const payload = isUpdate ? { goto: aliasFormData.goto } : aliasFormData;
@@ -272,7 +287,7 @@ export default function AdminMailServerConfig() {
       setShowAliasModal(false);
     } catch (e: any) {
       const msg = e.message || '';
-      alert('Lỗi Alias: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+      showToast({ type: 'error', title: 'Lỗi Alias: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
     }
   };
 
@@ -289,7 +304,7 @@ export default function AdminMailServerConfig() {
           fetchPosteAliases();
         } catch (e: any) {
           const msg = e.message || '';
-          alert('Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+          showToast({ type: 'error', title: 'Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
         }
       }
     });
@@ -309,7 +324,7 @@ export default function AdminMailServerConfig() {
       setShowDomainModal(false);
     } catch (e: any) {
       const msg = e.message || '';
-      alert('Lỗi Domain: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+      showToast({ type: 'error', title: 'Lỗi Domain: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
     }
   };
 
@@ -326,15 +341,15 @@ export default function AdminMailServerConfig() {
           fetchPosteDomains();
         } catch (e: any) {
           const msg = e.message || '';
-          alert('Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg));
+          showToast({ type: 'error', title: 'Lỗi xóa: ' + (msg.includes('<!DOCTYPE') ? 'Cấu hình API sai hoặc URL trỏ về máy chủ cũ.' : msg) });
         }
       }
     });
   };
 
 
-  const isBoxUpdateRender = posteBoxes.some(b => (b.email || b.emailAddress || b.address || b.login || b.id) === posteFormData.email);
-  const isAliasUpdateRender = posteAliases.some(a => (a.email || a.address || a.login || a.id) === aliasFormData.email);
+  const isBoxUpdateRender = posteFormData.email ? posteBoxes.some(b => getBoxEmail(b) === posteFormData.email.trim().toLowerCase()) : false;
+  const isAliasUpdateRender = aliasFormData.email ? posteAliases.some(a => getAliasEmail(a) === aliasFormData.email.trim().toLowerCase()) : false;
 
   return (
     <div className="space-y-6 pb-8">

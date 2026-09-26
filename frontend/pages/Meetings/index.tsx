@@ -5,6 +5,7 @@ import { subscribeToMeetings, deleteMeeting, saveMeeting, sendSignal } from '../
 import { Button, Avatar } from "../../components/UI";
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 interface MeetingViewProps {
@@ -23,6 +24,7 @@ export const MeetingView: React.FC<MeetingViewProps> = ({ onJoinMeeting, onCreat
   
   const { user } = useAuth();
   const { t, language } = useLanguage();
+  const { showToast } = useNotifications();
 
   useEffect(() => {
     const unsubscribe = subscribeToMeetings(setMeetings);
@@ -79,7 +81,7 @@ export const MeetingView: React.FC<MeetingViewProps> = ({ onJoinMeeting, onCreat
     if (meeting) {
       onJoinMeeting(meeting);
     } else {
-      alert(language === 'vi' ? 'Không tìm thấy cuộc họp!' : 'Meeting not found!');
+      showToast({ type: 'error', title: language === 'vi' ? 'Không tìm thấy cuộc họp!' : 'Meeting not found!' });
     }
   };
 

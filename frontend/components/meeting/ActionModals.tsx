@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, AlertTriangle, Search, Wifi, ChevronUp, Disc3, CircleDot, Square, Layout as LayoutIcon } from 'lucide-react';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 export interface ActionModalsProps {
   showReportIssue: boolean;
@@ -29,6 +30,7 @@ export const ActionModals: React.FC<ActionModalsProps> = ({
   showLayoutSettings, setShowLayoutSettings,
   isRecording, toggleRecording
 }) => {
+  const { showToast } = useNotifications();
   return (
     <AnimatePresence>
       {showReportIssue && (
@@ -42,7 +44,7 @@ export const ActionModals: React.FC<ActionModalsProps> = ({
             <textarea className="w-full bg-[#111] border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-brand-500 min-h-[120px] resize-none mb-6" placeholder="Bắt đầu nhập nội dung..."></textarea>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowReportIssue(false)} className="px-5 py-2.5 rounded-full text-brand-400 font-medium hover:bg-brand-500/10 transition-colors">Huỷ</button>
-              <button onClick={() => { setShowReportIssue(false); alert('Cảm ơn bạn đã gửi báo cáo!'); }} className="px-5 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">Gửi báo cáo</button>
+              <button onClick={() => { setShowReportIssue(false); showToast({ type: 'success', title: 'Cảm ơn bạn đã gửi báo cáo!' }); }} className="px-5 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">Gửi báo cáo</button>
             </div>
           </motion.div>
         </div>
@@ -67,7 +69,7 @@ export const ActionModals: React.FC<ActionModalsProps> = ({
             <textarea className="w-full bg-[#111] border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-red-500 min-h-[80px] resize-none mb-6" placeholder="Cung cấp thêm ngữ cảnh (nếu có)..."></textarea>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowReportAbuse(false)} className="px-5 py-2.5 rounded-full text-gray-300 font-medium hover:bg-white/5 transition-colors">Huỷ</button>
-              <button onClick={() => { setShowReportAbuse(false); alert('Báo cáo của bạn đã được ghi nhận.'); }} className="px-5 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors">Gửi báo cáo</button>
+              <button onClick={() => { setShowReportAbuse(false); showToast({ type: 'success', title: 'Báo cáo của bạn đã được ghi nhận.' }); }} className="px-5 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors">Gửi báo cáo</button>
             </div>
           </motion.div>
         </div>
@@ -136,7 +138,7 @@ export const ActionModals: React.FC<ActionModalsProps> = ({
             
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowLivestream(false)} className="px-5 py-2.5 rounded-full text-brand-400 font-medium hover:bg-brand-500/10 transition-colors">Đóng</button>
-              <button onClick={() => { setShowLivestream(false); alert('Đang kết nối tới máy chủ phát trực tuyến...'); }} className="px-5 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">Bắt đầu phát</button>
+              <button onClick={() => { setShowLivestream(false); showToast({ type: 'info', title: 'Đang kết nối tới máy chủ phát trực tuyến...' }); }} className="px-5 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">Bắt đầu phát</button>
             </div>
           </motion.div>
         </div>

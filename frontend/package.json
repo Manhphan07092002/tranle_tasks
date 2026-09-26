@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" node ../node_modules/vite/bin/vite.js",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
     "preview": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" node ../node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {

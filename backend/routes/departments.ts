@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function departmentRoutes(db: any) {
   const router = Router();
@@ -119,7 +120,7 @@ export function departmentRoutes(db: any) {
   });
 
   // POST /api/departments
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, code, name, description, color, icon, managerId, sortOrder } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Tên phòng ban không được trống' });
     try {
@@ -137,7 +138,7 @@ export function departmentRoutes(db: any) {
   });
 
   // PUT /api/departments/:id
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { code, name, description, color, icon, managerId, sortOrder, isActive } = req.body;
     try {
       const existing = await db.get('SELECT * FROM departments WHERE id = ?', [req.params.id]);
@@ -175,7 +176,7 @@ export function departmentRoutes(db: any) {
   });
 
   // DELETE /api/departments/:id
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       const dept = await db.get('SELECT * FROM departments WHERE id = ?', [req.params.id]);
       if (!dept) return res.status(404).json({ error: 'Not found' });

@@ -5,6 +5,43 @@ import { sendNotification } from '../utils/notify.js';
 export function projectRoutes(db: any) {
   const router = Router();
 
+  async function canAccessProject(user: any, projectId: string) {
+    if (user?.role === 'Admin' || user?.role === 'Director' || user?.role === 'Giám Đốc' || (user?.permissions || []).includes('view_all_reports')) return true;
+    const project = await db.get('SELECT managerId, departmentId, primaryDepartmentId FROM projects WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [projectId]);
+    if (!project) return null;
+    const departmentId = user?.departmentId || user?.department;
+    if (project.managerId === user?.id || project.departmentId === departmentId || project.primaryDepartmentId === departmentId) return true;
+    return Boolean(await db.get('SELECT 1 FROM project_departments WHERE projectId = ? AND departmentId = ?', [projectId, departmentId]));
+  }
+
+  async function requireProjectAccess(req: any, res: any) {
+    const allowed = await canAccessProject(req.user, req.params.id);
+    if (allowed === null) {
+      res.status(404).json({ error: 'Project not found' });
+      return false;
+    }
+    if (!allowed) {
+      res.status(403).json({ error: 'Forbidden' });
+      return false;
+    }
+    return true;
+  }
+
+  async function requireProjectManager(req: any, res: any) {
+    if (!(await requireProjectAccess(req, res))) return false;
+    const canManage = req.user?.role === 'Admin' || req.user?.role === 'Director' || req.user?.role === 'Giám Đốc'
+      || (req.user?.permissions || []).includes('view_all_reports');
+    if (!canManage) {
+      const project = await db.get('SELECT managerId, departmentId, primaryDepartmentId FROM projects WHERE id = ?', [req.params.id]);
+      const departmentId = req.user?.departmentId || req.user?.department;
+      if (project?.managerId !== req.user?.id && project?.departmentId !== departmentId && project?.primaryDepartmentId !== departmentId) {
+        res.status(403).json({ error: 'Forbidden: Chỉ quản lý dự án hoặc phòng ban phụ trách được thay đổi' });
+        return false;
+      }
+    }
+    return true;
+  }
+
   async function logActivity(userId: string, action: string, entityId: string, metadata: any) {
     const id = randomUUID();
     await db.run(
@@ -69,6 +106,7 @@ export function projectRoutes(db: any) {
   // GET single project with its contracts, reports, and participating departments
   router.get('/:id', async (req, res) => {
     try {
+      if (!(await requireProjectAccess(req, res))) return;
       const project = await db.get('SELECT * FROM projects WHERE id = ?', [req.params.id]);
       if (!project) return res.status(404).json({ error: 'Project not found' });
       
@@ -88,6 +126,7 @@ export function projectRoutes(db: any) {
   // GET participating departments for a project
   router.get('/:id/departments', async (req, res) => {
     try {
+      if (!(await requireProjectAccess(req, res))) return;
       const rows = await db.all(`
         SELECT pd.projectId, pd.departmentId, pd.role, d.name as departmentName, d.code as departmentCode, d.color as departmentColor
         FROM project_departments pd
@@ -103,6 +142,7 @@ export function projectRoutes(db: any) {
     const { departmentId, role } = req.body;
     if (!departmentId) return res.status(400).json({ error: 'departmentId is required' });
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run(
         'INSERT INTO project_departments (projectId, departmentId, role) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE role = VALUES(role)',
         [req.params.id, departmentId, role || 'member']
@@ -114,6 +154,7 @@ export function projectRoutes(db: any) {
   // REMOVE participating department from project
   router.delete('/:id/departments/:departmentId', async (req, res) => {
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run(
         'DELETE FROM project_departments WHERE projectId = ? AND departmentId = ?',
         [req.params.id, req.params.departmentId]
@@ -132,6 +173,12 @@ export function projectRoutes(db: any) {
     } = req.body;
 
     try {
+      const user = req.user!;
+      const canCreateGlobally = user.role === 'Admin' || user.role === 'Director' || user.role === 'Giám Đốc';
+      const requestedDepartmentId = departmentId || primaryDepartmentId;
+      if (!canCreateGlobally && requestedDepartmentId !== (user.departmentId || user.department)) {
+        return res.status(403).json({ error: 'Forbidden: Bạn chỉ được tạo dự án cho phòng ban của mình' });
+      }
       const projectId = id || randomUUID();
       const now = new Date().toISOString();
       const resolvedDeptId = departmentId || primaryDepartmentId || null;
@@ -200,6 +247,7 @@ export function projectRoutes(db: any) {
     } = req.body;
 
     try {
+      if (!(await requireProjectManager(req, res))) return;
       const resolvedDeptId = departmentId || primaryDepartmentId || null;
 
       await db.run(
@@ -250,6 +298,7 @@ export function projectRoutes(db: any) {
   // DELETE project
   router.delete('/:id', async (req, res) => {
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run('UPDATE projects SET isDeleted = 1 WHERE id = ?', [req.params.id]);
       await logActivity((req as any).user?.id || 'system', 'Xóa Dự án', req.params.id, {});
       res.json({ success: true });
@@ -260,18 +309,20 @@ export function projectRoutes(db: any) {
   
   router.get('/:id/reports', async (req, res) => {
     try {
+      if (!(await requireProjectAccess(req, res))) return;
       const rows = await db.all('SELECT * FROM project_reports WHERE projectId = ? ORDER BY createdAt DESC', [req.params.id]);
       res.json(rows);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch project reports' }); }
   });
 
   router.post('/:id/reports', async (req, res) => {
-    const { id, title, content, progress, authorId, status } = req.body;
+    const { id, title, content, progress, status } = req.body;
     try {
+      if (!(await requireProjectAccess(req, res))) return;
       const reportId = id || randomUUID();
       await db.run(
         'INSERT INTO project_reports (id, projectId, title, content, progress, authorId, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [reportId, req.params.id, title, content, progress || 0, authorId, status || 'draft', new Date().toISOString()]
+        [reportId, req.params.id, title, content, progress || 0, req.user!.id, status || 'draft', new Date().toISOString()]
       );
 
       // notify manager
@@ -290,6 +341,7 @@ export function projectRoutes(db: any) {
   router.put('/:id/reports/:reportId', async (req, res) => {
     const { title, content, progress, status } = req.body;
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run(
         'UPDATE project_reports SET title=?, content=?, progress=?, status=?, updatedAt=? WHERE id=? AND projectId=?',
         [title, content, progress, status, new Date().toISOString(), req.params.reportId, req.params.id]
@@ -300,6 +352,7 @@ export function projectRoutes(db: any) {
 
   router.delete('/:id/reports/:reportId', async (req, res) => {
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run('DELETE FROM project_reports WHERE id = ? AND projectId = ?', [req.params.reportId, req.params.id]);
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed to delete project report' }); }
@@ -309,6 +362,7 @@ export function projectRoutes(db: any) {
 
   router.get('/:id/milestones', async (req, res) => {
     try {
+      if (!(await requireProjectAccess(req, res))) return;
       const rows = await db.all('SELECT * FROM project_milestones WHERE projectId = ? ORDER BY sortOrder ASC, createdAt ASC', [req.params.id]);
       res.json(rows);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch milestones' }); }
@@ -317,6 +371,7 @@ export function projectRoutes(db: any) {
   router.post('/:id/milestones', async (req, res) => {
     const { id, title, dueDate, status, sortOrder } = req.body;
     try {
+      if (!(await requireProjectManager(req, res))) return;
       const mId = id || randomUUID();
       await db.run(
         'INSERT INTO project_milestones (id, projectId, title, dueDate, status, sortOrder, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -329,6 +384,7 @@ export function projectRoutes(db: any) {
   router.put('/:id/milestones/:milestoneId', async (req, res) => {
     const { title, dueDate, status, completedAt, sortOrder } = req.body;
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run(
         'UPDATE project_milestones SET title=?, dueDate=?, status=?, completedAt=?, sortOrder=? WHERE id=? AND projectId=?',
         [title, dueDate, status, completedAt, sortOrder, req.params.milestoneId, req.params.id]
@@ -339,6 +395,7 @@ export function projectRoutes(db: any) {
 
   router.delete('/:id/milestones/:milestoneId', async (req, res) => {
     try {
+      if (!(await requireProjectManager(req, res))) return;
       await db.run('DELETE FROM project_milestones WHERE id = ? AND projectId = ?', [req.params.milestoneId, req.params.id]);
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed to delete milestone' }); }

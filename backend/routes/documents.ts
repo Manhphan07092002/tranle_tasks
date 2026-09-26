@@ -1,10 +1,7 @@
 import { Router } from 'express';
-import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
+import { getManagedUploadPath } from './upload.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export function documentRoutes(db: any) {
   const router = Router();
@@ -74,6 +71,9 @@ export function documentRoutes(db: any) {
 
       if (!name || !url || !category) {
         return res.status(400).json({ error: 'Tên, URL và phân loại tài liệu là bắt buộc' });
+      }
+      if (!getManagedUploadPath(url)) {
+        return res.status(400).json({ error: 'URL tài liệu không phải là tệp đã được tải lên qua hệ thống' });
       }
 
       const docId = id || 'doc-' + Math.random().toString(36).substr(2, 9);
@@ -177,8 +177,8 @@ export function documentRoutes(db: any) {
 
       // 1. Xóa tệp vật lý vật lý trên đĩa
       if (doc.url) {
-        const absolutePath = path.join(__dirname, '../..', doc.url);
-        if (fs.existsSync(absolutePath)) {
+        const absolutePath = getManagedUploadPath(doc.url);
+        if (absolutePath && fs.existsSync(absolutePath)) {
           try {
             fs.unlinkSync(absolutePath);
           } catch (unlinkErr) {

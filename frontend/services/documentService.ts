@@ -69,6 +69,33 @@ export const deleteDocument = async (id: string): Promise<void> => {
   }
 };
 
+function protectedUploadUrl(url: string) {
+  const legacyPrefix = '/uploads/reports/';
+  if (url.startsWith(legacyPrefix)) {
+    return `/api/upload/${url.slice(legacyPrefix.length)}`;
+  }
+  if (url.startsWith('/api/upload/')) {
+    return url;
+  }
+  throw new Error('Đường dẫn tệp không hợp lệ');
+}
+
+// Browser downloads do not include the app's Bearer token, so fetch the protected
+// file first and then hand the authenticated response to the browser as a Blob.
+export const downloadFile = async (url: string, filename: string): Promise<void> => {
+  const response = await apiFetch(protectedUploadUrl(url));
+  if (!response.ok) throw new Error('Không thể tải tệp tin');
+
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+};
+
 // Hàm tải lên tệp tin sử dụng API upload hiện có của server
 export const uploadFiles = async (files: File[]): Promise<{ files: { name: string; url: string; size: number; type: string }[] }> => {
   const formData = new FormData();

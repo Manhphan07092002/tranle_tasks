@@ -7,6 +7,7 @@ import {
 import { Button } from '../UI';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface SolarFastQuoteModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ interface BOMItem {
 export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const { saveContract, saveDepartmentRequest, departments } = useData();
+  const { showToast } = useNotifications();
 
   // Inputs
   const [clientName, setClientName] = useState('Công ty CP Sản Xuất May Mặc An Phú');
@@ -254,7 +256,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
       setSuccessMessage(`✅ Đã lưu Báo Giá thành công vào Hệ thống Hợp Đồng với mã: ${contractCode}`);
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      alert('Lỗi lưu hợp đồng: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi lưu hợp đồng: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -281,7 +283,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
       setSuccessMessage('✅ Đã tạo và gửi Phiếu Yêu Cầu Kỹ Thuật (Technical Request) sang Phòng Kỹ Thuật Solar thành công!');
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      alert('Lỗi gửi yêu cầu: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi gửi yêu cầu: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }

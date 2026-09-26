@@ -1,13 +1,43 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import type { MysqlDb } from '../db_mysql.js';
+import { sendNotification } from '../utils/notify.js';
+import { validate } from '../middleware/validate.js';
+import { requireAdmin, requireDepartmentManager } from '../middleware/auth.js';
+
+// P1: body records luôn có dạng { type, data } — chặn type lạ và data không phải object.
+const WorkspaceRecordSchema = z.object({
+  type: z.string().trim().min(1, 'Thiếu loại bản ghi').max(64),
+  data: z.record(z.string(), z.unknown()),
+});
+
+// Canonical department IDs (seeded in db_mysql.ts TRANLE_DEPTS).
+// Legacy aliases from older frontend builds are normalized here for backward compatibility.
+const DEPT_ID_ALIASES: Record<string, string> = {
+  'dept-finance': 'dept-fin',
+  'dept-marketing': 'dept-mkt',
+  'dept-procurement': 'dept-proc',
+  'dept-warehouse': 'dept-wh',
+};
+
+function normalizeDepartmentId(rawId: string | string[] | undefined): string {
+  const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
+  return DEPT_ID_ALIASES[id] || id;
+}
+
+function isManagerOrAbove(role?: string): boolean {
+  if (!role) return false;
+  const r = role.toLowerCase();
+  return r === 'admin' || r === 'director' || r === 'giám đốc' || r === 'manager' || r === 'trưởng phòng' || r === 'phó phòng';
+}
 
 export function departmentWorkspaceRoutes(db: MysqlDb) {
   const router = express.Router();
 
   // Route: GET /api/department-workspace/:departmentId/records
-  router.get('/:departmentId/records', async (req, res) => {
-    const { departmentId } = req.params;
+  router.get('/:departmentId/records', requireDepartmentManager(), async (req, res) => {
+    const departmentId = normalizeDepartmentId(req.params.departmentId);
     const { type } = req.query;
 
     try {
@@ -21,6 +51,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
       } else if (departmentId === 'dept-epc') {
         if (type === 'subcontractor') {
           records = await db.all('SELECT * FROM epc_subcontractors ORDER BY createdAt DESC');
+        } else if (type === 'hse') {
+          records = await db.all('SELECT * FROM epc_hse_logs ORDER BY createdAt DESC');
+        } else if (type === 'attendance') {
+          records = await db.all('SELECT * FROM epc_attendance ORDER BY date DESC');
         }
       } else if (departmentId === 'dept-exec') {
         if (type === 'metrics') {
@@ -30,7 +64,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         } else if (type === 'meetings') {
           records = await db.all('SELECT * FROM executive_meetings ORDER BY createdAt ASC');
         }
-      } else if (departmentId === 'dept-finance') {
+      } else if (departmentId === 'dept-fin') {
         if (type === 'ap') {
           records = await db.all('SELECT * FROM finance_ap ORDER BY createdAt DESC');
         } else if (type === 'ar') {
@@ -41,6 +75,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           records = await db.all('SELECT * FROM hr_recruitment ORDER BY createdAt DESC');
         } else if (type === 'employees') {
           records = await db.all('SELECT * FROM hr_employees ORDER BY createdAt DESC');
+        } else if (type === 'leaves') {
+          records = await db.all('SELECT * FROM hr_leaves ORDER BY createdAt DESC');
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {
@@ -58,7 +94,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         } else if (type === 'library') {
           records = await db.all('SELECT * FROM legal_library ORDER BY createdAt DESC');
         }
-      } else if (departmentId === 'dept-marketing') {
+      } else if (departmentId === 'dept-mkt') {
         if (type === 'campaigns') {
           records = await db.all('SELECT * FROM marketing_campaigns ORDER BY createdAt DESC');
         } else if (type === 'leads') {
@@ -69,14 +105,22 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           records = await db.all('SELECT * FROM om_alarms ORDER BY createdAt DESC');
         } else if (type === 'pm') {
           records = await db.all('SELECT * FROM om_schedules ORDER BY createdAt DESC');
+        } else if (type === 'production') {
+          records = await db.all('SELECT * FROM om_production ORDER BY date DESC');
+        } else if (type === 'sites') {
+          records = await db.all('SELECT * FROM om_sites ORDER BY createdAt DESC');
         }
-      } else if (departmentId === 'dept-procurement') {
+      } else if (departmentId === 'dept-proc') {
         if (type === 'prs') {
           records = await db.all('SELECT * FROM procurement_prs ORDER BY createdAt DESC');
         } else if (type === 'pos') {
           records = await db.all('SELECT * FROM procurement_pos ORDER BY createdAt DESC');
+        } else if (type === 'rfqs') {
+          records = await db.all('SELECT * FROM procurement_rfqs ORDER BY createdAt DESC');
+        } else if (type === 'supplier_quotes') {
+          records = await db.all('SELECT * FROM procurement_quotes ORDER BY createdAt DESC');
         }
-      } else if (departmentId === 'dept-warehouse') {
+      } else if (departmentId === 'dept-wh') {
         if (type === 'inventory') {
           records = await db.all('SELECT * FROM warehouse_inventory ORDER BY createdAt DESC');
         } else if (type === 'inbound') {
@@ -89,6 +133,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           records = await db.all('SELECT * FROM sales_leads ORDER BY createdAt DESC');
         } else if (type === 'performance') {
           records = await db.all('SELECT * FROM sales_performance ORDER BY createdAt DESC');
+        } else if (type === 'quotes') {
+          records = await db.all('SELECT * FROM sales_quotes ORDER BY createdAt DESC');
         }
       } else if (departmentId === 'dept-eng') {
         if (type === 'requests') {
@@ -108,8 +154,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
   });
 
   // Route: POST /api/department-workspace/:departmentId/records
-  router.post('/:departmentId/records', async (req, res) => {
-    const { departmentId } = req.params;
+  // Intent: mọi user đã đăng nhập đều được tạo/sửa records (Employee tạo PR, ticket, lead...).
+  // Phê duyệt kiểm soát ở tầng approvals (canUserApprove); chỉ DELETE mới giới hạn Manager+.
+  router.post('/:departmentId/records', requireDepartmentManager(), validate(WorkspaceRecordSchema), async (req, res) => {
+    const departmentId = normalizeDepartmentId(req.params.departmentId);
     const { type, data } = req.body;
     const now = new Date().toISOString();
     const id = randomUUID();
@@ -117,10 +165,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
     try {
       if (departmentId === 'dept-cs') {
         if (type === 'tickets') {
-          const { customer, channel, title, status, time, agent, avatar } = data;
+          const { customer, channel, title, status, time, agent, avatar, csat, category } = data;
           await db.run(
-            'INSERT INTO customer_tickets (id, customer, channel, title, status, time, agent, avatar, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, customer, channel, title, status, time, agent, avatar, now]
+            'INSERT INTO customer_tickets (id, customer, channel, title, status, time, agent, avatar, csat, category, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, customer, channel, title, status, time, agent, avatar, csat ?? null, category || null, now]
           );
         } else if (type === 'renewals') {
           const { customer, expiry, value, status } = data;
@@ -135,6 +183,18 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run(
             'INSERT INTO epc_subcontractors (id, name, task, rating, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
             [id, name, subTask, rating, status, now]
+          );
+        } else if (type === 'hse') {
+          const { site, category, title, severity, date, status, action } = data;
+          await db.run(
+            'INSERT INTO epc_hse_logs (id, site, category, title, severity, date, status, action, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, site, category, title, severity, date, status, action, now]
+          );
+        } else if (type === 'attendance') {
+          const { site, date, team, workers, note } = data;
+          await db.run(
+            'INSERT INTO epc_attendance (id, site, date, team, workers, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, site, date, team, workers, note, now]
           );
         }
       } else if (departmentId === 'dept-exec') {
@@ -157,7 +217,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, title, date, actions, pending, now]
           );
         }
-      } else if (departmentId === 'dept-finance') {
+      } else if (departmentId === 'dept-fin') {
         if (type === 'ap') {
           const { dept, desc_text, amount, vendor, date, status } = data;
           await db.run(
@@ -165,10 +225,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, dept, desc_text, amount, vendor, date, status, now]
           );
         } else if (type === 'ar') {
-          const { project, desc_text, amount, customer, dueDate, status } = data;
+          const { project, desc_text, amount, customer, dueDate, status, milestoneId, projectId } = data;
           await db.run(
-            'INSERT INTO finance_ar (id, project, desc_text, amount, customer, dueDate, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, project, desc_text, amount, customer, dueDate, status, now]
+            'INSERT INTO finance_ar (id, project, desc_text, amount, customer, dueDate, status, milestoneId, projectId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, project, desc_text, amount, customer, dueDate, status, milestoneId || null, projectId || null, now]
           );
         }
       } else if (departmentId === 'dept-hr') {
@@ -183,6 +243,12 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run(
             'INSERT INTO hr_employees (id, name, position, dept, status, pto, timesheet, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [id, name, position, dept, status, pto, timesheet, now]
+          );
+        } else if (type === 'leaves') {
+          const { employeeName, type: leaveType, startDate, days, status } = data;
+          await db.run(
+            'INSERT INTO hr_leaves (id, employeeName, type, startDate, days, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, employeeName, leaveType, startDate, days, status, now]
           );
         }
       } else if (departmentId === 'dept-it') {
@@ -225,7 +291,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, title, category, date, now]
           );
         }
-      } else if (departmentId === 'dept-marketing') {
+      } else if (departmentId === 'dept-mkt') {
         if (type === 'campaigns') {
           const { title, channels, status } = data;
           await db.run(
@@ -233,10 +299,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, title, channels, status, now]
           );
         } else if (type === 'leads') {
-          const { source, percentage } = data;
+          const { source, percentage, leadCount, conversion } = data;
           await db.run(
-            'INSERT INTO marketing_leads (id, source, percentage, createdAt) VALUES (?, ?, ?, ?)',
-            [id, source, percentage, now]
+            'INSERT INTO marketing_leads (id, source, percentage, leadCount, conversion, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, source, percentage, Number(leadCount) || 0, Number(conversion) || 0, now]
           );
         }
       } else if (departmentId === 'dept-om') {
@@ -252,39 +318,63 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'INSERT INTO om_schedules (id, site, task, date, team, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [id, site, task, date, team, status, now]
           );
-        }
-      } else if (departmentId === 'dept-procurement') {
-        if (type === 'prs') {
-          const { project, items, date, status, priority } = data;
+        } else if (type === 'production') {
+          const { site, date, kwh } = data;
           await db.run(
-            'INSERT INTO procurement_prs (id, project, items, date, status, priority, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [id, project, items, date, status, priority, now]
+            'INSERT INTO om_production (id, site, date, kwh, createdAt) VALUES (?, ?, ?, ?, ?)',
+            [id, site, date, kwh, now]
+          );
+        } else if (type === 'sites') {
+          const { name, capacityKwp, location, sunHours, warrantyExpiry } = data;
+          await db.run(
+            'INSERT INTO om_sites (id, name, capacityKwp, location, sunHours, warrantyExpiry, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, now]
+          );
+        }
+      } else if (departmentId === 'dept-proc') {
+        if (type === 'prs') {
+          const { project, items, date, status, priority, designId } = data;
+          await db.run(
+            'INSERT INTO procurement_prs (id, project, items, date, status, priority, designId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, project, items, date, status, priority, designId || null, now]
           );
         } else if (type === 'pos') {
-          const { supplier, value, items, stage, progress, eta, status } = data;
+          const { supplier, value, items, stage, progress, eta, status, prId } = data;
           await db.run(
-            'INSERT INTO procurement_pos (id, supplier, value, items, stage, progress, eta, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, supplier, value, items, stage, progress, eta, status, now]
+            'INSERT INTO procurement_pos (id, supplier, value, items, stage, progress, eta, status, prId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, supplier, value, items, stage, progress, eta, status, prId || null, now]
+          );
+        } else if (type === 'rfqs') {
+          const { title, items, deadline, status } = data;
+          await db.run(
+            'INSERT INTO procurement_rfqs (id, title, items, deadline, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, title, items, deadline, status, now]
+          );
+        } else if (type === 'supplier_quotes') {
+          const { rfqId, supplier, price, warranty, leadTime, status } = data;
+          await db.run(
+            'INSERT INTO procurement_quotes (id, rfqId, supplier, price, warranty, leadTime, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, rfqId, supplier, price, warranty, leadTime, status, now]
           );
         }
-      } else if (departmentId === 'dept-warehouse') {
+      } else if (departmentId === 'dept-wh') {
         if (type === 'inventory') {
-          const { sku, name, category, stock, minStock, unit, image } = data;
+          const { sku, name, category, stock, minStock, unit, image, serials } = data;
           await db.run(
-            'INSERT INTO warehouse_inventory (id, sku, name, category, stock, minStock, unit, image, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, sku, name, category, stock, minStock, unit, image, now]
+            'INSERT INTO warehouse_inventory (id, sku, name, category, stock, minStock, unit, image, serials, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, sku, name, category, stock, minStock, unit, image, serials || null, now]
           );
         } else if (type === 'inbound') {
-          const { source, items, date, status } = data;
+          const { source, items, date, status, poId } = data;
           await db.run(
-            'INSERT INTO warehouse_inbound (id, source, items, date, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-            [id, source, items, date, status, now]
+            'INSERT INTO warehouse_inbound (id, source, items, date, status, poId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, source, items, date, status, poId || null, now]
           );
         } else if (type === 'outbound') {
-          const { project, items, date, status, requestedBy } = data;
+          const { project, items, date, status, requestedBy, projectId } = data;
           await db.run(
-            'INSERT INTO warehouse_outbound (id, project, items, date, status, requestedBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [id, project, items, date, status, requestedBy, now]
+            'INSERT INTO warehouse_outbound (id, project, items, date, status, requestedBy, projectId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, project, items, date, status, requestedBy, projectId || null, now]
           );
         }
       } else if (departmentId === 'dept-sales') {
@@ -300,6 +390,12 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'INSERT INTO sales_performance (id, name, sales, createdAt) VALUES (?, ?, ?, ?)',
             [id, name, sales, now]
           );
+        } else if (type === 'quotes') {
+          const { leadId, version, amount, items, status } = data;
+          await db.run(
+            'INSERT INTO sales_quotes (id, leadId, version, amount, items, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, leadId, version, amount, items, status, now]
+          );
         }
       } else if (departmentId === 'dept-eng') {
         if (type === 'requests') {
@@ -309,10 +405,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, reqType, project, date, status, priority, now]
           );
         } else if (type === 'design') {
-          const { name, capacity, stage, progress, tasks, status } = data;
+          const { name, capacity, stage, progress, tasks, status, project } = data;
           await db.run(
-            'INSERT INTO engineering_designs (id, name, capacity, stage, progress, tasks, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, name, capacity, stage, progress, JSON.stringify(tasks || []), status, now]
+            'INSERT INTO engineering_designs (id, name, capacity, stage, progress, tasks, status, project, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name, capacity, stage, progress, JSON.stringify(tasks || []), status, project || null, now]
           );
         }
       }
@@ -325,18 +421,19 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
   });
 
   // Route: PUT /api/department-workspace/:departmentId/records/:id
-  router.put('/:departmentId/records/:id', async (req, res) => {
-    const { departmentId, id } = req.params;
+  router.put('/:departmentId/records/:id', requireDepartmentManager(), validate(WorkspaceRecordSchema), async (req, res) => {
+    const departmentId = normalizeDepartmentId(req.params.departmentId);
+    const { id } = req.params;
     const { type, data } = req.body;
     const now = new Date().toISOString();
 
     try {
       if (departmentId === 'dept-cs') {
         if (type === 'tickets') {
-          const { customer, channel, title, status, time, agent, avatar } = data;
+          const { customer, channel, title, status, time, agent, avatar, csat, category } = data;
           await db.run(
-            'UPDATE customer_tickets SET customer = ?, channel = ?, title = ?, status = ?, time = ?, agent = ?, avatar = ?, updatedAt = ? WHERE id = ?',
-            [customer, channel, title, status, time, agent, avatar, now, id]
+            'UPDATE customer_tickets SET customer = ?, channel = ?, title = ?, status = ?, time = ?, agent = ?, avatar = ?, csat = ?, category = ?, updatedAt = ? WHERE id = ?',
+            [customer, channel, title, status, time, agent, avatar, csat ?? null, category || null, now, id]
           );
         } else if (type === 'renewals') {
           const { customer, expiry, value, status } = data;
@@ -351,6 +448,18 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run(
             'UPDATE epc_subcontractors SET name = ?, task = ?, rating = ?, status = ?, updatedAt = ? WHERE id = ?',
             [name, subTask, rating, status, now, id]
+          );
+        } else if (type === 'hse') {
+          const { site, category, title, severity, date, status, action } = data;
+          await db.run(
+            'UPDATE epc_hse_logs SET site = ?, category = ?, title = ?, severity = ?, date = ?, status = ?, action = ?, updatedAt = ? WHERE id = ?',
+            [site, category, title, severity, date, status, action, now, id]
+          );
+        } else if (type === 'attendance') {
+          const { site, date, team, workers, note } = data;
+          await db.run(
+            'UPDATE epc_attendance SET site = ?, date = ?, team = ?, workers = ?, note = ?, updatedAt = ? WHERE id = ?',
+            [site, date, team, workers, note, now, id]
           );
         }
       } else if (departmentId === 'dept-exec') {
@@ -373,7 +482,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [title, date, actions, pending, now, id]
           );
         }
-      } else if (departmentId === 'dept-finance') {
+      } else if (departmentId === 'dept-fin') {
         if (type === 'ap') {
           const { dept, desc_text, amount, vendor, date, status } = data;
           await db.run(
@@ -381,10 +490,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [dept, desc_text, amount, vendor, date, status, now, id]
           );
         } else if (type === 'ar') {
-          const { project, desc_text, amount, customer, dueDate, status } = data;
+          const { project, desc_text, amount, customer, dueDate, status, milestoneId, projectId } = data;
           await db.run(
-            'UPDATE finance_ar SET project = ?, desc_text = ?, amount = ?, customer = ?, dueDate = ?, status = ?, updatedAt = ? WHERE id = ?',
-            [project, desc_text, amount, customer, dueDate, status, now, id]
+            'UPDATE finance_ar SET project = ?, desc_text = ?, amount = ?, customer = ?, dueDate = ?, status = ?, milestoneId = ?, projectId = ?, updatedAt = ? WHERE id = ?',
+            [project, desc_text, amount, customer, dueDate, status, milestoneId || null, projectId || null, now, id]
           );
         }
       } else if (departmentId === 'dept-hr') {
@@ -399,6 +508,12 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run(
             'UPDATE hr_employees SET name = ?, position = ?, dept = ?, status = ?, pto = ?, timesheet = ?, updatedAt = ? WHERE id = ?',
             [name, position, dept, status, pto, timesheet, now, id]
+          );
+        } else if (type === 'leaves') {
+          const { employeeName, type: leaveType, startDate, days, status } = data;
+          await db.run(
+            'UPDATE hr_leaves SET employeeName = ?, type = ?, startDate = ?, days = ?, status = ?, updatedAt = ? WHERE id = ?',
+            [employeeName, leaveType, startDate, days, status, now, id]
           );
         }
       } else if (departmentId === 'dept-it') {
@@ -441,7 +556,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [title, category, date, now, id]
           );
         }
-      } else if (departmentId === 'dept-marketing') {
+      } else if (departmentId === 'dept-mkt') {
         if (type === 'campaigns') {
           const { title, channels, status } = data;
           await db.run(
@@ -449,10 +564,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [title, channels, status, now, id]
           );
         } else if (type === 'leads') {
-          const { source, percentage } = data;
+          const { source, percentage, leadCount, conversion } = data;
           await db.run(
-            'UPDATE marketing_leads SET source = ?, percentage = ?, updatedAt = ? WHERE id = ?',
-            [source, percentage, now, id]
+            'UPDATE marketing_leads SET source = ?, percentage = ?, leadCount = ?, conversion = ?, updatedAt = ? WHERE id = ?',
+            [source, percentage, Number(leadCount) || 0, Number(conversion) || 0, now, id]
           );
         }
       } else if (departmentId === 'dept-om') {
@@ -468,39 +583,63 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'UPDATE om_schedules SET site = ?, task = ?, date = ?, team = ?, status = ?, updatedAt = ? WHERE id = ?',
             [site, task, date, team, status, now, id]
           );
-        }
-      } else if (departmentId === 'dept-procurement') {
-        if (type === 'prs') {
-          const { project, items, date, status, priority } = data;
+        } else if (type === 'production') {
+          const { site, date, kwh } = data;
           await db.run(
-            'UPDATE procurement_prs SET project = ?, items = ?, date = ?, status = ?, priority = ?, updatedAt = ? WHERE id = ?',
-            [project, items, date, status, priority, now, id]
+            'UPDATE om_production SET site = ?, date = ?, kwh = ?, updatedAt = ? WHERE id = ?',
+            [site, date, kwh, now, id]
+          );
+        } else if (type === 'sites') {
+          const { name, capacityKwp, location, sunHours, warrantyExpiry } = data;
+          await db.run(
+            'UPDATE om_sites SET name = ?, capacityKwp = ?, location = ?, sunHours = ?, warrantyExpiry = ?, updatedAt = ? WHERE id = ?',
+            [name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, now, id]
+          );
+        }
+      } else if (departmentId === 'dept-proc') {
+        if (type === 'prs') {
+          const { project, items, date, status, priority, designId } = data;
+          await db.run(
+            'UPDATE procurement_prs SET project = ?, items = ?, date = ?, status = ?, priority = ?, designId = ?, updatedAt = ? WHERE id = ?',
+            [project, items, date, status, priority, designId || null, now, id]
           );
         } else if (type === 'pos') {
-          const { supplier, value, items, stage, progress, eta, status } = data;
+          const { supplier, value, items, stage, progress, eta, status, prId } = data;
           await db.run(
-            'UPDATE procurement_pos SET supplier = ?, value = ?, items = ?, stage = ?, progress = ?, eta = ?, status = ?, updatedAt = ? WHERE id = ?',
-            [supplier, value, items, stage, progress, eta, status, now, id]
+            'UPDATE procurement_pos SET supplier = ?, value = ?, items = ?, stage = ?, progress = ?, eta = ?, status = ?, prId = ?, updatedAt = ? WHERE id = ?',
+            [supplier, value, items, stage, progress, eta, status, prId || null, now, id]
+          );
+        } else if (type === 'rfqs') {
+          const { title, items, deadline, status } = data;
+          await db.run(
+            'UPDATE procurement_rfqs SET title = ?, items = ?, deadline = ?, status = ?, updatedAt = ? WHERE id = ?',
+            [title, items, deadline, status, now, id]
+          );
+        } else if (type === 'supplier_quotes') {
+          const { rfqId, supplier, price, warranty, leadTime, status } = data;
+          await db.run(
+            'UPDATE procurement_quotes SET rfqId = ?, supplier = ?, price = ?, warranty = ?, leadTime = ?, status = ?, updatedAt = ? WHERE id = ?',
+            [rfqId, supplier, price, warranty, leadTime, status, now, id]
           );
         }
-      } else if (departmentId === 'dept-warehouse') {
+      } else if (departmentId === 'dept-wh') {
         if (type === 'inventory') {
-          const { sku, name, category, stock, minStock, unit, image } = data;
+          const { sku, name, category, stock, minStock, unit, image, serials } = data;
           await db.run(
-            'UPDATE warehouse_inventory SET sku = ?, name = ?, category = ?, stock = ?, minStock = ?, unit = ?, image = ?, updatedAt = ? WHERE id = ?',
-            [sku, name, category, stock, minStock, unit, image, now, id]
+            'UPDATE warehouse_inventory SET sku = ?, name = ?, category = ?, stock = ?, minStock = ?, unit = ?, image = ?, serials = ?, updatedAt = ? WHERE id = ?',
+            [sku, name, category, stock, minStock, unit, image, serials || null, now, id]
           );
         } else if (type === 'inbound') {
-          const { source, items, date, status } = data;
+          const { source, items, date, status, poId } = data;
           await db.run(
-            'UPDATE warehouse_inbound SET source = ?, items = ?, date = ?, status = ?, updatedAt = ? WHERE id = ?',
-            [source, items, date, status, now, id]
+            'UPDATE warehouse_inbound SET source = ?, items = ?, date = ?, status = ?, poId = ?, updatedAt = ? WHERE id = ?',
+            [source, items, date, status, poId || null, now, id]
           );
         } else if (type === 'outbound') {
-          const { project, items, date, status, requestedBy } = data;
+          const { project, items, date, status, requestedBy, projectId } = data;
           await db.run(
-            'UPDATE warehouse_outbound SET project = ?, items = ?, date = ?, status = ?, requestedBy = ?, updatedAt = ? WHERE id = ?',
-            [project, items, date, status, requestedBy, now, id]
+            'UPDATE warehouse_outbound SET project = ?, items = ?, date = ?, status = ?, requestedBy = ?, projectId = ?, updatedAt = ? WHERE id = ?',
+            [project, items, date, status, requestedBy, projectId || null, now, id]
           );
         }
       } else if (departmentId === 'dept-sales') {
@@ -516,6 +655,12 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'UPDATE sales_performance SET name = ?, sales = ?, updatedAt = ? WHERE id = ?',
             [name, sales, now, id]
           );
+        } else if (type === 'quotes') {
+          const { leadId, version, amount, items, status } = data;
+          await db.run(
+            'UPDATE sales_quotes SET leadId = ?, version = ?, amount = ?, items = ?, status = ?, updatedAt = ? WHERE id = ?',
+            [leadId, version, amount, items, status, now, id]
+          );
         }
       } else if (departmentId === 'dept-eng') {
         if (type === 'requests') {
@@ -525,10 +670,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [reqType, project, date, status, priority, now, id]
           );
         } else if (type === 'design') {
-          const { name, capacity, stage, progress, tasks, status } = data;
+          const { name, capacity, stage, progress, tasks, status, project } = data;
           await db.run(
-            'UPDATE engineering_designs SET name = ?, capacity = ?, stage = ?, progress = ?, tasks = ?, status = ?, updatedAt = ? WHERE id = ?',
-            [name, capacity, stage, progress, JSON.stringify(tasks || []), status, now, id]
+            'UPDATE engineering_designs SET name = ?, capacity = ?, stage = ?, progress = ?, tasks = ?, status = ?, project = ?, updatedAt = ? WHERE id = ?',
+            [name, capacity, stage, progress, JSON.stringify(tasks || []), status, project || null, now, id]
           );
         }
       }
@@ -540,8 +685,13 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
   });
 
   // Route: DELETE /api/department-workspace/:departmentId/records/:id
-  router.delete('/:departmentId/records/:id', async (req, res) => {
-    const { departmentId, id } = req.params;
+  // P0 RBAC: Employee không được xóa records phòng ban (chỉ Manager/Director/Admin).
+  router.delete('/:departmentId/records/:id', requireDepartmentManager(), async (req, res) => {
+    if (!isManagerOrAbove((req as any).user?.role)) {
+      return res.status(403).json({ error: 'Forbidden: Chỉ Trưởng/Phó phòng, Giám đốc hoặc Admin được xóa dữ liệu phòng ban' });
+    }
+    const departmentId = normalizeDepartmentId(req.params.departmentId);
+    const { id } = req.params;
     const { type } = req.query;
 
     try {
@@ -560,6 +710,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
       } else if (departmentId === 'dept-epc') {
         if (type === 'subcontractor') {
           await db.run('DELETE FROM epc_subcontractors WHERE id = ?', [id]);
+        } else if (type === 'hse') {
+          await db.run('DELETE FROM epc_hse_logs WHERE id = ?', [id]);
+        } else if (type === 'attendance') {
+          await db.run('DELETE FROM epc_attendance WHERE id = ?', [id]);
         }
       } else if (departmentId === 'dept-exec') {
         if (type === 'metrics') {
@@ -569,7 +723,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         } else if (type === 'meetings') {
           await db.run('DELETE FROM executive_meetings WHERE id = ?', [id]);
         }
-      } else if (departmentId === 'dept-finance') {
+      } else if (departmentId === 'dept-fin') {
         if (type === 'ap') {
           await db.run('DELETE FROM finance_ap WHERE id = ?', [id]);
         } else if (type === 'ar') {
@@ -580,6 +734,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run('DELETE FROM hr_recruitment WHERE id = ?', [id]);
         } else if (type === 'employees') {
           await db.run('DELETE FROM hr_employees WHERE id = ?', [id]);
+        } else if (type === 'leaves') {
+          await db.run('DELETE FROM hr_leaves WHERE id = ?', [id]);
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {
@@ -597,7 +753,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         } else if (type === 'library') {
           await db.run('DELETE FROM legal_library WHERE id = ?', [id]);
         }
-      } else if (departmentId === 'dept-marketing') {
+      } else if (departmentId === 'dept-mkt') {
         if (type === 'campaigns') {
           await db.run('DELETE FROM marketing_campaigns WHERE id = ?', [id]);
         } else if (type === 'leads') {
@@ -608,14 +764,22 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run('DELETE FROM om_alarms WHERE id = ?', [id]);
         } else if (type === 'pm') {
           await db.run('DELETE FROM om_schedules WHERE id = ?', [id]);
+        } else if (type === 'production') {
+          await db.run('DELETE FROM om_production WHERE id = ?', [id]);
+        } else if (type === 'sites') {
+          await db.run('DELETE FROM om_sites WHERE id = ?', [id]);
         }
-      } else if (departmentId === 'dept-procurement') {
+      } else if (departmentId === 'dept-proc') {
         if (type === 'prs') {
           await db.run('DELETE FROM procurement_prs WHERE id = ?', [id]);
         } else if (type === 'pos') {
           await db.run('DELETE FROM procurement_pos WHERE id = ?', [id]);
+        } else if (type === 'rfqs') {
+          await db.run('DELETE FROM procurement_rfqs WHERE id = ?', [id]);
+        } else if (type === 'supplier_quotes') {
+          await db.run('DELETE FROM procurement_quotes WHERE id = ?', [id]);
         }
-      } else if (departmentId === 'dept-warehouse') {
+      } else if (departmentId === 'dept-wh') {
         if (type === 'inventory') {
           await db.run('DELETE FROM warehouse_inventory WHERE id = ?', [id]);
         } else if (type === 'inbound') {
@@ -628,6 +792,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run('DELETE FROM sales_leads WHERE id = ?', [id]);
         } else if (type === 'performance') {
           await db.run('DELETE FROM sales_performance WHERE id = ?', [id]);
+        } else if (type === 'quotes') {
+          await db.run('DELETE FROM sales_quotes WHERE id = ?', [id]);
         }
       }
       res.json({ success: true });
@@ -639,8 +805,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
   // Route: GET /api/department-workspace/:departmentId/kpis
   // Returns computed KPI metrics from MySQL for the dashboard cards
-  router.get('/:departmentId/kpis', async (req, res) => {
-    const { departmentId } = req.params;
+  router.get('/:departmentId/kpis', requireDepartmentManager(), async (req, res) => {
+    const departmentId = normalizeDepartmentId(req.params.departmentId);
     try {
       let kpis: Record<string, any> = {};
 
@@ -649,11 +815,14 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         const [pendingTickets] = await db.all(`SELECT COUNT(*) AS cnt FROM customer_tickets WHERE status = 'Pending'`) as any[];
         const [inProgressTickets] = await db.all(`SELECT COUNT(*) AS cnt FROM customer_tickets WHERE status = 'In Progress'`) as any[];
         const [totalRenewals] = await db.all(`SELECT COUNT(*) AS cnt FROM contract_renewals`) as any[];
+        const [csatAvg] = await db.all(`SELECT AVG(csat) AS avg, COUNT(*) AS cnt FROM customer_tickets WHERE csat IS NOT NULL`) as any[];
         kpis = {
           totalTickets: totalTickets?.cnt ?? 0,
           pendingTickets: pendingTickets?.cnt ?? 0,
           inProgressTickets: inProgressTickets?.cnt ?? 0,
           totalRenewals: totalRenewals?.cnt ?? 0,
+          csatAvg: csatAvg?.avg != null ? Math.round(Number(csatAvg.avg) * 10) / 10 : null,
+          csatCount: csatAvg?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-eng') {
         const [pendingRequests] = await db.all(`SELECT COUNT(*) AS cnt FROM engineering_requests WHERE status = 'pending'`) as any[];
@@ -670,19 +839,25 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         const [activeProjects] = await db.all(`SELECT COUNT(DISTINCT project) AS cnt FROM epc_subcontractors WHERE status = 'active'`) as any[];
         const [totalWorkers] = await db.all(`SELECT COUNT(*) AS cnt FROM epc_subcontractors WHERE status = 'active'`) as any[];
         const [inboundCount] = await db.all(`SELECT COUNT(*) AS cnt FROM warehouse_inbound`) as any[];
+        const [openHse] = await db.all(`SELECT COUNT(*) AS cnt FROM epc_hse_logs WHERE status = 'open'`) as any[];
+        const [criticalHse] = await db.all(`SELECT COUNT(*) AS cnt FROM epc_hse_logs WHERE severity = 'critical' AND status = 'open'`) as any[];
         kpis = {
           activeProjects: activeProjects?.cnt ?? 0,
           totalWorkers: totalWorkers?.cnt ?? 0,
           inboundCount: inboundCount?.cnt ?? 0,
+          openHse: openHse?.cnt ?? 0,
+          criticalHse: criticalHse?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-om') {
         const [activeAlarms] = await db.all(`SELECT COUNT(*) AS cnt FROM om_alarms WHERE status = 'active'`) as any[];
         const [criticalAlarms] = await db.all(`SELECT COUNT(*) AS cnt FROM om_alarms WHERE severity = 'critical' AND status = 'active'`) as any[];
         const [totalSchedules] = await db.all(`SELECT COUNT(*) AS cnt FROM om_schedules`) as any[];
+        const [productionSites] = await db.all(`SELECT COUNT(DISTINCT site) AS cnt FROM om_production`) as any[];
         kpis = {
           activeAlarms: activeAlarms?.cnt ?? 0,
           criticalAlarms: criticalAlarms?.cnt ?? 0,
           totalSchedules: totalSchedules?.cnt ?? 0,
+          productionSites: productionSites?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-sales') {
         const [totalLeads] = await db.all(`SELECT COUNT(*) AS cnt FROM sales_leads`) as any[];
@@ -695,7 +870,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           winRate,
           totalContractValue: totalContractValue?.total ?? 0,
         };
-      } else if (departmentId === 'dept-finance') {
+      } else if (departmentId === 'dept-fin') {
         const [totalAp] = await db.all(`SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS cnt FROM finance_ap WHERE status = 'pending'`) as any[];
         const [totalAr] = await db.all(`SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS cnt FROM finance_ar WHERE status = 'pending'`) as any[];
         kpis = {
@@ -706,10 +881,12 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         };
       } else if (departmentId === 'dept-hr') {
         const [totalEmployees] = await db.all(`SELECT COUNT(*) AS cnt FROM hr_employees`) as any[];
-        const [openPositions] = await db.all(`SELECT COUNT(*) AS cnt FROM hr_recruitment WHERE status = 'open'`) as any[];
+        const [openPositions] = await db.all(`SELECT COUNT(*) AS cnt FROM hr_recruitment WHERE status IN ('open', 'Screening')`) as any[];
+        const [pendingLeaves] = await db.all(`SELECT COUNT(*) AS cnt FROM hr_leaves WHERE status = 'pending'`) as any[];
         kpis = {
           totalEmployees: totalEmployees?.cnt ?? 0,
           openPositions: openPositions?.cnt ?? 0,
+          pendingLeaves: pendingLeaves?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-it') {
         const [openTickets] = await db.all(`SELECT COUNT(*) AS cnt FROM it_tickets WHERE status = 'open'`) as any[];
@@ -727,21 +904,21 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           pendingApprovals: pendingApprovals?.cnt ?? 0,
           totalContracts: totalContracts?.cnt ?? 0,
         };
-      } else if (departmentId === 'dept-marketing') {
-        const [activeCampaigns] = await db.all(`SELECT COUNT(*) AS cnt FROM marketing_campaigns WHERE status = 'active'`) as any[];
+      } else if (departmentId === 'dept-mkt') {
+        const [activeCampaigns] = await db.all(`SELECT COUNT(*) AS cnt FROM marketing_campaigns WHERE status <> 'Đã Phát Hành'`) as any[];
         const [totalLeads] = await db.all(`SELECT COUNT(*) AS cnt FROM marketing_leads`) as any[];
         kpis = {
           activeCampaigns: activeCampaigns?.cnt ?? 0,
           totalLeads: totalLeads?.cnt ?? 0,
         };
-      } else if (departmentId === 'dept-procurement') {
+      } else if (departmentId === 'dept-proc') {
         const [pendingPrs] = await db.all(`SELECT COUNT(*) AS cnt FROM procurement_prs WHERE status = 'pending'`) as any[];
-        const [pendingPos] = await db.all(`SELECT COUNT(*) AS cnt FROM procurement_pos WHERE status = 'pending'`) as any[];
+        const [pendingPos] = await db.all(`SELECT COUNT(*) AS cnt FROM procurement_pos WHERE status IN ('open', 'pending')`) as any[];
         kpis = {
           pendingPrs: pendingPrs?.cnt ?? 0,
           pendingPos: pendingPos?.cnt ?? 0,
         };
-      } else if (departmentId === 'dept-warehouse') {
+      } else if (departmentId === 'dept-wh') {
         const [totalItems] = await db.all(`SELECT COUNT(*) AS cnt FROM warehouse_inventory`) as any[];
         const [inboundToday] = await db.all(`SELECT COUNT(*) AS cnt FROM warehouse_inbound WHERE DATE(createdAt) = CURDATE()`) as any[];
         const [outboundToday] = await db.all(`SELECT COUNT(*) AS cnt FROM warehouse_outbound WHERE DATE(createdAt) = CURDATE()`) as any[];
@@ -773,7 +950,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
   // POST /api/department-workspace/automation/convert-lead-to-project
   // Luồng tự động: Sales Lead (Won) -> Tạo Projects + Yêu cầu Kỹ thuật SLD + Giao việc EPC
-  router.post('/automation/convert-lead-to-project', async (req, res) => {
+  router.post('/automation/convert-lead-to-project', requireAdmin, async (req, res) => {
     try {
       const { leadId, projectName, capacity, value, client, notes } = req.body;
       const now = new Date().toISOString();
@@ -792,10 +969,23 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
       const finalValue = value !== undefined ? Number(value) : (lead ? Number(lead.value) : 0);
       const finalNotes = notes || (lead ? `Cơ hội bán hàng: ${lead.name} (${lead.contact || ''})` : '');
 
-      // 1. Tạo Dự án EPC mới trong projects
+      // Idempotency: lead đã chốt và đã có dự án thì trả về bản cũ, không tạo trùng.
+      if (leadId) {
+        const existingProject = await db.get('SELECT * FROM projects WHERE leadId = ?', [leadId]);
+        if (existingProject) {
+          return res.json({
+            success: true,
+            projectId: existingProject.id,
+            engRequestId: null,
+            message: 'Dự án đã tồn tại từ lead này (chống tạo trùng)',
+          });
+        }
+      }
+
+      // 1. Tạo Dự án EPC mới trong projects (lưu leadId để truy vết chuỗi)
       await db.run(
-        `INSERT INTO projects (id, name, client, capacity, value, status, stage, startDate, description, progress, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, 'planning', 'survey', ?, ?, 0, ?, ?)`,
+        `INSERT INTO projects (id, name, client, capacity, value, status, stage, startDate, description, progress, leadId, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, 'planning', 'survey', ?, ?, 0, ?, ?, ?)`,
         [
           projectId,
           finalProjectName,
@@ -804,15 +994,16 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           finalValue,
           now.split('T')[0],
           finalNotes,
+          leadId || null,
           now,
           now,
         ]
       );
 
-      // 2. Tạo yêu cầu khảo sát & thiết kế kỹ thuật trong engineering_requests
+      // 2. Tạo yêu cầu khảo sát & thiết kế kỹ thuật (đúng vocab frontend: pending/HIGH)
       await db.run(
         `INSERT INTO engineering_requests (id, type, project, date, status, priority, createdAt)
-         VALUES (?, 'Khảo sát hiện trường & Sơ đồ 1 sợi SLD', ?, ?, 'Chờ khảo sát', 'Gấp', ?)`,
+         VALUES (?, 'Khảo Sát Mái', ?, ?, 'pending', 'HIGH', ?)`,
         [
           engRequestId,
           finalProjectName,
@@ -821,10 +1012,10 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         ]
       );
 
-      // 3. Cập nhật trạng thái lead trong sales_leads sang 'Won'
+      // 3. Cập nhật trạng thái lead sang 'won' (lowercase — khớp kanban Sales)
       if (leadId) {
         await db.run(
-          `UPDATE sales_leads SET stage = 'Won' WHERE id = ?`,
+          `UPDATE sales_leads SET stage = 'won' WHERE id = ?`,
           [leadId]
         );
       }
@@ -863,7 +1054,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
   // POST /api/department-workspace/automation/design-to-pr
   // Luồng tự động: Hồ sơ Kỹ thuật (BOM) -> Phiếu Đề xuất Mua hàng (PR)
-  router.post('/automation/design-to-pr', async (req, res) => {
+  router.post('/automation/design-to-pr', requireAdmin, async (req, res) => {
     try {
       const { designId, projectName, items, priority } = req.body;
       const now = new Date().toISOString();
@@ -876,17 +1067,26 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
       const finalProject = projectName || (design ? design.name : 'Dự án');
       const finalItems = items || (design ? `Vật tư bóc tách thiết kế ${design.name} (${design.capacity || ''})` : 'Vật tư thi công');
-      const finalPriority = priority || 'Cao';
+      const finalPriority = priority || 'HIGH';
+
+      // Idempotency: design đã có PR thì trả về bản cũ.
+      if (designId) {
+        const existingPr = await db.get('SELECT * FROM procurement_prs WHERE designId = ?', [designId]);
+        if (existingPr) {
+          return res.json({ success: true, prId: existingPr.id, message: 'PR đã tồn tại từ hồ sơ này (chống tạo trùng)' });
+        }
+      }
 
       await db.run(
-        `INSERT INTO procurement_prs (id, project, items, date, status, priority, createdAt)
-         VALUES (?, ?, ?, ?, 'Chờ duyệt PO', ?, ?)`,
+        `INSERT INTO procurement_prs (id, project, items, date, status, priority, designId, createdAt)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
         [
           prId,
           finalProject,
           finalItems,
           now.split('T')[0],
           finalPriority,
+          designId || null,
           now,
         ]
       );
@@ -920,9 +1120,9 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
   // POST /api/department-workspace/automation/milestone-to-ar
   // Luồng tự động: Nghiệm thu Mốc Thi Công -> Sinh Công nợ Phải Thu (AR) gửi Kế toán
-  router.post('/automation/milestone-to-ar', async (req, res) => {
+  router.post('/automation/milestone-to-ar', requireAdmin, async (req, res) => {
     try {
-      const { milestoneId, projectName, milestoneTitle, amount, customer, dueDate } = req.body;
+      const { milestoneId, projectId, projectName, milestoneTitle, amount, customer, dueDate } = req.body;
       const now = new Date().toISOString();
       const arId = `ar-${randomUUID().slice(0, 8)}`;
 
@@ -931,28 +1131,33 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
         milestone = await db.get('SELECT * FROM project_milestones WHERE id = ?', [milestoneId]);
       }
 
+      // Idempotency: mốc đã có AR thì trả về bản cũ.
+      if (milestoneId) {
+        const existingAr = await db.get('SELECT * FROM finance_ar WHERE milestoneId = ?', [milestoneId]);
+        if (existingAr) {
+          return res.json({ success: true, arId: existingAr.id, message: 'AR đã tồn tại từ mốc này (chống tạo trùng)' });
+        }
+      }
+
       const finalProject = projectName || (milestone ? milestone.projectName : 'Dự án');
       const finalTitle = milestoneTitle || (milestone ? milestone.title : 'Nghiệm thu');
-      const finalAmount = amount !== undefined ? amount : (milestone ? milestone.amount : 0);
+      // amount lưu SỐ (cột VARCHAR nhưng SUM() cần số; lớp hiển thị format VNĐ).
+      const finalAmount = Number(amount !== undefined ? amount : (milestone ? milestone.amount : 0)) || 0;
       const finalCustomer = customer || (milestone ? milestone.customer : 'Chủ đầu tư');
       const finalDueDate = dueDate || now.split('T')[0];
 
-      const formatVND = (num: number) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num || 0);
-      };
-
-      const amountStr = typeof finalAmount === 'number' ? formatVND(finalAmount) : (finalAmount || '0 đ');
-
       await db.run(
-        `INSERT INTO finance_ar (id, project, desc_text, amount, customer, dueDate, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO finance_ar (id, project, desc_text, amount, customer, dueDate, status, milestoneId, projectId, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
         [
           arId,
           finalProject,
           `Thu hồi công nợ mốc: ${finalTitle}`,
-          amountStr,
+          finalAmount,
           finalCustomer,
           finalDueDate,
+          milestoneId || null,
+          projectId || (milestone ? milestone.projectId : null),
           now,
         ]
       );
@@ -972,7 +1177,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           u.id,
           'ar_created',
           `💰 Phát Sinh Khoản Thu Công Nợ (AR)`,
-          `Mốc nghiệm thu "${finalTitle}" của dự án "${finalProject}" (${amountStr}) đã chuyển sang Kế toán để xuất hóa đơn.`,
+          `Mốc nghiệm thu "${finalTitle}" của dự án "${finalProject}" (${finalAmount.toLocaleString('vi-VN')} đ) đã chuyển sang Kế toán để xuất hóa đơn.`,
           arId
         );
       }
@@ -980,6 +1185,184 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
       res.json({ success: true, arId, message: 'Đã tạo khoản phải thu AR thành công' });
     } catch (error: any) {
       console.error('[POST /automation/milestone-to-ar] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 1+2: notify dùng chung cho các mắt nối chuỗi (Admin/Director luôn nhận + lọc theo từ khóa phòng ban).
+  async function notifyChain(
+    opts: { deptKeywords?: string[]; type: string; title: string; message: string; relatedId?: string }
+  ) {
+    const allUsers = await db.all('SELECT id, role, department FROM users');
+    const targets = (allUsers || []).filter((u: any) => {
+      const role = String(u.role || '').toLowerCase();
+      if (role === 'admin' || role === 'director' || role === 'giám đốc') return true;
+      const dept = String(u.department || '').toLowerCase();
+      return (opts.deptKeywords || []).some((kw) => dept.includes(kw));
+    });
+    for (const u of targets) {
+      await sendNotification(db, u.id, opts.type, opts.title, opts.message, opts.relatedId);
+    }
+  }
+
+  // POST /api/department-workspace/automation/pr-to-po
+  // Luồng: PR đã duyệt -> sinh PO nháp giữ prId (Mua hàng bổ sung NCC/giá sau).
+  router.post('/automation/pr-to-po', requireAdmin, async (req, res) => {
+    try {
+      const { prId } = req.body;
+      if (!prId) return res.status(400).json({ error: 'Thiếu prId' });
+      const pr: any = await db.get('SELECT * FROM procurement_prs WHERE id = ?', [prId]);
+      if (!pr) return res.status(404).json({ error: 'Không tìm thấy PR' });
+      const existing: any = await db.get('SELECT * FROM procurement_pos WHERE prId = ?', [prId]);
+      if (existing) {
+        return res.json({ success: true, poId: existing.id, message: 'PO đã tồn tại từ PR này (chống tạo trùng)' });
+      }
+      const now = new Date().toISOString();
+      const poId = `po-${randomUUID().slice(0, 8)}`;
+      await db.run(
+        `INSERT INTO procurement_pos (id, supplier, value, items, stage, progress, eta, status, prId, createdAt)
+         VALUES (?, '', 0, ?, 'Nháp từ PR', 0, '', 'open', ?, ?)`,
+        [poId, pr.items, prId, now]
+      );
+      await notifyChain({
+        deptKeywords: ['procurement', 'scm', 'mua hàng', 'vật tư'],
+        type: 'po_draft_created',
+        title: '📝 PO nháp mới từ PR đã duyệt',
+        message: `PR cho "${pr.project}" đã được chuyển thành PO nháp. Vui lòng bổ sung NCC và giá trị.`,
+        relatedId: poId,
+      });
+      res.json({ success: true, poId, message: 'Đã sinh PO nháp từ PR' });
+    } catch (error: any) {
+      console.error('[POST /automation/pr-to-po] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/department-workspace/automation/po-to-inbound
+  // Luồng: PO -> báo nhập kho chờ (Warehouse chuẩn bị tiếp nhận).
+  router.post('/automation/po-to-inbound', requireAdmin, async (req, res) => {
+    try {
+      const { poId } = req.body;
+      if (!poId) return res.status(400).json({ error: 'Thiếu poId' });
+      const po: any = await db.get('SELECT * FROM procurement_pos WHERE id = ?', [poId]);
+      if (!po) return res.status(404).json({ error: 'Không tìm thấy PO' });
+      const existing: any = await db.get('SELECT * FROM warehouse_inbound WHERE poId = ?', [poId]);
+      if (existing) {
+        return res.json({ success: true, inboundId: existing.id, message: 'Phiếu nhập đã tồn tại từ PO này (chống tạo trùng)' });
+      }
+      const now = new Date().toISOString();
+      const inboundId = `inb-${randomUUID().slice(0, 8)}`;
+      await db.run(
+        `INSERT INTO warehouse_inbound (id, source, items, date, status, poId, createdAt)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+        [inboundId, po.supplier || 'Nhà cung cấp', po.items, now.split('T')[0], poId, now]
+      );
+      await notifyChain({
+        deptKeywords: ['kho', 'warehouse', 'logistics'],
+        type: 'inbound_expected',
+        title: '📦 Hàng sắp về kho',
+        message: `PO từ "${po.supplier || 'NCC'}" đã được báo nhập kho chờ. Chuẩn bị tiếp nhận.`,
+        relatedId: inboundId,
+      });
+      res.json({ success: true, inboundId, message: 'Đã báo nhập kho chờ từ PO' });
+    } catch (error: any) {
+      console.error('[POST /automation/po-to-inbound] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/department-workspace/automation/cod-to-om
+  // Luồng: Đóng điện COD -> bàn giao vận hành O&M + chuyển trạng thái dự án sang warranty.
+  router.post('/automation/cod-to-om', requireAdmin, async (req, res) => {
+    try {
+      const { projectId } = req.body;
+      if (!projectId) return res.status(400).json({ error: 'Thiếu projectId' });
+      const project: any = await db.get('SELECT * FROM projects WHERE id = ?', [projectId]);
+      if (!project) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+      const existing: any = await db.get(
+        `SELECT * FROM om_schedules WHERE site = ? AND task LIKE '%Bàn giao%' ORDER BY createdAt DESC`,
+        [project.name]
+      );
+      if (existing) {
+        return res.json({ success: true, scheduleId: existing.id, message: 'Đã bàn giao O&M trước đó (chống tạo trùng)' });
+      }
+      const now = new Date().toISOString();
+      const scheduleId = `om-${randomUUID().slice(0, 8)}`;
+      await db.run(
+        `INSERT INTO om_schedules (id, site, task, date, team, status, createdAt)
+         VALUES (?, ?, 'Tiếp nhận vận hành sau Bàn giao COD', ?, '', 'scheduled', ?)`,
+        [scheduleId, project.name, now.split('T')[0], now]
+      );
+      await db.run(`UPDATE projects SET status = 'warranty', updatedAt = ? WHERE id = ?`, [now, projectId]);
+      await notifyChain({
+        deptKeywords: ['o&m', 'o m', 'om', 'bảo hành', 'vận hành', 'cs', 'chăm sóc'],
+        type: 'om_handover',
+        title: '🔧 Bàn giao vận hành O&M',
+        message: `Dự án "${project.name}" đã đóng điện COD và được bàn giao sang O&M theo dõi.`,
+        relatedId: scheduleId,
+      });
+      res.json({ success: true, scheduleId, message: 'Đã bàn giao dự án sang O&M' });
+    } catch (error: any) {
+      console.error('[POST /automation/cod-to-om] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Ngưỡng giá trị cao cần duyệt cấp Giám đốc + Pháp chế (dùng chung PO/AP).
+  const HIGH_VALUE_THRESHOLD = 2000000000;
+
+  // POST /api/department-workspace/automation/request-approval
+  // Luồng: chứng từ giá trị cao -> tự sinh tờ trình trung tâm gửi Giám đốc + Pháp chế.
+  router.post('/automation/request-approval', requireAdmin, async (req, res) => {
+    try {
+      const { entityType, entityId, title, amount, requestedBy, departmentId, reason } = req.body;
+      if (!entityType || !entityId || !String(title || '').trim()) {
+        return res.status(400).json({ error: 'Thiếu entityType/entityId/title' });
+      }
+      const now = new Date().toISOString();
+      const allUsers = await db.all('SELECT id, role, department FROM users');
+      const approvers = (allUsers || []).filter((u: any) => {
+        const role = String(u.role || '').toLowerCase();
+        if (role === 'admin' || role === 'director' || role === 'giám đốc') return true;
+        const dept = String(u.department || '').toLowerCase();
+        return ['pháp chế', 'legal'].some((kw) => dept.includes(kw));
+      });
+      if (approvers.length === 0) {
+        return res.status(400).json({ error: 'Chưa cấu hình người phê duyệt (Giám đốc/Pháp chế)' });
+      }
+      const approvalId = `apr-${randomUUID().slice(0, 8)}`;
+      const approvalCode = `APR-${Date.now().toString().slice(-6)}`;
+      const approverId = approvers[0].id;
+      await db.run(
+        `INSERT INTO approvals (id, approvalCode, entityType, entityId, title, amount, requestedBy, departmentId, approverId, status, comment, requestedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        [
+          approvalId,
+          approvalCode,
+          entityType,
+          entityId,
+          String(title).trim(),
+          Number(amount) || 0,
+          requestedBy || 'system',
+          departmentId || null,
+          approverId,
+          reason || `Chứng từ vượt ngưỡng ${HIGH_VALUE_THRESHOLD.toLocaleString('vi-VN')} đ`,
+          now,
+        ]
+      );
+      for (const approver of approvers) {
+        await sendNotification(
+          db,
+          approver.id,
+          'approval_needed',
+          '🛡️ Chứng từ giá trị cao cần phê duyệt',
+          `${title} — vui lòng xem xét trong trung tâm phê duyệt.`,
+          approvalId
+        );
+      }
+      res.json({ success: true, approvalId, approvalCode, threshold: HIGH_VALUE_THRESHOLD });
+    } catch (error: any) {
+      console.error('[POST /automation/request-approval] Error:', error);
       res.status(500).json({ error: error.message });
     }
   });

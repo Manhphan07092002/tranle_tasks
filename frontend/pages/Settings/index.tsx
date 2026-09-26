@@ -6,6 +6,7 @@ import { Button, Card, Avatar } from "../../components/UI";
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import Flatpickr from 'react-flatpickr';
 import { toLocalDateString } from '../../utils/dateUtils';
 
@@ -13,6 +14,7 @@ export const SettingsView: React.FC = () => {
   const { t } = useLanguage();
   const { user, updateUserSession } = useAuth();
   const { saveUser } = useData();
+  const { showToast } = useNotifications();
   const [activeTab, setActiveTab] = useState('profile');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -120,7 +122,7 @@ export const SettingsView: React.FC = () => {
       updateUserSession(updatedUser);
       showSaveSuccess();
     } catch (e) {
-      alert('Lưu hồ sơ thất bại, vui lòng thử lại.');
+      showToast({ type: 'error', title: 'Lưu hồ sơ thất bại, vui lòng thử lại.' });
     }
   };
 
@@ -142,14 +144,14 @@ export const SettingsView: React.FC = () => {
       updateUserSession(updatedUser);
       showSaveSuccess();
     } catch (e) {
-      alert('Lưu cài đặt thất bại, vui lòng thử lại.');
+      showToast({ type: 'error', title: 'Lưu cài đặt thất bại, vui lòng thử lại.' });
     }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 800 * 1024) { alert('Ảnh quá lớn! Tối đa 800KB.'); return; }
+    if (file.size > 800 * 1024) { showToast({ type: 'error', title: 'Ảnh quá lớn! Tối đa 800KB.' }); return; }
     const reader = new FileReader();
     reader.onload = (ev) => setAvatarUrl(ev.target?.result as string);
     reader.readAsDataURL(file);
@@ -159,7 +161,7 @@ export const SettingsView: React.FC = () => {
     setPwError('');
     setPwSuccess('');
     if (!currentPassword) { setPwError('Vui lòng nhập mật khẩu hiện tại.'); return; }
-    if (newPassword.length < 6) { setPwError('Mật khẩu mới phải có ít nhất 6 ký tự.'); return; }
+    if (newPassword.length < 12) { setPwError('Mật khẩu mới phải có ít nhất 12 ký tự.'); return; }
     if (newPassword !== confirmPassword) { setPwError('Mật khẩu xác nhận không khớp.'); return; }
 
     try {

@@ -4,23 +4,34 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { validate } from '../middleware/validate.js';
+import { requireActiveSession } from '../middleware/auth.js';
 
 const LoginSchema = z.object({
   email: z.string().email('Email không hợp lệ'),
   password: z.string().min(6, 'Mật khẩu phải ít nhất 6 ký tự'),
 });
 
+const MIN_PASSWORD_LENGTH = 12;
+
 const ChangePasswordSchema = z.object({
   userId: z.string(),
   currentPassword: z.string().optional(),
-  newPassword: z.string().min(6, 'Mật khẩu mới phải ít nhất 6 ký tự'),
+  newPassword: z.string().min(MIN_PASSWORD_LENGTH, `Mật khẩu mới phải ít nhất ${MIN_PASSWORD_LENGTH} ký tự`),
 });
+
+function hashResetToken(token: string) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 
 
 export function authRoutes(db: any) {
   const router = Router();
-  const getSecret = () => (process.env.JWT_SECRET || 'secret') as string;
+  const getSecret = () => {
+    const s = process.env.JWT_SECRET;
+    if (!s) throw new Error('JWT_SECRET is not configured');
+    return s;
+  };
 
   const generateToken = (userPayload: any) => {
     return jwt.sign(userPayload, getSecret(), { expiresIn: '7d' });
@@ -110,10 +121,10 @@ export function authRoutes(db: any) {
       
       const userClientData = {
         id: user.id, name: user.name, email: user.email, role: user.role, 
-        department: user.department, avatar: user.avatar, 
+        department: user.department, departmentId: user.departmentId, avatar: user.avatar,
         permissions: role?.permissions ? JSON.parse(role.permissions) : []
       };
-      const jwtPayload = { ...userClientData };
+      const jwtPayload = { ...userClientData, sessionVersion: Number(user.sessionVersion || 0) };
       const token = generateToken(jwtPayload);
       
       try {
@@ -129,15 +140,27 @@ export function authRoutes(db: any) {
     } catch (e) { console.error('LOGIN ROUTE EXCEPTION:', e); res.status(500).json({ error: 'Failed' }); }
   });
 
-  router.post('/change-password', validate(ChangePasswordSchema), async (req, res) => {
+  // P0: yêu cầu đăng nhập + chống IDOR. Chỉ tự đổi hoặc Admin reset cho người khác.
+  // Director/Managers muốn reset cho cấp dưới phải dùng luồng forgot-password (qua email + token 30p).
+  router.post('/change-password', requireActiveSession(db), validate(ChangePasswordSchema), async (req, res) => {
     const { userId, currentPassword, newPassword } = req.body;
     try {
+      const requester = (req as any).user;
+      if (!requester) return res.status(401).json({ error: 'Unauthorized' });
+      const isSelf = requester.id === userId;
+      const isAdmin = requester.role === 'Admin';
+      if (!isSelf && !isAdmin) {
+        return res.status(403).json({ error: 'Forbidden: Bạn chỉ được đổi mật khẩu của chính mình' });
+      }
       const user = await db.get('SELECT id, password FROM users WHERE id = ?', [userId]);
       if (!user || !user.password) return res.status(404).json({ error: 'User not found' });
-      const isMatch = await bcrypt.compare(currentPassword || '', user.password);
-      if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
+      // Tự đổi pass bắt buộc xác thực mật khẩu hiện tại; Admin reset cho người khác thì bỏ qua bước này.
+      if (isSelf) {
+        const isMatch = await bcrypt.compare(currentPassword || '', user.password);
+        if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
+      }
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, userId]);
+      await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL, sessionVersion = sessionVersion + 1 WHERE id = ?', [hashedPassword, userId]);
       return res.json({ success: true });
     } catch (e) { console.error('CHANGE PASSWORD ROUTE EXCEPTION:', e); res.status(500).json({ error: 'Failed' }); }
   });
@@ -166,12 +189,13 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       }
 
       const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+      const tokenHash = hashResetToken(token);
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       const appBaseUrl = process.env.APP_BASE_URL || 'https://ai.hieuhomecloud.online';
       const resetLink = `${appBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
       await db.run('DELETE FROM password_reset_tokens WHERE userId = ? AND usedAt IS NULL', [user.id]);
-      await db.run('INSERT INTO password_reset_tokens (id, userId, email, token, expiresAt, usedAt) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), user.id, user.email, token, expiresAt, null]);
+      await db.run('INSERT INTO password_reset_tokens (id, userId, email, token, expiresAt, usedAt) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), user.id, user.email, tokenHash, expiresAt, null]);
 
       if (recentPending) {
         await db.run('UPDATE password_reset_requests SET email = ?, emailStatus = ?, emailSentAt = ?, createdAt = ? WHERE id = ?', [user.email, 'pending', null, new Date().toISOString(), recentPending.id]);
@@ -190,13 +214,15 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       }
 
       await db.run("UPDATE password_reset_requests SET emailStatus = ?, emailSentAt = ? WHERE userId = ? AND status = 'pending'", [emailSent ? 'sent' : 'failed', emailSent ? new Date().toISOString() : null, user.id]);
-      return res.json({ success: true, emailSent, message, resetLink, expiresAt });
+      // P0: KHÔNG bao giờ trả resetLink/token về client — token chỉ gửi qua email.
+      return res.json({ success: true, emailSent, message });
     } catch (e) { console.error('forgot-password error', e); res.status(500).json({ error: 'Failed' }); }
   });
 
   router.get('/reset-password/:token', async (req, res) => {
     try {
-      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [req.params.token]);
+      const tokenHash = hashResetToken(req.params.token);
+      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
       if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
       if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
       if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
@@ -207,15 +233,16 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
   router.post('/reset-password', async (req, res) => {
     const { token, newPassword } = req.body;
     try {
-      if (!newPassword || String(newPassword).trim().length < 6) return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
-      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [token]);
+      if (!newPassword || String(newPassword).trim().length < MIN_PASSWORD_LENGTH) return res.status(400).json({ error: `Mật khẩu mới phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự` });
+      const tokenHash = hashResetToken(String(token || ''));
+      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
       if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
       if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
       if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
       const hashedPassword = await bcrypt.hash(String(newPassword).trim(), 10);
-      await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, rt.userId]);
+      await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL, sessionVersion = sessionVersion + 1 WHERE id = ?', [hashedPassword, rt.userId]);
       const now = new Date().toISOString();
-      await db.run('UPDATE password_reset_tokens SET usedAt = ? WHERE token = ?', [now, token]);
+      await db.run('UPDATE password_reset_tokens SET usedAt = ? WHERE token = ?', [now, tokenHash]);
       await db.run("UPDATE password_reset_requests SET status = 'resolved', emailStatus = 'reset_done', emailSentAt = COALESCE(emailSentAt, ?) WHERE userId = ? AND status = 'pending'", [now, rt.userId]);
       return res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }

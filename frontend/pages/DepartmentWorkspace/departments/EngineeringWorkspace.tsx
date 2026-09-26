@@ -8,6 +8,8 @@ import { Button } from '../../../components/UI';
 import { WorkQueue } from '../../../components/workflow/WorkQueue';
 import { DepartmentRequestPanel } from '../../../components/workflow/DepartmentRequestPanel';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
+import { statusLabel } from '../../../utils/workspaceStatus';
 
 interface EngineeringWorkspaceProps {
   onOpenFastQuote: () => void;
@@ -16,6 +18,7 @@ interface EngineeringWorkspaceProps {
 export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
   onOpenFastQuote
 }) => {
+  const { showToast } = useNotifications();
   const [activeTab, setActiveTab] = useState<'requests' | 'design'>('requests');
   const [requests, setRequests] = useState<any[]>([]);
   const [designs, setDesigns] = useState<any[]>([]);
@@ -38,6 +41,7 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
   const [designName, setDesignName] = useState('');
   const [designCapacity, setDesignCapacity] = useState('');
   const [designStage, setDesignStage] = useState('Bản vẽ 1 sợi SLD');
+  const [designProject, setDesignProject] = useState('');
   const [actionStatusMessage, setActionStatusMessage] = useState<string | null>(null);
 
   // PV String Sizing State (AIKO 650Wp & SAJ Inverter)
@@ -48,16 +52,64 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
   const [panelsPerString, setPanelsPerString] = useState<number>(18);
   const [numStrings, setNumStrings] = useState<number>(10);
 
+  // Cập nhật tiến độ / giai đoạn hồ sơ (hết đóng băng ở 10%).
+  const DESIGN_STAGES = ['Bản vẽ 1 sợi SLD', 'Mô phỏng PVsyst', 'Bóc tách BOM & Dự toán', 'Hồ sơ nghiệm thu EVN'];
+  const handleUpdateDesign = async (des: any, patch: Partial<{ progress: number; stage: string }>) => {
+    try {
+      const progress = patch.progress !== undefined
+        ? Math.min(100, Math.max(0, Math.round(patch.progress)))
+        : Number(des.progress) || 0;
+      await departmentWorkspaceService.updateRecord('dept-eng', 'design', des.id, {
+        ...des,
+        ...patch,
+        progress,
+        status: progress >= 100 ? 'completed' : 'active'
+      });
+      fetchEngRecords();
+    } catch (err) {
+      console.error('Error updating design:', err);
+      showToast({ type: 'error', title: 'Cập nhật hồ sơ thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
+  // Nháp tiến độ cục bộ theo từng hồ sơ (kéo slider không bắn API liên tục).
+  const [progressDraft, setProgressDraft] = useState<Record<string, number>>({});
+  const commitProgress = (des: any) => {
+    const v = progressDraft[des.id];
+    if (v === undefined || v === (Number(des.progress) || 0)) return;
+    setProgressDraft(prev => {
+      const next = { ...prev };
+      delete next[des.id];
+      return next;
+    });
+    handleUpdateDesign(des, { progress: v });
+  };
+
+  // Vòng đời yêu cầu: pending -> done / cancelled.
+  const handleRequestStatus = async (req: any, status: 'done' | 'cancelled') => {
+    try {
+      await departmentWorkspaceService.updateRecord('dept-eng', 'requests', req.id, {
+        ...req,
+        status
+      });
+      fetchEngRecords();
+    } catch (err) {
+      console.error('Error updating request status:', err);
+      showToast({ type: 'error', title: 'Cập nhật yêu cầu thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
+
   const fetchEngRecords = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'requests') {
-        const data = await departmentWorkspaceService.getRecords('dept-eng', 'requests');
-        setRequests(data);
-      } else if (activeTab === 'design') {
-        const data = await departmentWorkspaceService.getRecords('dept-eng', 'design');
-        setDesigns(data);
-      }
+      const [reqData, desData, freshKpis] = await Promise.all([
+        departmentWorkspaceService.getRecords('dept-eng', 'requests'),
+        departmentWorkspaceService.getRecords('dept-eng', 'design'),
+        departmentWorkspaceService.getKpis('dept-eng')
+      ]);
+      setRequests(reqData);
+      setDesigns(desData);
+      if (freshKpis) setKpis(freshKpis);
     } catch (err) {
       console.error('Error fetching records:', err);
     } finally {
@@ -66,12 +118,8 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
   };
 
   useEffect(() => {
-    departmentWorkspaceService.getKpis('dept-eng').then(setKpis).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     fetchEngRecords();
-  }, [activeTab]);
+  }, []);
 
   const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,9 +136,11 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
       });
       setIsAddRequestOpen(false);
       setReqProject('');
+      setReqDate(new Date().toISOString().slice(0, 10));
       fetchEngRecords();
     } catch (err) {
       console.error('Error creating request:', err);
+      showToast({ type: 'error', title: 'Tạo yêu cầu thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -108,13 +158,18 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
         stage: designStage,
         progress: 10,
         tasks: ['Khảo sát hiện trường', 'Mô phỏng PVsyst', 'Vẽ AutoCAD SLD', 'Bóc tách BOM'],
-        status: 'active'
+        status: 'active',
+        project: designProject.trim()
       });
       setIsAddDesignOpen(false);
       setDesignName('');
+      setDesignCapacity('');
+      setDesignStage('Bản vẽ 1 sợi SLD');
+      setDesignProject('');
       fetchEngRecords();
     } catch (err) {
       console.error('Error creating design:', err);
+      showToast({ type: 'error', title: 'Tạo hồ sơ thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -125,7 +180,7 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
   const totalDcCapacityKwp = (totalPanels * panelWattage) / 1000;
   const stringVoc = Math.round(panelsPerString * panelVoc * 1.1 * 10) / 10; // Cold weather factor
   const stringVmp = Math.round(panelsPerString * panelVmp * 10) / 10;
-  const dcAcRatio = Math.round((totalDcCapacityKwp / inverterCapKw) * 100) / 100;
+  const dcAcRatio = inverterCapKw > 0 ? Math.round((totalDcCapacityKwp / inverterCapKw) * 100) / 100 : 0;
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-300">
@@ -293,8 +348,24 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
                   <h4 className="font-bold text-sm text-slate-900 dark:text-white">{req.project}</h4>
                   <div className="text-xs text-slate-400 flex items-center justify-between border-t border-gray-100 dark:border-slate-700 pt-2">
                     <span>Hẹn khảo sát: {req.date}</span>
-                    <span className="text-teal-600 font-bold capitalize">{req.status}</span>
+                    <span className="text-teal-600 font-bold capitalize">{statusLabel(req.status)}</span>
                   </div>
+                  {req.status === 'pending' && (
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => handleRequestStatus(req, 'done')}
+                        className="flex-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white"
+                      >
+                        Hoàn thành
+                      </button>
+                      <button
+                        onClick={() => handleRequestStatus(req, 'cancelled')}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-500 border border-gray-200"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -338,6 +409,7 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
                             setTimeout(() => setActionStatusMessage(null), 4000);
                           } catch (err) {
                             console.error('Error generating PR:', err);
+                            showToast({ type: 'error', title: 'Tạo PR thất bại', message: 'Vui lòng thử lại.' });
                           }
                         }}
                         className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
@@ -349,6 +421,36 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                     <div className="bg-teal-500 h-full rounded-full transition-all" style={{ width: `${des.progress}%` }} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <select
+                      value={des.stage}
+                      onChange={(e) => handleUpdateDesign(des, { stage: e.target.value })}
+                      className="text-xs px-2.5 py-1.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                    >
+                      {DESIGN_STAGES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={progressDraft[des.id] ?? (Number(des.progress) || 0)}
+                      onChange={(e) => setProgressDraft(prev => ({ ...prev, [des.id]: Number(e.target.value) }))}
+                      onMouseUp={() => commitProgress(des)}
+                      onTouchEnd={() => commitProgress(des)}
+                      onBlur={() => commitProgress(des)}
+                      className="flex-1 min-w-[120px] accent-teal-600"
+                      title="Kéo để cập nhật tiến độ (thả ra để lưu)"
+                    />
+                    <button
+                      onClick={() => handleUpdateDesign(des, { progress: (Number(des.progress) || 0) + 10 })}
+                      className="text-xs font-bold text-teal-600 hover:text-teal-800 hover:bg-teal-50 px-2 py-1 rounded-lg border border-teal-200"
+                    >
+                      +10%
+                    </button>
                   </div>
                 </div>
               ))}
@@ -569,6 +671,19 @@ export const EngineeringWorkspace: React.FC<EngineeringWorkspaceProps> = ({
                   value={designName}
                   onChange={(e) => setDesignName(e.target.value)}
                   placeholder="VD: Bản vẽ kỹ thuật SLD & Mô phỏng PVsyst Nhà máy Tân Bình..."
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Dự Án Liên Kết (để lên dòng đời dự án)
+                </label>
+                <input
+                  type="text"
+                  value={designProject}
+                  onChange={(e) => setDesignProject(e.target.value)}
+                  placeholder="VD: Dự án Điện Mặt Trời Nhà máy Tân Bình..."
                   className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>

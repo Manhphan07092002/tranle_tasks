@@ -13,6 +13,7 @@ import { Meeting, User } from '../types';
 import { Button, Avatar, Card } from './UI';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { subscribeToSignals, sendSignal, saveMeeting } from '../services/meetingService';
 import { SettingsModal } from './meeting/SettingsModal';
@@ -48,6 +49,7 @@ const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void }> = ({ ch
 export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meeting, onLeave, allUsers }) => {
   const { user } = useAuth();
   const { t, language } = useLanguage();
+  const { showToast } = useNotifications();
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [showChat, setShowChat] = useState(false);
@@ -402,7 +404,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meeting, onLeave, allU
             if (signal.data === 'mic') setIsMicOn(false);
             else if (signal.data === 'cam') setIsCamOn(false);
             else if (signal.data === 'kick') {
-              alert(language === 'vi' ? 'Bạn đã bị Chủ phòng mời ra khỏi cuộc họp.' : 'You have been removed by the Host.');
+              showToast({ type: 'info', title: language === 'vi' ? 'Bạn đã bị Chủ phòng mời ra khỏi cuộc họp.' : 'You have been removed by the Host.' });
               onLeave();
             }
           }
@@ -417,7 +419,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meeting, onLeave, allU
           }
         } else if (signal.type === 'meeting_deleted') {
           if (!signal.isHistorical) {
-            alert(language === 'vi' ? 'Chủ phòng đã kết thúc và xóa phòng họp này. Bạn sẽ được đưa ra ngoài.' : 'The host has ended and deleted this meeting. You will be removed.');
+            showToast({ type: 'info', title: language === 'vi' ? 'Chủ phòng đã kết thúc và xóa phòng họp này. Bạn sẽ được đưa ra ngoài.' : 'The host has ended and deleted this meeting. You will be removed.' });
             onLeave();
           }
         } else if (signal.type === 'webrtc_offer' && !signal.isHistorical) {

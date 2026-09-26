@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Project, ProjectMilestone, User } from '../../types';
 import { Building, CheckCircle2, DollarSign, AlignLeft, PieChart as PieChartIcon, Briefcase, List, ExternalLink, Trash2, Target, UserIcon, Clock, Plus, Flag, Milestone } from 'lucide-react';
 import { getProjectMilestones, saveProjectMilestone, deleteProjectMilestone } from '../../services/projectService';
+import { departmentWorkspaceService } from '../../services/departmentWorkspaceService';
 import { useAuth } from '../../contexts/AuthContext';
 import { InlineDocumentManager } from '../../components/InlineDocumentManager';
 
@@ -29,6 +30,8 @@ export const ProjectEditForm: React.FC<Props> = ({ project, projects, onChange, 
 
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [newMilestone, setNewMilestone] = useState('');
+  const [arRecords, setArRecords] = useState<any[]>([]);
+  const [arMsg, setArMsg] = useState('');
 
   const cursorRef = React.useRef<{ element: HTMLInputElement; digitsBeforeCursor: number } | null>(null);
 
@@ -87,6 +90,7 @@ export const ProjectEditForm: React.FC<Props> = ({ project, projects, onChange, 
   useEffect(() => {
     if (project.id) {
       getProjectMilestones(project.id).then(setMilestones).catch(() => {});
+      departmentWorkspaceService.getRecords('dept-fin', 'ar').then(setArRecords).catch(() => {});
     }
   }, [project.id]);
 
@@ -110,6 +114,31 @@ export const ProjectEditForm: React.FC<Props> = ({ project, projects, onChange, 
     if (!project.id) return;
     await deleteProjectMilestone(project.id, mId);
     setMilestones(prev => prev.filter(m => m.id !== mId));
+  };
+
+  const arForMilestone = (mId: string) =>
+    arRecords.find((ar: any) => ar.milestoneId === mId);
+
+  // Nghiệm thu mốc -> sinh AR (chống tạo trùng qua milestoneId).
+  const handleCreateArFromMilestone = async (m: ProjectMilestone) => {
+    if (!project.id || arForMilestone(m.id)) return;
+    setArMsg('');
+    try {
+      await departmentWorkspaceService.convertMilestoneToAr({
+        milestoneId: m.id,
+        projectId: project.id,
+        projectName: project.name || 'Dự án',
+        milestoneTitle: m.title,
+        amount: (project as any).winningPrice ?? project.budget ?? 0,
+        customer: project.clientName || (project as any).investor || 'Chủ đầu tư',
+        dueDate: m.dueDate,
+      });
+      const data = await departmentWorkspaceService.getRecords('dept-fin', 'ar');
+      setArRecords(data);
+      setArMsg(`Đã tạo AR từ mốc "${m.title}" — Kế toán xem ở tab Phải thu.`);
+    } catch {
+      setArMsg('Tạo AR thất bại, vui lòng thử lại.');
+    }
   };
 
   return (
@@ -394,6 +423,11 @@ export const ProjectEditForm: React.FC<Props> = ({ project, projects, onChange, 
                 <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
                   <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm"><Flag size={16} className="text-amber-500" /> Cột mốc ({milestones.filter(m => m.status === 'completed').length}/{milestones.length})</h3>
                 </div>
+                {arMsg && (
+                  <div className="px-4 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border-b border-blue-100">
+                    {arMsg}
+                  </div>
+                )}
                 <div className="p-3 space-y-2 max-h-[200px] overflow-y-auto">
                   {milestones.map(m => (
                     <div key={m.id} className="flex items-center gap-2 group">
@@ -402,6 +436,15 @@ export const ProjectEditForm: React.FC<Props> = ({ project, projects, onChange, 
                       </button>
                       <span className={`flex-1 text-sm ${m.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-700'}`}>{m.title}</span>
                       {m.dueDate && <span className="text-[10px] text-gray-400">{new Date(m.dueDate).toLocaleDateString('vi-VN')}</span>}
+                      {m.status === 'completed' && (
+                        arForMilestone(m.id) ? (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Đã có AR</span>
+                        ) : (
+                          <button onClick={() => handleCreateArFromMilestone(m)} title="Tạo khoản phải thu AR từ mốc này" className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                            Tạo AR
+                          </button>
+                        )
+                      )}
                       <button onClick={() => removeMilestone(m.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
                     </div>
                   ))}

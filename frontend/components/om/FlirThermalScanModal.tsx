@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Activity, X, CheckCircle2, AlertTriangle, Send, Thermometer, Flame, Eye } from 'lucide-react';
 import { Button } from '../UI';
 import { useData } from '../../contexts/DataContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface FlirThermalScanModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface FlirThermalScanModalProps {
 
 export const FlirThermalScanModal: React.FC<FlirThermalScanModalProps> = ({ isOpen, onClose }) => {
   const { saveTask } = useData();
+  const { showToast } = useNotifications();
 
   const [reportCode] = useState(`FLIR-2026-TH-${Math.floor(100 + Math.random() * 900)}`);
   const [siteName, setSiteName] = useState('Nhà máy May Việt Tiến (1.2 MWp)');
@@ -76,7 +78,7 @@ export const FlirThermalScanModal: React.FC<FlirThermalScanModalProps> = ({ isOp
         onClose();
       }, 1800);
     } catch (err: any) {
-      alert('Lỗi lưu báo cáo: ' + err.message);
+      showToast({ type: 'error', title: 'Lỗi lưu báo cáo: ' + err.message });
     } finally {
       setIsSubmitting(false);
     }

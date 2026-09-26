@@ -1,20 +1,71 @@
-import React, { useState } from 'react';
-import { 
-  Building2, HardHat, Package, CheckCircle2, ArrowRight, 
+import React, { useState, useEffect } from 'react';
+import {
+  Building2, HardHat, Package, CheckCircle2, ArrowRight,
   Settings, PenTool, TrendingUp, ShieldCheck, FileText, Zap
 } from 'lucide-react';
+import { departmentWorkspaceService } from '../../services/departmentWorkspaceService';
 
 const WORKFLOW_STAGES = [
-  { id: 'sales', label: 'Kinh Doanh', icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/40', border: 'border-blue-200 dark:border-blue-800', desc: 'Chốt HĐ, Thu Tiền' },
-  { id: 'tech', label: 'Kỹ Thuật', icon: PenTool, color: 'text-indigo-500', bg: 'bg-indigo-100 dark:bg-indigo-900/40', border: 'border-indigo-200 dark:border-indigo-800', desc: 'Thiết kế BOM & SLD' },
-  { id: 'epc', label: 'Dự Án EPC', icon: HardHat, color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/40', border: 'border-amber-200 dark:border-amber-800', desc: 'Lập Kế Hoạch & Thi Công' },
-  { id: 'procurement', label: 'Mua Hàng', icon: Package, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100 dark:bg-fuchsia-900/40', border: 'border-fuchsia-200 dark:border-fuchsia-800', desc: 'Tạo PO, Đặt Hàng' },
-  { id: 'warehouse', label: 'Kho Vận', icon: Building2, color: 'text-rose-500', bg: 'bg-rose-100 dark:bg-rose-900/40', border: 'border-rose-200 dark:border-rose-800', desc: 'Xuất/Nhập Serial' },
-  { id: 'om', label: 'O&M', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/40', border: 'border-emerald-200 dark:border-emerald-800', desc: 'Bảo Hành & Bảo Trì' },
+  { id: 'sales', label: 'Kinh Doanh', icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/40', border: 'border-blue-200 dark:border-blue-800', desc: 'Chốt HĐ, Thu Tiền', deptId: 'dept-sales' },
+  { id: 'tech', label: 'Kỹ Thuật', icon: PenTool, color: 'text-indigo-500', bg: 'bg-indigo-100 dark:bg-indigo-900/40', border: 'border-indigo-200 dark:border-indigo-800', desc: 'Thiết kế BOM & SLD', deptId: 'dept-eng' },
+  { id: 'epc', label: 'Dự Án EPC', icon: HardHat, color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/40', border: 'border-amber-200 dark:border-amber-800', desc: 'Lập Kế Hoạch & Thi Công', deptId: 'dept-epc' },
+  { id: 'procurement', label: 'Mua Hàng', icon: Package, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100 dark:bg-fuchsia-900/40', border: 'border-fuchsia-200 dark:border-fuchsia-800', desc: 'Tạo PO, Đặt Hàng', deptId: 'dept-proc' },
+  { id: 'warehouse', label: 'Kho Vận', icon: Building2, color: 'text-rose-500', bg: 'bg-rose-100 dark:bg-rose-900/40', border: 'border-rose-200 dark:border-rose-800', desc: 'Xuất/Nhập Serial', deptId: 'dept-wh' },
+  { id: 'om', label: 'O&M', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/40', border: 'border-emerald-200 dark:border-emerald-800', desc: 'Bảo Hành & Bảo Trì', deptId: 'dept-om' },
 ];
+
+// Số việc chờ xử lý theo trạm — đọc trực tiếp KPI từng phòng ban (số thật, không hardcode).
+function pendingOf(stageId: string, kpis: Record<string, any>): number | null {
+  const k = kpis[stageId];
+  if (!k) return null;
+  switch (stageId) {
+    case 'sales':
+      return (k.totalLeads ?? 0) - (k.wonLeads ?? 0);
+    case 'tech':
+      return k.pendingRequests ?? 0;
+    case 'epc':
+      return k.activeProjects ?? 0;
+    case 'procurement':
+      return (k.pendingPrs ?? 0) + (k.pendingPos ?? 0);
+    case 'warehouse':
+      return k.inboundToday ?? 0;
+    case 'om':
+      return k.activeAlarms ?? 0;
+    default:
+      return null;
+  }
+}
 
 export const CrossDepartmentWorkflowTracker: React.FC = () => {
   const [activeStage, setActiveStage] = useState<string>('tech');
+  const [kpis, setKpis] = useState<Record<string, any>>({});
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          WORKFLOW_STAGES.map(async (s) => {
+            try {
+              const k = await departmentWorkspaceService.getKpis(s.deptId);
+              return [s.id, k] as const;
+            } catch {
+              return [s.id, null] as const;
+            }
+          })
+        );
+        if (!mounted) return;
+        const map: Record<string, any> = {};
+        entries.forEach(([id, k]) => { if (k) map[id] = k; });
+        setKpis(map);
+        setLive(Object.keys(map).length > 0);
+      } catch {
+        setLive(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -26,8 +77,12 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
           </h2>
           <p className="text-xs text-gray-500 mt-1">Hệ thống sẽ tự động chuyển tiếp dữ liệu và sinh phiếu yêu cầu giữa các phòng ban.</p>
         </div>
-        <div className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200">
-          Trạng Thái: Active
+        <div className={`px-3 py-1 text-xs font-bold rounded-lg border ${
+          live
+            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            : 'bg-gray-100 text-gray-500 border-gray-200'
+        }`}>
+          Trạng Thái: {live ? 'Active (số liệu trực tiếp)' : 'Ngoại tuyến'}
         </div>
       </div>
 
@@ -36,13 +91,14 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
         <div className="flex items-center justify-between relative mb-12">
           {/* Connector Line */}
           <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1 bg-gray-200 dark:bg-slate-700 -z-10 rounded-full"></div>
-          
-          {WORKFLOW_STAGES.map((stage, index) => {
+
+          {WORKFLOW_STAGES.map((stage) => {
             const Icon = stage.icon;
             const isActive = activeStage === stage.id;
-            
+            const pending = pendingOf(stage.id, kpis);
+
             return (
-              <div 
+              <div
                 key={stage.id}
                 onClick={() => setActiveStage(stage.id)}
                 className={`relative flex flex-col items-center gap-3 cursor-pointer group transition-all ${isActive ? 'scale-110' : 'hover:scale-105'}`}
@@ -50,13 +106,21 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center border-4 ${isActive ? `border-white dark:border-slate-800 shadow-lg ${stage.bg}` : 'border-white dark:border-slate-800 bg-gray-100 dark:bg-slate-800 shadow-sm'}`}>
                   <Icon size={24} className={isActive ? stage.color : 'text-gray-400 dark:text-slate-500'} />
                 </div>
-                
+                {pending !== null && pending > 0 && (
+                  <span className="absolute -top-1 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shadow">
+                    {pending}
+                  </span>
+                )}
+
                 <div className="text-center absolute top-16 w-32">
                   <div className={`text-[11px] font-extrabold uppercase tracking-wider ${isActive ? stage.color : 'text-gray-500'}`}>
                     {stage.label}
                   </div>
                   <div className="text-[10px] text-gray-400 font-medium">
                     {stage.desc}
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-500 mt-0.5">
+                    {pending === null ? '—' : `${pending} chờ xử lý`}
                   </div>
                 </div>
               </div>
@@ -83,7 +147,7 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
 
               {activeStage === 'sales' && (
                 <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-300">
-                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Hợp đồng ký xong $\rightarrow$ Tạo Request Khảo sát cho Kỹ thuật.</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi lead Won $\rightarrow$ Tạo Dự án + Request Khảo sát cho Kỹ thuật.</li>
                   <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Khách thanh toán cọc $\rightarrow$ Thông báo cho Kế toán & Ban GĐ.</li>
                 </ul>
               )}
@@ -97,8 +161,8 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
 
               {activeStage === 'procurement' && (
                 <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-300">
-                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi PO được duyệt $\rightarrow$ Cập nhật ngày dự kiến hàng về.</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Hàng đang đi đường $\rightarrow$ Gắn task chuẩn bị Nhập Kho cho Warehouse.</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi PR được duyệt $\rightarrow$ Sinh PO nháp giữ liên kết PR (1-click).</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi PO phát hành $\rightarrow$ Báo nhập kho chờ cho Warehouse.</li>
                 </ul>
               )}
 
@@ -111,8 +175,8 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
 
               {activeStage === 'epc' && (
                 <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-300">
-                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Milestones hoàn thành $\rightarrow$ Báo Kế toán xuất hóa đơn thanh toán.</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Commissioning xong $\rightarrow$ Chuyển giao trạng thái dự án sang O&M.</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Milestones hoàn thành $\rightarrow$ Tạo AR gửi Kế toán (nút Tạo AR, chống trùng).</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Khi Commissioning xong $\rightarrow$ Bàn giao O&M + chuyển dự án sang bảo hành.</li>
                 </ul>
               )}
 
@@ -122,6 +186,16 @@ export const CrossDepartmentWorkflowTracker: React.FC = () => {
                   <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500"/> Tự động check Ticket lỗi từ khách hàng để phân phối Task sự cố.</li>
                 </ul>
               )}
+
+              <button
+                onClick={() => window.location.assign('/projects')}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800"
+              >
+                Xem dòng đời dự án <ArrowRight size={12} />
+              </button>
+              <div className="flex items-center gap-1 text-[11px] text-gray-400">
+                <ShieldCheck size={12} className="text-emerald-500" /> Mọi chuyển tiếp đều chống tạo trùng và bắn realtime.
+              </div>
 
             </div>
           </div>

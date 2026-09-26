@@ -1,6 +1,6 @@
 # 🔍 Phân Tích Toàn Diện Dự Án Tran Le Tasks
 
-> **Ngày cập nhật:** 01/09/2026 (Phiên bản 5.0 — Hệ thống 13 Không gian làm việc Phòng ban & 100% MySQL 8 Dynamic)  
+> **Ngày cập nhật:** 13/09/2026 (Phiên bản 6.0 — Hệ thống 13 Không gian làm việc Phòng ban & 100% MySQL 8 Dynamic, đồng bộ từ source code thực tế)  
 > **Mục đích:** Tài liệu kỹ thuật chi tiết về cấu trúc mã nguồn, kiến trúc hệ thống, cơ sở dữ liệu MySQL, quy trình nghiệp vụ 13 phòng ban và quy chuẩn phát triển dành cho kỹ sư & Agent AI.  
 > **Tham khảo thêm:** [CLAUDE.md](CLAUDE.md), `.agent/workflows/tranle-*.md`.
 
@@ -53,17 +53,20 @@ tranle_tasks/
 │   │   ├── finance/                  # MilestonePaymentModal, ArAgingDetailModal
 │   │   ├── epc/                      # DailySiteLogModal (Nhật ký thi công)
 │   │   ├── om/                       # SajRmaTicketModal, FlirThermalScanModal
+│   │   ├── solar/                    # Components năng lượng mặt trời dùng chung
 │   │   ├── workflow/                 # WorkQueue, DepartmentRequestPanel
 │   │   ├── meeting/                  # WebRTC Video Room, Screen Sharing, Background Blur
 │   │   ├── AIAssistant.tsx           # Trợ lý ảo AI Gemini Chatbot
 │   │   ├── TaskModal.tsx             # Modal tạo và phân công công việc
 │   │   └── UI.tsx                    # Button, Badge, Modal, Input primitives
 │   │
-│   ├── pages/                        # 20 Module màn hình chính
+│   ├── pages/                        # 22 Module màn hình chính
 │   │   ├── Dashboard/                # Tổng quan KPI công ty, biểu đồ tiến độ
 │   │   ├── Tasks/                    # Quản trị task: Kanban board, List view, Gantt/Calendar
+│   │   ├── Calendar/Notes/Team/Settings/Notifications/Organization # Lịch, Ghi chú, Nhân sự, Cài đặt, Thông báo, Sơ đồ tổ chức
 │   │   ├── DepartmentWorkspace/      # Không gian làm việc 13 phòng ban chuyên biệt
-│   │   │   ├── index.tsx             # Bộ điều hướng phòng ban & 8 Tabs làm việc chung
+│   │   │   ├── index.tsx             # Bộ điều hướng phòng ban
+│   │   │   ├── DepartmentDomainView.tsx # View nghiệp vụ theo domain phòng ban
 │   │   │   ├── tabs/                 # 6 Tab mở rộng toàn diện:
 │   │   │   │   ├── DepartmentDashboardTab.tsx   # Dashboard KPI phòng ban & Biểu đồ phân bổ
 │   │   │   │   ├── DepartmentCalendarTab.tsx    # Lịch biểu deadline & Sự kiện phòng ban
@@ -87,54 +90,60 @@ tranle_tasks/
 │   │   │       ├── CustomerCareWorkspace.tsx    # CSKH: Hotline/Zalo tickets, HĐ Tái ký O&M
 │   │   │       └── ExecutiveWorkspace.tsx       # Ban Giám Đốc: Cockpit chiến lược, OKRs, Giao ban
 │   │   ├── Contracts/                # Quản lý Hợp đồng đầu vào/ra & Bán lẻ
-│   │   ├── Projects/                 # Danh mục dự án đấu thầu & EPC
+│   │   ├── Projects/ + ProjectReports/ # Danh mục dự án đấu thầu & EPC + Báo cáo dự án
 │   │   ├── Revenue/                  # Báo cáo doanh thu & Dòng tiền thực thu
 │   │   ├── Products/                 # Quản lý danh mục thiết bị Solar (AIKO, SAJ, v.v.)
 │   │   ├── Meetings/                 # Phòng họp trực tuyến WebRTC
 │   │   ├── Mail/                     # Hòm thư Webmail nội bộ (IMAP/SMTP)
 │   │   ├── Reports/                  # Báo cáo công việc định kỳ
+│   │   ├── Approvals/                # Trung tâm phê duyệt tờ trình số
 │   │   ├── DocumentAdmin/            # Kho lưu trữ tài liệu số
 │   │   └── Admin/                    # Quản trị hệ thống, RBAC & Backup/Restore JSON
 │   │
-│   ├── contexts/                     # Quản lý trạng thái ứng dụng
+│   ├── contexts/                     # Quản lý trạng thái ứng dụng (4 contexts)
 │   │   ├── AuthContext.tsx           # Xác thực JWT & phân quyền người dùng
 │   │   ├── DataContext.tsx           # Server State Management qua React Query
 │   │   ├── LanguageContext.tsx       # Đa ngôn ngữ (Tiếng Việt / English)
 │   │   └── NotificationContext.tsx   # Thông báo thời gian thực qua WebSocket
 │   │
-│   └── services/                     # Lớp giao tiếp API Backend
+│   └── services/                     # Lớp giao tiếp API Backend (23 files)
 │       ├── api.ts                    # Axios/Fetch client kèm JWT Interceptor
 │       ├── departmentWorkspaceService.ts # API CRUD nghiệp vụ 13 phòng ban
-│       ├── taskService.ts            # Quản lý công việc
-│       ├── contractService.ts        # Quản lý hợp đồng
-│       ├── projectService.ts         # Quản lý dự án
-│       ├── productService.ts         # Quản lý kho hàng & thiết bị
+│       ├── taskService.ts / noteService.ts / reportService.ts # Công việc, Ghi chú, Báo cáo
+│       ├── contractService.ts + contractLinkService.ts # Hợp đồng + Liên kết HĐ
+│       ├── projectService.ts / productService.ts / revenueService.ts # Dự án, Kho, Doanh thu
+│       ├── userService.ts / roleService.ts / departmentService.ts / teamService.ts # Tổ chức
+│       ├── organizationService.ts / positionService.ts / approvalService.ts # Orgchart, Chức danh, Phê duyệt
+│       ├── departmentRequestService.ts / documentService.ts / taskTemplateService.ts # Liên phòng ban, Tài liệu, Mẫu việc
+│       ├── clientService.ts / meetingService.ts # Khách hàng, Họp
 │       └── aiService.ts              # Trí tuệ nhân tạo Gemini
 │
 └── backend/                          # Máy chủ ứng dụng Express 5 & MySQL 8
-    ├── server.ts                     # Khởi tạo HTTP server, socket.io & routes
-    ├── db_mysql.ts                   # Trình điều khiển kết nối MySQL 8, DDL Schema & Seeds
+    ├── server.ts                     # Khởi tạo HTTP server, socket.io & 29 routes (server.ts:108-137)
+    ├── db_mysql.ts                   # MySQL 8 adapter + DDL 68 tables + seeds + SQL normalizer (~1285 dòng)
     ├── socket.ts                     # Cấu hình Realtime WebSocket Server
     ├── mailer.ts                     # Trình gửi Email SMTP Transporter
-    ├── middleware/
-    │   ├── auth.ts                   # Middleware kiểm tra JWT token & Quyền Admin
+    ├── middleware/                   # 2 middlewares
+    │   ├── auth.ts                   # requireAuth / requireAdmin (JWT)
     │   └── validate.ts               # Kiểm tra tính hợp lệ dữ liệu (Zod)
-    └── routes/                       # 23 Router API Express:
+    ├── schedulers/                   # 5 cron jobs: fridayReminder, noteReminder, dailyTaskReminder, mailScheduler, revenueAutoSubmit
+    └── routes/                       # 29 Router API Express:
         ├── departmentWorkspace.ts    # [TRUNG TÂM] API records & KPIs cho 13 phòng ban
         ├── auth.ts                   # Xác thực, Đăng nhập, Reset mật khẩu
-        ├── tasks.ts                  # CRUD công việc & Subtasks
-        ├── contracts.ts              # CRUD hợp đồng & Quy trình ký kết
-        ├── projects.ts               # CRUD dự án & Tiến độ
-        ├── products.ts               # CRUD thiết bị vật tư
+        ├── users.ts / roles.ts / departments.ts / teams.ts / positions.ts / organization.ts # Tổ chức & RBAC
+        ├── tasks.ts + taskTemplates.ts # CRUD công việc, subtasks & Mẫu công việc
+        ├── contracts.ts + contractLinks.ts # CRUD hợp đồng & Liên kết HĐ đầu vào/ra
+        ├── projects.ts / products.ts / revenue.ts / clients.ts # Dự án, Vật tư, Doanh thu, Khách hàng
+        ├── approvals.ts + departmentRequests.ts # Phê duyệt số + Yêu cầu liên phòng ban
+        ├── notes.ts / reports.ts / events.ts / activity.ts / notifications.ts # Ghi chú, Báo cáo, Sự kiện, Audit, Thông báo
+        ├── documents.ts / mail.ts / meetings.ts / upload.ts # Tài liệu, IMAP/SMTP, Họp WebRTC, Upload
         ├── admin.ts                  # Quản trị người dùng & Export/Import DB
-        ├── mail.ts                   # Đọc IMAP và gửi thư SMTP
-        ├── ai.ts                     # Tương tác với Google Gemini Model
-        └── ...
+        └── ai.ts                     # Tương tác với Google Gemini Model
 ```
 
 ---
 
-## 3. Kiến Trúc Cơ Sở Dữ Liệu MySQL 8 (40+ Bảng)
+## 3. Kiến Trúc Cơ Sở Dữ Liệu MySQL 8 (68 Bảng — `backend/db_mysql.ts`)
 
 Hệ thống hoạt động trên nền tảng **100% MySQL 8**, tuân thủ nguyên tắc không sử dụng mock data. Mọi chỉ số thống kê (KPIs, Charts, Workflows) đều được tính toán theo thời gian thực từ cơ sở dữ liệu.
 
@@ -142,23 +151,32 @@ Hệ thống hoạt động trên nền tảng **100% MySQL 8**, tuân thủ ngu
 1. `users`: Thông tin tài khoản nhân sự, phân quyền, mật khẩu băm bcrypt, trạng thái khóa.
 2. `roles`: Danh mục vai trò và tập quyền hạn RBAC.
 3. `departments`: Danh mục phòng ban trực thuộc Tran Le Electricity.
-4. `tasks`: Danh sách công việc, phân loại, độ ưu tiên, deadline, trạng thái Kanban.
-5. `task_assignees`: Bảng liên kết nhiều-nhiều giữa task và nhân viên được giao việc.
-6. `task_tags`: Nhãn công việc.
-7. `task_subtasks`: Danh sách đầu việc con trong từng task.
-8. `task_comments`: Thảo luận và trao đổi công việc.
-9. `contracts`: Hợp đồng kinh tế, giá trị trước/sau thuế, tiến độ thanh toán.
-10. `contract_links`: Quan hệ liên kết giữa các hợp đồng đầu vào và đầu ra.
-11. `projects`: Danh mục dự án đấu thầu, tổng thầu EPC và thương mại.
-12. `project_milestones`: Các mốc tiến độ chính của dự án.
-13. `project_reports`: Báo cáo tiến độ hiện trường định kỳ.
-14. `products`: Danh mục thiết bị Solar (Tấm pin AIKO, Biến tần SAJ, Phụ kiện DC).
-15. `revenue_reports`: Báo cáo doanh thu tài chính định kỳ.
-16. `meetings` & `meeting_participants`: Lịch họp và danh sách người tham dự.
-17. `signals`: Tín hiệu WebRTC P2P dành cho video call.
-18. `notes`: Sổ tay ghi chú cá nhân và lịch nhắc nhở.
-19. `notifications`: Thông báo hệ thống gửi đến người dùng.
-20. `activity_logs`: Nhật ký kiểm toán thao tác hệ thống (Audit Trail).
+4. `teams` & `positions`: Đội nhóm và chức danh trong cơ cấu tổ chức.
+5. `tasks`: Danh sách công việc, phân loại, độ ưu tiên, deadline, trạng thái Kanban.
+6. `task_assignees`: Bảng liên kết nhiều-nhiều giữa task và nhân viên được giao việc.
+7. `task_tags`: Nhãn công việc.
+8. `task_subtasks`: Danh sách đầu việc con trong từng task.
+9. `task_comments`: Thảo luận và trao đổi công việc.
+10. `task_templates`: Mẫu công việc tái sử dụng.
+11. `contracts`: Hợp đồng kinh tế, giá trị trước/sau thuế, tiến độ thanh toán.
+12. `contract_links`: Quan hệ liên kết giữa các hợp đồng đầu vào và đầu ra.
+13. `clients`: Danh mục khách hàng / đối tác.
+14. `projects`: Danh mục dự án đấu thầu, tổng thầu EPC và thương mại.
+15. `project_milestones`: Các mốc tiến độ chính của dự án.
+16. `project_reports`: Báo cáo tiến độ hiện trường định kỳ.
+17. `project_departments` & `project_members`: Phân rã dự án theo phòng ban và thành viên.
+18. `products`: Danh mục thiết bị Solar (Tấm pin AIKO, Biến tần SAJ, Phụ kiện DC).
+19. `revenue_reports`: Báo cáo doanh thu tài chính định kỳ.
+20. `meetings` & `meeting_participants`: Lịch họp và danh sách người tham dự.
+21. `signals`: Tín hiệu WebRTC P2P dành cho video call.
+22. `notes` (+ `reports`): Sổ tay ghi chú cá nhân, lịch nhắc và báo cáo tuần.
+23. `notifications` & `scheduled_emails` & `mail_tracking` & `mail_quotas`: Thông báo realtime, mail hẹn giờ, tracking và hạn mức mail.
+24. `events`: Sự kiện lịch biểu & deadline.
+25. `activity_logs` & `db_history` & `_migrations`: Audit Trail, lịch sử DB và phiên bản migration.
+26. `documents`: Kho tài liệu số.
+27. `department_requests` & `approvals`: Yêu cầu liên phòng ban và tờ trình phê duyệt số.
+28. `system_config`: Cấu hình hệ thống key-value.
+29. `password_reset_requests` & `password_reset_tokens`: Luồng quên / đặt lại mật khẩu.
 
 ### 3.2 Nhóm Bảng Nghiệp Vụ Chuyên Biệt 13 Phòng Ban
 | Tên Bảng MySQL | Phòng Ban Phụ Trách | Trường Dữ Liệu Chính | Mục Đích Nghiệp Vụ |
@@ -182,8 +200,10 @@ Hệ thống hoạt động trên nền tảng **100% MySQL 8**, tuân thủ ngu
 | `it_tickets` | CNTT & Số Hóa | `id, issue, requester, priority, status, time` | Phiếu yêu cầu hỗ trợ kỹ thuật IT Helpdesk |
 | `it_assets` | CNTT & Số Hóa | `id, name, assignee, type, status` | Quản lý máy đo, laptop, license phần mềm |
 | `it_systems` | CNTT & Số Hóa | `id, name, status, uptime, load_pct` | Giám sát hạ tầng máy chủ và mạng |
+| `executive_metrics` | Ban Giám Đốc | `id, metric, value, period` | Chỉ số điều hành tổng hợp cho Cockpit |
 | `legal_contracts` | Pháp Chế & HĐ | `id, title, partner, type, value, status, expiry` | Sổ theo dõi hợp đồng và cam kết pháp lý |
 | `legal_approvals` | Pháp Chế & HĐ | `id, title, entity, requester, step, urgency` | Tờ trình thẩm định điều khoản rủi ro |
+| `legal_library` | Pháp Chế & HĐ | `id, title, category, file` | Thư viện văn bản pháp luật & biểu mẫu ISO |
 | `marketing_campaigns` | Marketing & PR | `id, title, channels, status` | Lịch biên tập nội dung, hội thảo Solar Expo |
 | `marketing_leads` | Marketing & PR | `id, source, percentage` | Tỷ trọng chuyển đổi nguồn khách hàng tiềm năng |
 | `customer_tickets` | Chăm Sóc Khách Hàng | `id, customer, channel, title, status, agent` | Hàng đợi khiếu nại và bảo hành 24/7 |
@@ -274,13 +294,16 @@ docker compose up -d --build
 # 2. Kiểm tra log của backend container
 docker logs -f tranle_task_app
 
-# 3. Kiểm tra tính toàn vẹn của TypeScript và Bundle frontend
-cd frontend && npm run build
+# 3. Kiểm tra kiểu toàn monorepo (root proxy typecheck cả 2 workspaces)
+npm run typecheck
 
-# 4. Chạy kiểm thử tự động trên Backend
-cd backend && npm test
+# 4. Build kiểm tra Bundle frontend
+npm run build
+
+# 5. Chạy kiểm thử tự động trên Backend (vitest + supertest)
+npm run test --workspace=backend
 ```
 
 ---
 
-> **Cam kết chất lượng:** Toàn bộ hệ thống TranLe Tasks tuân thủ nguyên tắc **Zero-Hardcode**, 100% dữ liệu đồng bộ và lưu trữ an toàn trong MySQL 8, phục vụ hoàn hảo cho quy trình làm việc thực tế của Công ty Cổ phần Tư vấn Xây dựng Điện Trần Lê.
+> **Cam kết chất lượng:** Toàn bộ hệ thống TranLe Tasks tuân thủ nguyên tắc **Zero-Hardcode**, 100% dữ liệu đồng bộ và lưu trữ an toàn trong MySQL 8 (68 bảng), phục vụ hoàn hảo cho quy trình làm việc thực tế của Công ty Cổ phần Tư vấn Xây dựng Điện Trần Lê. Tài liệu đồng bộ từ source code ngày 13/09/2026: 29 routes backend, 22 pages + 23 services frontend, 5 schedulers, 4 contexts.

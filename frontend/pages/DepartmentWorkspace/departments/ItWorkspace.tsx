@@ -6,8 +6,10 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/UI';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
+import { useNotifications } from '../../../contexts/NotificationContext';
 
 export const ItWorkspace: React.FC = () => {
+  const { showToast } = useNotifications();
   const [activeTab, setActiveTab] = useState<'helpdesk' | 'assets' | 'infrastructure'>('helpdesk');
   
   const [tickets, setTickets] = useState<any[]>([]);
@@ -30,20 +32,24 @@ export const ItWorkspace: React.FC = () => {
   const [assetName, setAssetName] = useState('');
   const [assetAssignee, setAssetAssignee] = useState('');
   const [assetType, setAssetType] = useState('Laptop');
+  const [assetFilter, setAssetFilter] = useState<'all' | 'unassigned'>('all');
+  const visibleAssets = assetFilter === 'unassigned'
+    ? assets.filter((a: any) => !a.assignee || a.assignee === 'Chưa cấp phát')
+    : assets;
 
   const fetchItData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'helpdesk') {
-        const data = await departmentWorkspaceService.getRecords('dept-it', 'tickets');
-        setTickets(data);
-      } else if (activeTab === 'assets') {
-        const data = await departmentWorkspaceService.getRecords('dept-it', 'assets');
-        setAssets(data);
-      } else if (activeTab === 'infrastructure') {
-        const data = await departmentWorkspaceService.getRecords('dept-it', 'infrastructure');
-        setSystems(data);
-      }
+      const [ticketData, assetData, sysData, freshKpis] = await Promise.all([
+        departmentWorkspaceService.getRecords('dept-it', 'tickets'),
+        departmentWorkspaceService.getRecords('dept-it', 'assets'),
+        departmentWorkspaceService.getRecords('dept-it', 'infrastructure'),
+        departmentWorkspaceService.getKpis('dept-it')
+      ]);
+      setTickets(ticketData);
+      setAssets(assetData);
+      setSystems(sysData);
+      if (freshKpis) setKpis(freshKpis);
     } catch (err) {
       console.error('Error fetching it records:', err);
     } finally {
@@ -52,12 +58,22 @@ export const ItWorkspace: React.FC = () => {
   };
 
   useEffect(() => {
-    departmentWorkspaceService.getKpis('dept-it').then(setKpis).catch(console.error);
+    fetchItData();
   }, []);
 
-  useEffect(() => {
-    fetchItData();
-  }, [activeTab]);
+  // Vòng đời ticket: mở -> đóng / đóng -> mở lại.
+  const handleTicketStatus = async (t: any, status: 'closed' | 'open') => {
+    try {
+      await departmentWorkspaceService.updateRecord('dept-it', 'tickets', t.id, {
+        ...t,
+        status
+      });
+      fetchItData();
+    } catch (err) {
+      console.error('Error updating ticket status:', err);
+      showToast({ type: 'error', title: 'Cập nhật ticket thất bại', message: 'Vui lòng thử lại.' });
+    }
+  };
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,14 +86,16 @@ export const ItWorkspace: React.FC = () => {
         requester: ticketRequester.trim(),
         priority: ticketPriority,
         status: 'open',
-        time: 'Vừa xong'
+        time: new Date().toISOString().slice(0, 10)
       });
       setIsAddTicketOpen(false);
       setTicketIssue('');
       setTicketRequester('');
+      setTicketPriority('HIGH');
       fetchItData();
     } catch (err) {
       console.error('Error creating ticket:', err);
+      showToast({ type: 'error', title: 'Tạo ticket thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -98,9 +116,11 @@ export const ItWorkspace: React.FC = () => {
       setIsAddAssetOpen(false);
       setAssetName('');
       setAssetAssignee('');
+      setAssetType('Laptop');
       fetchItData();
     } catch (err) {
       console.error('Error creating asset:', err);
+      showToast({ type: 'error', title: 'Thêm tài sản thất bại', message: 'Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -142,6 +162,22 @@ export const ItWorkspace: React.FC = () => {
         </div>
       </div>
 
+      {/* KPI strip (server) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-800 px-5 py-4 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500 uppercase">Ticket đang mở</span>
+          <span className="text-2xl font-black text-indigo-600">{kpis.openTickets ?? tickets.filter(t => t.status === 'open').length}</span>
+        </div>
+        <div className="bg-white dark:bg-slate-800 px-5 py-4 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500 uppercase">Thiết bị / License</span>
+          <span className="text-2xl font-black text-slate-800 dark:text-white">{kpis.totalAssets ?? assets.length}</span>
+        </div>
+        <div className="bg-white dark:bg-slate-800 px-5 py-4 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500 uppercase">Hệ thống gián đoạn</span>
+          <span className={`text-2xl font-black ${(kpis.systemsDown ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{kpis.systemsDown ?? 0}</span>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm w-fit">
         <button
@@ -165,6 +201,17 @@ export const ItWorkspace: React.FC = () => {
         >
           <Monitor size={18} />
           Assets & Licenses ({assets.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('infrastructure')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'infrastructure'
+              ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 shadow-sm'
+              : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700'
+          }`}
+        >
+          <Server size={18} />
+          Hạ Tầng & Uptime ({systems.length})
         </button>
       </div>
 
@@ -191,19 +238,69 @@ export const ItWorkspace: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {tickets.map(t => (
-                  <div key={t.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center">
-                    <div>
+                  <div key={t.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center gap-2">
+                    <div className="min-w-0">
                       <div className="font-bold text-sm text-slate-900 dark:text-white">{t.issue}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Người yêu cầu: {t.requester}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        Người yêu cầu: {t.requester} • <span className={`font-bold ${t.status === 'closed' ? 'text-slate-400' : 'text-emerald-600'}`}>{t.status === 'closed' ? 'Đã đóng' : 'Đang mở'}</span>
+                      </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0 space-y-1">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         t.priority === 'HIGH' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
                       }`}>
                         {t.priority}
                       </span>
-                      <div className="text-[11px] text-slate-400 mt-1">{t.time || 'Hôm nay'}</div>
+                      <div className="text-[11px] text-slate-400">{t.time || 'Hôm nay'}</div>
+                      {t.status === 'closed' ? (
+                        <button onClick={() => handleTicketStatus(t, 'open')} className="text-[11px] font-bold text-blue-600 hover:text-blue-800">
+                          Mở lại
+                        </button>
+                      ) : (
+                        <button onClick={() => handleTicketStatus(t, 'closed')} className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800">
+                          Đóng
+                        </button>
+                      )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'assets' ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">
+                Danh Mục Thiết Bị Laptop, Máy Đo & Bản Quyền Phần Mềm
+              </h3>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-gray-100 dark:bg-slate-700 rounded-xl p-1 text-xs font-bold">
+                  <button onClick={() => setAssetFilter('all')} className={`px-3 py-1.5 rounded-lg ${assetFilter === 'all' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow' : 'text-slate-500'}`}>
+                    Tất cả ({assets.length})
+                  </button>
+                  <button onClick={() => setAssetFilter('unassigned')} className={`px-3 py-1.5 rounded-lg ${assetFilter === 'unassigned' ? 'bg-white dark:bg-slate-800 text-amber-600 shadow' : 'text-slate-500'}`}>
+                    Chưa cấp phát ({assets.filter((a: any) => !a.assignee || a.assignee === 'Chưa cấp phát').length})
+                  </button>
+                </div>
+                <Button size="sm" onClick={() => setIsAddAssetOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl">
+                  <Plus size={14} className="mr-1" /> Thêm Thiết Bị
+                </Button>
+              </div>
+            </div>
+
+            {visibleAssets.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 text-sm">Không có thiết bị nào trong bộ lọc này</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {visibleAssets.map((ast: any) => (
+                  <div key={ast.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center">
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">{ast.name}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">Người sử dụng: <span className="font-bold text-indigo-600">{ast.assignee}</span></div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200">
+                      {ast.type}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -213,26 +310,37 @@ export const ItWorkspace: React.FC = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider">
-                Danh Mục Thiết Bị Laptop, Máy Đo & Bản Quyền Phần Mềm
+                Giám Sát Hạ Tầng Máy Chủ & Mạng
               </h3>
-              <Button size="sm" onClick={() => setIsAddAssetOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl">
-                <Plus size={14} className="mr-1" /> Thêm Thiết Bị
-              </Button>
+              {(kpis.systemsDown ?? systems.filter((s: any) => s.status === 'down').length) > 0 ? (
+                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl">
+                  {(kpis.systemsDown ?? systems.filter((s: any) => s.status === 'down').length)} hệ thống gián đoạn
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl">
+                  Tất cả hệ thống hoạt động
+                </span>
+              )}
             </div>
 
-            {assets.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 text-sm">Chưa có thiết bị nào trong danh mục</div>
+            {systems.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 text-sm">Chưa có hệ thống nào được giám sát</div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {assets.map(ast => (
-                  <div key={ast.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">{ast.name}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Người sử dụng: <span className="font-bold text-indigo-600">{ast.assignee}</span></div>
+                {systems.map((sys: any) => (
+                  <div key={sys.id} className="p-4 bg-gray-50 dark:bg-slate-700/30 border border-gray-100 dark:border-slate-700 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">{sys.name}</div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        sys.status === 'down' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {sys.status === 'down' ? 'Gián đoạn' : (sys.status || 'Hoạt động')}
+                      </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200">
-                      {ast.type}
-                    </span>
+                    <div className="flex gap-4 text-xs text-slate-500">
+                      <span>Uptime: <span className="font-bold text-slate-800 dark:text-white">{sys.uptime || '—'}</span></span>
+                      <span>Tải: <span className="font-bold text-slate-800 dark:text-white">{sys.load_pct ?? '—'}{sys.load_pct != null ? '%' : ''}</span></span>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -8,6 +8,9 @@
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
     "build": "npm run build --workspace=frontend",
+    "typecheck": "npm run typecheck --workspace=backend && npm run typecheck --workspace=frontend",
+    "typecheck:backend": "npm run typecheck --workspace=backend",
+    "typecheck:frontend": "npm run typecheck --workspace=frontend",
     "start": "cross-env NODE_OPTIONS=\"--max-http-header-size=1000000\" npm run start --workspace=backend",
     "start:prod": "cross-env NODE_ENV=production PORT=3500 NODE_OPTIONS=\"--max-http-header-size=1000000\" npm run start --workspace=backend"
   },

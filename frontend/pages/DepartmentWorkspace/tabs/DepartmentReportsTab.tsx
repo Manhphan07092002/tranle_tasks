@@ -36,7 +36,7 @@ export const DepartmentReportsTab: React.FC<DepartmentReportsTabProps> = ({
   const totalTasks = deptTasks.length;
   const doneTasks = deptTasks.filter(t => t.status === TaskStatus.DONE).length;
   const overdueTasks = deptTasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== TaskStatus.DONE).length;
-  const slaRate = totalTasks > 0 ? Math.round(((totalTasks - overdueTasks) / totalTasks) * 100) : 100;
+  const slaRate = totalTasks > 0 ? Math.round(((totalTasks - overdueTasks) / totalTasks) * 100) : 0;
 
   // Member Performance Leaderboard
   const memberPerformance = useMemo(() => {
@@ -44,7 +44,7 @@ export const DepartmentReportsTab: React.FC<DepartmentReportsTabProps> = ({
       const assigned = deptTasks.filter(t => t.assignees?.includes(member.id));
       const completed = assigned.filter(t => t.status === TaskStatus.DONE).length;
       const overdue = assigned.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== TaskStatus.DONE).length;
-      const rate = assigned.length > 0 ? Math.round((completed / assigned.length) * 100) : 100;
+      const rate = assigned.length > 0 ? Math.round((completed / assigned.length) * 100) : 0;
 
       return {
         id: member.id,

@@ -1,10 +1,12 @@
 import { apiFetch } from '../../services/api';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Database, Download, FileUp, RefreshCw, Search, Trash2, CheckCircle2, History, Upload, ArrowDownToLine } from 'lucide-react';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 type DbTable = { name: string; count?: number | null };
 
 export default function AdminDatabaseManagement() {
+  const { showToast } = useNotifications();
   const [tables, setTables] = useState<DbTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -111,7 +113,7 @@ export default function AdminDatabaseManagement() {
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        alert('Có lỗi khi xuất dữ liệu: ' + e.message);
+        showToast({ type: 'error', title: 'Có lỗi khi xuất dữ liệu: ' + e.message });
       }
     }
   };

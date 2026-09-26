@@ -49,13 +49,14 @@ import { departmentWorkspaceRoutes } from './routes/departmentWorkspace.js';
 import { aiRoutes, invalidateAiKeyCache } from './routes/ai.js';
 
 import { initSocket } from './socket.js';
-import { requireAuth, requireAdmin } from './middleware/auth.js';
+import { requireAuth, requireActiveSession, requireAdmin } from './middleware/auth.js';
 
 import { scheduleFridayReminder } from './schedulers/fridayReminder.js';
 import { scheduleNoteReminders } from './schedulers/noteReminder.js';
 import { scheduleDailyTaskReminder } from './schedulers/dailyTaskReminder.js';
 import { initMailScheduler } from './schedulers/mailScheduler.js';
 import { scheduleRevenueAutoSubmit } from './schedulers/revenueAutoSubmit.js';
+import { scheduleChainReminders } from './schedulers/chainReminders.js';
 
 async function startServer() {
   const app = express();
@@ -78,13 +79,16 @@ async function startServer() {
 
   initSocket(httpServer);
 
-  app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // P1: origin '*' không dùng được chung với credentials (browser chặn) → chỉ cho origin khai báo.
+  // Cùng-origin (vite proxy lúc dev / serve static lúc prod) không cần CORS nên mặc định tắt cross-origin.
+  const allowedOrigins = (process.env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors({ origin: allowedOrigins.length > 0 ? allowedOrigins : false, credentials: true }));
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5000,
+    max: 2000,
     message: { error: 'Too many requests from this IP' },
   });
   const loginLimiter = rateLimit({
@@ -92,61 +96,73 @@ async function startServer() {
     max: 10,
     message: { error: 'Too many login attempts from this IP' },
   });
+  // P1: các endpoint reset-password không xác thực cũng cần throttle (tránh spam mail/token).
+  const forgotLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many password-reset attempts from this IP' },
+  });
 
   app.use('/api', globalLimiter);
   app.use('/api/auth/login', loginLimiter);
+  app.use('/api/auth/forgot-password', forgotLimiter);
+  app.use('/api/auth/reset-password', forgotLimiter);
 
   // Database: MySQL (duy nhất)
   const db = await initDbMysql();
 
   const mailer = createMailer(db);
 
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date() });
+  app.get('/health', async (_req, res) => {
+    try {
+      await db.get('SELECT 1 AS ok');
+      res.json({ status: 'ok', database: 'ok', uptime: process.uptime(), timestamp: new Date() });
+    } catch {
+      res.status(503).json({ status: 'unavailable', database: 'unavailable' });
+    }
   });
+
+  const authenticated = requireActiveSession(db);
 
   app.use('/api/auth', authRoutes(db));
   app.use('/api/auth', forgotPasswordRoutes(db, mailer));
-  app.use('/api/users', requireAuth, userRoutes(db, mailer));
-  app.use('/api/tasks', requireAuth, taskRoutes(db));
-  app.use('/api/notes', requireAuth, noteRoutes(db));
-  app.use('/api/meetings', requireAuth, meetingRoutes(db));
-  app.use('/api/reports', requireAuth, reportRoutes(db));
-  app.use('/api/roles', requireAuth, roleRoutes(db));
-  app.use('/api/departments', requireAuth, departmentRoutes(db));
-  app.use('/api/teams', requireAuth, teamRoutes(db));
-  app.use('/api/positions', requireAuth, positionRoutes(db));
-  app.use('/api/organization', requireAuth, organizationRoutes(db));
-  app.use('/api/notifications', requireAuth, notificationRoutes(db));
+  app.use('/api/users', authenticated, userRoutes(db, mailer));
+  app.use('/api/tasks', authenticated, taskRoutes(db));
+  app.use('/api/notes', authenticated, noteRoutes(db));
+  app.use('/api/meetings', authenticated, meetingRoutes(db));
+  app.use('/api/reports', authenticated, reportRoutes(db));
+  app.use('/api/roles', authenticated, roleRoutes(db));
+  app.use('/api/departments', authenticated, departmentRoutes(db));
+  app.use('/api/teams', authenticated, teamRoutes(db));
+  app.use('/api/positions', authenticated, positionRoutes(db));
+  app.use('/api/organization', authenticated, organizationRoutes(db));
+  app.use('/api/notifications', authenticated, notificationRoutes(db));
 
-  app.use('/api/ai', requireAuth, aiRoutes(db));
-  app.use('/api/admin', requireAuth, requireAdmin, adminRoutes(db, mailer));
-  app.use('/api/events', requireAuth, eventRoutes(db));
-  app.use('/api/activity', requireAuth, activityRoutes(db));
-  app.use('/api/mail', requireAuth, mailRoutes(db));
-  app.use('/api/contracts', requireAuth, contractRoutes(db));
-  app.use('/api/contract-links', requireAuth, contractLinkRoutes(db));
-  app.use('/api/revenue-reports', requireAuth, revenueRoutes(db));
-  app.use('/api/clients', requireAuth, clientRoutes(db));
-  app.use('/api/products', requireAuth, productRoutes(db));
-  app.use('/api/projects', requireAuth, projectRoutes(db));
-  app.use('/api/documents', requireAuth, documentRoutes(db));
-  app.use('/api/department-requests', requireAuth, departmentRequestRoutes(db));
-  app.use('/api/approvals', requireAuth, approvalRoutes(db));
-  app.use('/api/task-templates', requireAuth, taskTemplateRoutes(db));
-  app.use('/api/department-workspace', requireAuth, departmentWorkspaceRoutes(db));
+  app.use('/api/ai', authenticated, aiRoutes(db));
+  app.use('/api/admin', authenticated, requireAdmin, adminRoutes(db, mailer));
+  app.use('/api/events', authenticated, eventRoutes(db));
+  app.use('/api/activity', authenticated, activityRoutes(db));
+  app.use('/api/mail', authenticated, mailRoutes(db));
+  app.use('/api/contracts', authenticated, contractRoutes(db));
+  app.use('/api/contract-links', authenticated, contractLinkRoutes(db));
+  app.use('/api/revenue-reports', authenticated, revenueRoutes(db));
+  app.use('/api/clients', authenticated, clientRoutes(db));
+  app.use('/api/products', authenticated, productRoutes(db));
+  app.use('/api/projects', authenticated, projectRoutes(db));
+  app.use('/api/documents', authenticated, documentRoutes(db));
+  app.use('/api/department-requests', authenticated, departmentRequestRoutes(db));
+  app.use('/api/approvals', authenticated, approvalRoutes(db));
+  app.use('/api/task-templates', authenticated, taskTemplateRoutes(db));
+  app.use('/api/department-workspace', authenticated, departmentWorkspaceRoutes(db));
 
   scheduleFridayReminder(db);
   scheduleNoteReminders(db);
   scheduleDailyTaskReminder(db);
   initMailScheduler(db);
   scheduleRevenueAutoSubmit(db);
+  scheduleChainReminders(db);
 
-  app.use('/api/upload', requireAuth, uploadRoutes());
-
-  // Serve uploaded files
-  const uploadsPath = path.join(__dirname, '../uploads');
-  app.use('/uploads', express.static(uploadsPath));
+  app.use('/api/upload', authenticated, uploadRoutes());
 
   const frontendPath = path.join(__dirname, '../frontend/dist');
   app.use(express.static(frontendPath));

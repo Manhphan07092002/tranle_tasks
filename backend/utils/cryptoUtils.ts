@@ -1,12 +1,18 @@
 import crypto from 'crypto';
 
-const DEFAULT_KEY = 'TranLe-Task-Secure-Key-123456789';
-const ENCRYPTION_KEY = process.env.MAIL_ENCRYPTION_KEY || DEFAULT_KEY;
 const IV_LENGTH = 16;
 
-if (!process.env.MAIL_ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
-  console.error('[SECURITY] MAIL_ENCRYPTION_KEY is not set. Using the default insecure key. Set this env var immediately to protect stored mail credentials.');
+function resolveEncryptionKey(): string {
+  const envKey = process.env.MAIL_ENCRYPTION_KEY;
+  if (envKey) return envKey;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[SECURITY] MAIL_ENCRYPTION_KEY is not set in production. Refusing to start with insecure default.');
+  }
+  console.warn('[SECURITY] MAIL_ENCRYPTION_KEY is not set. Using an ephemeral random key for this dev/test session only.');
+  return crypto.randomBytes(32).toString('hex');
 }
+
+const ENCRYPTION_KEY = resolveEncryptionKey();
 
 export function encrypt(text: string) {
   if (!text) return text;
