@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Project } from '../../types';
-import { Edit2, Trash2, ChevronUp, ChevronDown, ArrowUpDown, Briefcase, AlertTriangle, Clock } from 'lucide-react';
+import { Edit2, Trash2, ChevronUp, ChevronDown, ArrowUpDown, Briefcase, AlertTriangle, Clock, Workflow } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
 
 interface Props {
@@ -195,6 +196,7 @@ export const ProjectListTab: React.FC<Props> = ({ projects, contracts, tasks, se
                   </td>
                   <td className="px-5 py-4 text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Link to={`/projects/${p.id}/workspace/overview`} className="p-1.5 text-gray-400 hover:text-emerald-600 bg-gray-50 hover:bg-emerald-50 rounded-lg transition-colors" title="Mở Không gian dự án"><Workflow size={15}/></Link>
                       {canEditProject(p) && (
                         <>
                           <button onClick={() => onEdit(p)} className="p-1.5 text-gray-400 hover:text-brand-600 bg-gray-50 hover:bg-brand-50 rounded-lg transition-colors"><Edit2 size={15}/></button>

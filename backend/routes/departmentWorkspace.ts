@@ -77,6 +77,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           records = await db.all('SELECT * FROM hr_employees ORDER BY createdAt DESC');
         } else if (type === 'leaves') {
           records = await db.all('SELECT * FROM hr_leaves ORDER BY createdAt DESC');
+        } else if (type === 'interviews') {
+          records = await db.all('SELECT * FROM hr_interviews ORDER BY scheduleDate ASC');
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {
@@ -250,6 +252,15 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'INSERT INTO hr_leaves (id, employeeName, type, startDate, days, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [id, employeeName, leaveType, startDate, days, status, now]
           );
+        } else if (type === 'interviews') {
+          const { candidateName, recruitmentId, round, scheduleDate, interviewers, result, note } = data;
+          if (!String(candidateName || '').trim() || !scheduleDate || !String(interviewers || '').trim()) {
+            return res.status(400).json({ error: 'candidateName/scheduleDate/interviewers là bắt buộc' });
+          }
+          await db.run(
+            'INSERT INTO hr_interviews (id, candidateName, recruitmentId, round, scheduleDate, interviewers, result, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, candidateName, recruitmentId || null, round || 'Screening', scheduleDate, interviewers, result || 'scheduled', note || '', now]
+          );
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {
@@ -325,10 +336,13 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [id, site, date, kwh, now]
           );
         } else if (type === 'sites') {
-          const { name, capacityKwp, location, sunHours, warrantyExpiry } = data;
+          const { name, capacityKwp, location, sunHours, warrantyExpiry, pvsystExpectedKwh } = data;
+          if (!String(name || '').trim() || !(Number(capacityKwp) > 0)) {
+            return res.status(400).json({ error: 'Tên + công suất trạm không hợp lệ' });
+          }
           await db.run(
-            'INSERT INTO om_sites (id, name, capacityKwp, location, sunHours, warrantyExpiry, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [id, name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, now]
+            'INSERT INTO om_sites (id, name, capacityKwp, location, sunHours, warrantyExpiry, pvsystExpectedKwh, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, Number(pvsystExpectedKwh) > 0 ? Number(pvsystExpectedKwh) : null, now]
           );
         }
       } else if (departmentId === 'dept-proc') {
@@ -515,6 +529,15 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             'UPDATE hr_leaves SET employeeName = ?, type = ?, startDate = ?, days = ?, status = ?, updatedAt = ? WHERE id = ?',
             [employeeName, leaveType, startDate, days, status, now, id]
           );
+        } else if (type === 'interviews') {
+          const { candidateName, recruitmentId, round, scheduleDate, interviewers, result, note } = data;
+          if (!String(candidateName || '').trim() || !scheduleDate || !String(interviewers || '').trim()) {
+            return res.status(400).json({ error: 'candidateName/scheduleDate/interviewers là bắt buộc' });
+          }
+          await db.run(
+            'UPDATE hr_interviews SET candidateName = ?, recruitmentId = ?, round = ?, scheduleDate = ?, interviewers = ?, result = ?, note = ?, updatedAt = ? WHERE id = ?',
+            [candidateName, recruitmentId || null, round, scheduleDate, interviewers, result, note || '', now, id]
+          );
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {
@@ -590,10 +613,13 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
             [site, date, kwh, now, id]
           );
         } else if (type === 'sites') {
-          const { name, capacityKwp, location, sunHours, warrantyExpiry } = data;
+          const { name, capacityKwp, location, sunHours, warrantyExpiry, pvsystExpectedKwh } = data;
+          if (!String(name || '').trim() || !(Number(capacityKwp) > 0)) {
+            return res.status(400).json({ error: 'Tên + công suất trạm không hợp lệ' });
+          }
           await db.run(
-            'UPDATE om_sites SET name = ?, capacityKwp = ?, location = ?, sunHours = ?, warrantyExpiry = ?, updatedAt = ? WHERE id = ?',
-            [name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, now, id]
+            'UPDATE om_sites SET name = ?, capacityKwp = ?, location = ?, sunHours = ?, warrantyExpiry = ?, pvsystExpectedKwh = ?, updatedAt = ? WHERE id = ?',
+            [name, capacityKwp, location, Number(sunHours) || 4.5, warrantyExpiry || null, Number(pvsystExpectedKwh) > 0 ? Number(pvsystExpectedKwh) : null, now, id]
           );
         }
       } else if (departmentId === 'dept-proc') {
@@ -736,6 +762,8 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           await db.run('DELETE FROM hr_employees WHERE id = ?', [id]);
         } else if (type === 'leaves') {
           await db.run('DELETE FROM hr_leaves WHERE id = ?', [id]);
+        } else if (type === 'interviews') {
+          await db.run('DELETE FROM hr_interviews WHERE id = ?', [id]);
         }
       } else if (departmentId === 'dept-it') {
         if (type === 'tickets') {

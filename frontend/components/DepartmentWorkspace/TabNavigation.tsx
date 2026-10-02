@@ -1,6 +1,6 @@
 import { 
   BarChart3, Inbox, ArrowRightLeft, Layers, Sparkles, Calendar, 
-  FileText, CheckCircle2, PieChart, Clock 
+  FileText, CheckCircle2, PieChart, Clock, Gauge
 } from 'lucide-react';
 
 interface TabConfig {
@@ -23,6 +23,7 @@ const tabs: TabConfig[] = [
   { id: 'reports', label: 'Báo cáo', icon: PieChart, color: 'text-gray-500' },
   { id: 'kpi', label: 'KPI', icon: BarChart3, color: 'text-gray-500' },
   { id: 'audit', label: 'Lịch sử', icon: Clock, color: 'text-gray-400' },
+  { id: 'workload', label: 'Tải công việc', icon: Gauge, color: 'text-gray-500' },
 ];
 
 interface TabNavigationProps {

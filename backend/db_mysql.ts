@@ -441,6 +441,20 @@ CREATE TABLE IF NOT EXISTS customer_tickets (
   avatar TEXT,
   csat INT,
   category VARCHAR(64),
+  priority VARCHAR(64) NOT NULL DEFAULT 'medium',
+  escalatedLevel INT NOT NULL DEFAULT 0,
+  escalatedAt TEXT,
+  slaDueAt TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sla_policies (
+  id VARCHAR(191) PRIMARY KEY,
+  ticketType VARCHAR(64) NOT NULL,
+  priority VARCHAR(64) NOT NULL,
+  responseHours INT NOT NULL,
+  resolveHours INT NOT NULL,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -603,6 +617,19 @@ CREATE TABLE IF NOT EXISTS hr_leaves (
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS hr_interviews (
+  id VARCHAR(191) PRIMARY KEY,
+  candidateName TEXT NOT NULL,
+  recruitmentId VARCHAR(191),
+  round VARCHAR(64) NOT NULL DEFAULT 'Screening',
+  scheduleDate TEXT NOT NULL,
+  interviewers TEXT NOT NULL,
+  result VARCHAR(64) NOT NULL DEFAULT 'scheduled',
+  note TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS it_tickets (
   id VARCHAR(191) PRIMARY KEY,
   issue TEXT NOT NULL,
@@ -610,6 +637,9 @@ CREATE TABLE IF NOT EXISTS it_tickets (
   priority VARCHAR(64) NOT NULL,
   status VARCHAR(64) NOT NULL,
   time TEXT NOT NULL,
+  escalatedLevel INT NOT NULL DEFAULT 0,
+  escalatedAt TEXT,
+  slaDueAt TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -693,6 +723,9 @@ CREATE TABLE IF NOT EXISTS om_alarms (
   time TEXT NOT NULL,
   severity VARCHAR(64) NOT NULL,
   status VARCHAR(64) NOT NULL,
+  escalatedLevel INT NOT NULL DEFAULT 0,
+  escalatedAt TEXT,
+  slaDueAt TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -724,6 +757,7 @@ CREATE TABLE IF NOT EXISTS om_sites (
   location TEXT NOT NULL,
   sunHours DOUBLE DEFAULT 4.5,
   warrantyExpiry TEXT,
+  pvsystExpectedKwh DOUBLE,
   createdAt TEXT NOT NULL,
   updatedAt TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -951,6 +985,7 @@ export async function initDbMysql(): Promise<MysqlDb> {
   await ensureColumnExists(db, 'departments', 'parentId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'departments', 'sortOrder', 'INT DEFAULT 0');
   await ensureColumnExists(db, 'departments', 'isActive', 'TINYINT NOT NULL DEFAULT 1');
+  await ensureColumnExists(db, 'departments', 'workloadCapacityHours', 'INT NOT NULL DEFAULT 40');
   await ensureColumnExists(db, 'departments', 'createdAt', 'TEXT');
   await ensureColumnExists(db, 'departments', 'updatedAt', 'TEXT');
 
@@ -966,6 +1001,17 @@ export async function initDbMysql(): Promise<MysqlDb> {
   await ensureColumnExists(db, 'users', 'sessionVersion', 'INT NOT NULL DEFAULT 0');
   await ensureColumnExists(db, 'tasks', 'teamId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'customer_tickets', 'csat', 'INT');
+  await ensureColumnExists(db, 'customer_tickets', 'priority', "VARCHAR(64) NOT NULL DEFAULT 'medium'");
+  await ensureColumnExists(db, 'customer_tickets', 'escalatedLevel', 'INT NOT NULL DEFAULT 0');
+  await ensureColumnExists(db, 'customer_tickets', 'escalatedAt', 'TEXT');
+  await ensureColumnExists(db, 'customer_tickets', 'slaDueAt', 'TEXT');
+  await ensureColumnExists(db, 'it_tickets', 'escalatedLevel', 'INT NOT NULL DEFAULT 0');
+  await ensureColumnExists(db, 'it_tickets', 'escalatedAt', 'TEXT');
+  await ensureColumnExists(db, 'it_tickets', 'slaDueAt', 'TEXT');
+  await ensureColumnExists(db, 'om_alarms', 'escalatedLevel', 'INT NOT NULL DEFAULT 0');
+  await ensureColumnExists(db, 'om_alarms', 'escalatedAt', 'TEXT');
+  await ensureColumnExists(db, 'om_alarms', 'slaDueAt', 'TEXT');
+  await ensureColumnExists(db, 'om_sites', 'pvsystExpectedKwh', 'DOUBLE');
   await ensureColumnExists(db, 'tasks', 'assigneeId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'tasks', 'milestoneId', 'VARCHAR(191)');
   await ensureColumnExists(db, 'tasks', 'customerId', 'VARCHAR(191)');

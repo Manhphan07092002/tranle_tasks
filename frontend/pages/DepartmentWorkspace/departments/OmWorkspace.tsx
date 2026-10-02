@@ -10,10 +10,13 @@ import { FlirThermalScanModal } from '../../../components/om/FlirThermalScanModa
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
 import { useNotifications } from '../../../contexts/NotificationContext';
 import { statusLabel } from '../../../utils/workspaceStatus';
+import { useSlaPolicies, isSlaBreached } from '../hooks/useSla';
+import { expectedKwh, hasPvsyst, prPercent } from './omPr';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export const OmWorkspace: React.FC = () => {
   const { showToast } = useNotifications();
+  const slaPolicies = useSlaPolicies();
   const [isRmaOpen, setIsRmaOpen] = useState(false);
   const [isFlirOpen, setIsFlirOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'scada' | 'pm' | 'production'>('scada');
@@ -29,6 +32,7 @@ export const OmWorkspace: React.FC = () => {
   const [siteLocation, setSiteLocation] = useState('');
   const [siteSunHours, setSiteSunHours] = useState<number | ''>(4.5);
   const [siteWarranty, setSiteWarranty] = useState('');
+  const [sitePvsyst, setSitePvsyst] = useState<number | ''>('');
   const [prodSite, setProdSite] = useState('');
   const [prodDate, setProdDate] = useState(new Date().toISOString().slice(0, 10));
   const [prodKwh, setProdKwh] = useState<number | ''>('');
@@ -149,7 +153,8 @@ export const OmWorkspace: React.FC = () => {
         capacityKwp: cap,
         location: siteLocation.trim(),
         sunHours: Number(siteSunHours) || 4.5,
-        warrantyExpiry: siteWarranty || null
+        warrantyExpiry: siteWarranty || null,
+        pvsystExpectedKwh: Number(sitePvsyst) > 0 ? Number(sitePvsyst) : null
       });
       setIsAddSiteOpen(false);
       setSiteName('');
@@ -157,6 +162,7 @@ export const OmWorkspace: React.FC = () => {
       setSiteLocation('');
       setSiteSunHours(4.5);
       setSiteWarranty('');
+      setSitePvsyst('');
       fetchOmRecords();
     } catch (err) {
       console.error('Error creating site:', err);
@@ -200,7 +206,6 @@ export const OmWorkspace: React.FC = () => {
   const sitePrStats = prodSites.map((name: string) => {
     const site = sites.find((s: any) => s.name === name);
     const cap = Number(site?.capacityKwp) || 0;
-    const sunH = Number(site?.sunHours) || 4.5;
     const rows = productions
       .filter((p: any) => p.site === name)
       .slice()
@@ -212,9 +217,9 @@ export const OmWorkspace: React.FC = () => {
       : null;
     const latestKwh = latest ? Number(latest.kwh) || 0 : 0;
     const low = avg !== null && avg > 0 && latestKwh < avg * 0.7;
-    // PR% = sản lượng thực / (công suất × giờ nắng chuẩn).
-    const expected = cap > 0 ? cap * sunH : 0;
-    const pr = expected > 0 && latest ? Math.round((latestKwh / expected) * 1000) / 10 : null;
+    // PR% = sản lượng thực / kỳ vọng (ưu tiên PVsyst nhập tay, fallback công suất × giờ nắng).
+    const expected = expectedKwh(site);
+    const pr = latest ? prPercent(latestKwh, expected) : null;
     // Bảo hành còn lại (ngày).
     let warrantyLeft: number | null = null;
     if (site?.warrantyExpiry) {
@@ -230,6 +235,8 @@ export const OmWorkspace: React.FC = () => {
       avg: avg !== null ? Math.round(avg) : null,
       low,
       pr,
+      pvsyst: hasPvsyst(site),
+      expected: expected > 0 ? Math.round(expected) : null,
       warrantyLeft,
     };
   });
@@ -404,6 +411,11 @@ export const OmWorkspace: React.FC = () => {
                     }`}>
                       {statusLabel(alm.severity)}
                     </span>
+                    {isAlarmOpen(alm) && isSlaBreached('om', alm, slaPolicies) && (
+                      <span className="ml-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                        Quá SLA
+                      </span>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <span className="text-xs text-slate-400 flex items-center gap-1">
@@ -540,6 +552,7 @@ export const OmWorkspace: React.FC = () => {
                       <div className="flex gap-4 mt-1 text-xs text-slate-400">
                         <span>Suất: <span className="font-bold text-slate-200">{s.yield !== null ? `${s.yield} kWh/kWp` : '—'}</span></span>
                         <span>TB 7 ngày: <span className="font-bold text-slate-200">{s.avg !== null ? `${s.avg.toLocaleString('vi-VN')} kWh` : '—'}</span></span>
+                        {s.pvsyst && <span>Kỳ vọng PVsyst: <span className="font-bold text-violet-300">{s.expected !== null ? `${s.expected.toLocaleString('vi-VN')} kWh` : '—'}</span></span>}
                       </div>
                       <div className="flex gap-4 mt-1 text-xs text-slate-400">
                         <span>PR thực: {s.pr === null ? (
@@ -681,6 +694,20 @@ export const OmWorkspace: React.FC = () => {
                     className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl bg-slate-800 text-white outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase tracking-wider mb-1">
+                  Kỳ Vọng PVsyst (kWh/ngày) — không bắt buộc
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={sitePvsyst}
+                  onChange={(e) => setSitePvsyst(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="VD: 22000 (bỏ trống = dùng công suất × giờ nắng)"
+                  className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl bg-slate-800 text-white outline-none focus:ring-2 focus:ring-cyan-500"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">

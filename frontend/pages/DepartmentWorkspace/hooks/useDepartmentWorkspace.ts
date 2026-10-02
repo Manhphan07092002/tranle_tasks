@@ -3,10 +3,11 @@ import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Task, DepartmentRequest, TaskTemplate, TaskStatus, TaskPriority } from '../../../types';
 import { useNavigate } from 'react-router-dom';
+import type { DeptTabId } from '../deptSections';
 
 export interface DepartmentWorkspaceState {
   selectedDeptId: string;
-  activeTab: 'dashboard' | 'queue' | 'requests' | 'domain' | 'workflow' | 'calendar' | 'docs' | 'approvals' | 'reports' | 'kpi' | 'audit';
+  activeTab: DeptTabId;
   queueFilter: 'all' | 'my' | 'team' | 'unassigned' | 'today' | 'overdue' | 'blocked' | 'review';
   requestTab: 'incoming' | 'outgoing';
   searchQuery: string;

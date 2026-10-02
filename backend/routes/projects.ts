@@ -11,6 +11,7 @@ export function projectRoutes(db: any) {
     if (!project) return null;
     const departmentId = user?.departmentId || user?.department;
     if (project.managerId === user?.id || project.departmentId === departmentId || project.primaryDepartmentId === departmentId) return true;
+    if (await db.get('SELECT 1 FROM project_members WHERE projectId = ? AND userId = ?', [projectId, user?.id])) return true;
     return Boolean(await db.get('SELECT 1 FROM project_departments WHERE projectId = ? AND departmentId = ?', [projectId, departmentId]));
   }
 
@@ -73,9 +74,10 @@ export function projectRoutes(db: any) {
             OR p.departmentId = ? 
             OR p.department = ?
             OR p.id IN (SELECT projectId FROM project_departments WHERE departmentId = ?)
+            OR p.id IN (SELECT projectId FROM project_members WHERE userId = ?)
           )
         `;
-        params.push(user.id, user.departmentId || '', user.department || '', user.departmentId || '');
+        params.push(user.id, user.departmentId || '', user.department || '', user.departmentId || '', user.id);
       }
       
       query += ' ORDER BY p.createdAt DESC';
@@ -161,6 +163,47 @@ export function projectRoutes(db: any) {
       );
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed to remove project department' }); }
+  });
+
+  // GET project members
+  router.get('/:id/members', async (req, res) => {
+    try {
+      if (!(await requireProjectAccess(req, res))) return;
+      const rows = await db.all(`
+        SELECT pm.projectId, pm.userId, pm.role, u.name, u.email, u.avatar, u.departmentId
+        FROM project_members pm
+        LEFT JOIN users u ON pm.userId = u.id
+        WHERE pm.projectId = ?
+      `, [req.params.id]);
+      res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'Failed to fetch project members' }); }
+  });
+
+  // ADD project member
+  router.post('/:id/members', async (req, res) => {
+    const { userId, role } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const memberRole = ['member', 'lead', 'viewer'].includes(role) ? role : 'member';
+    try {
+      if (!(await requireProjectManager(req, res))) return;
+      await db.run(
+        'INSERT INTO project_members (projectId, userId, role) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE role = VALUES(role)',
+        [req.params.id, userId, memberRole]
+      );
+      res.status(201).json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: 'Failed to add project member', detail: e.message }); }
+  });
+
+  // REMOVE project member
+  router.delete('/:id/members/:userId', async (req, res) => {
+    try {
+      if (!(await requireProjectManager(req, res))) return;
+      await db.run(
+        'DELETE FROM project_members WHERE projectId = ? AND userId = ?',
+        [req.params.id, req.params.userId]
+      );
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'Failed to remove project member' }); }
   });
 
   // CREATE project

@@ -7,9 +7,11 @@ import {
 import { Button } from '../../../components/UI';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
 import { useNotifications } from '../../../contexts/NotificationContext';
+import { useSlaPolicies, isSlaBreached } from '../hooks/useSla';
 
 export const ItWorkspace: React.FC = () => {
   const { showToast } = useNotifications();
+  const slaPolicies = useSlaPolicies();
   const [activeTab, setActiveTab] = useState<'helpdesk' | 'assets' | 'infrastructure'>('helpdesk');
   
   const [tickets, setTickets] = useState<any[]>([]);
@@ -251,6 +253,9 @@ export const ItWorkspace: React.FC = () => {
                       }`}>
                         {t.priority}
                       </span>
+                      {t.status !== 'closed' && isSlaBreached('it', t, slaPolicies) && (
+                        <div><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">Quá SLA</span></div>
+                      )}
                       <div className="text-[11px] text-slate-400">{t.time || 'Hôm nay'}</div>
                       {t.status === 'closed' ? (
                         <button onClick={() => handleTicketStatus(t, 'open')} className="text-[11px] font-bold text-blue-600 hover:text-blue-800">

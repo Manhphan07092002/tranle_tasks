@@ -43,6 +43,7 @@ import { productRoutes } from './routes/products.js';
 import { projectRoutes } from './routes/projects.js';
 import { documentRoutes } from './routes/documents.js';
 import { departmentRequestRoutes } from './routes/departmentRequests.js';
+import { slaRoutes } from './routes/sla.js';
 import { approvalRoutes } from './routes/approvals.js';
 import { taskTemplateRoutes } from './routes/taskTemplates.js';
 import { departmentWorkspaceRoutes } from './routes/departmentWorkspace.js';
@@ -57,6 +58,7 @@ import { scheduleDailyTaskReminder } from './schedulers/dailyTaskReminder.js';
 import { initMailScheduler } from './schedulers/mailScheduler.js';
 import { scheduleRevenueAutoSubmit } from './schedulers/revenueAutoSubmit.js';
 import { scheduleChainReminders } from './schedulers/chainReminders.js';
+import { scheduleSlaEscalation } from './schedulers/slaEscalation.js';
 
 async function startServer() {
   const app = express();
@@ -152,6 +154,7 @@ async function startServer() {
   app.use('/api/projects', authenticated, projectRoutes(db));
   app.use('/api/documents', authenticated, documentRoutes(db));
   app.use('/api/department-requests', authenticated, departmentRequestRoutes(db));
+  app.use('/api/sla-policies', authenticated, slaRoutes(db));
   app.use('/api/approvals', authenticated, approvalRoutes(db));
   app.use('/api/task-templates', authenticated, taskTemplateRoutes(db));
   app.use('/api/department-workspace', authenticated, departmentWorkspaceRoutes(db));
@@ -162,6 +165,7 @@ async function startServer() {
   initMailScheduler(db);
   scheduleRevenueAutoSubmit(db);
   scheduleChainReminders(db);
+  scheduleSlaEscalation(db);
 
   app.use('/api/upload', authenticated, uploadRoutes());
 

@@ -10,11 +10,11 @@ import {
 } from '../pages/DepartmentWorkspace/deptSections';
 
 describe('deptSections — bảng ánh xạ tab <-> section', () => {
-  it('có đúng 11 section theo yêu cầu', () => {
-    expect(DEPT_SECTIONS).toHaveLength(11);
+  it('có đúng 12 section theo yêu cầu', () => {
+    expect(DEPT_SECTIONS).toHaveLength(12);
     expect(DEPT_SECTIONS).toEqual([
       'overview', 'tasks', 'requests', 'domain', 'workflow',
-      'calendar', 'documents', 'approvals', 'reports', 'kpi', 'history',
+      'calendar', 'documents', 'approvals', 'reports', 'kpi', 'history', 'workload',
     ]);
   });
 
@@ -24,8 +24,8 @@ describe('deptSections — bảng ánh xạ tab <-> section', () => {
       expect(tab).toBeDefined();
       expect(TAB_TO_SECTION[tab]).toBe(section);
     }
-    // Bao phủ toàn bộ tab nội bộ cũ
-    expect(Object.keys(TAB_TO_SECTION)).toHaveLength(11);
+    // Bao phủ toàn bộ tab nội bộ cũ + workload mới
+    expect(Object.keys(TAB_TO_SECTION)).toHaveLength(12);
   });
 
   it('ánh xạ đúng các trường hợp đặc biệt (dashboard/overview, queue/tasks, docs/documents, audit/history)', () => {
@@ -44,10 +44,10 @@ describe('deptSections — bảng ánh xạ tab <-> section', () => {
 });
 
 describe('deptSections — submenu sidebar', () => {
-  it('có đúng 11 mục theo đúng thứ tự yêu cầu', () => {
+  it('có đúng 12 mục theo đúng thứ tự yêu cầu', () => {
     expect(DEPT_SUBMENU.map((m) => m.label)).toEqual([
       'Tổng quan', 'Công việc', 'Yêu cầu', 'Nghiệp vụ', 'Quy trình',
-      'Lịch biểu', 'Tài liệu', 'Phê duyệt', 'Báo cáo', 'KPI', 'Lịch sử',
+      'Lịch biểu', 'Tài liệu', 'Phê duyệt', 'Báo cáo', 'KPI', 'Lịch sử', 'Tải công việc',
     ]);
     expect(DEPT_SUBMENU.map((m) => m.section)).toEqual(DEPT_SECTIONS);
   });

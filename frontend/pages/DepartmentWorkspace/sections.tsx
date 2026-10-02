@@ -10,6 +10,8 @@ import {
   DepartmentAuditTab,
 } from './tabs';
 import { WorkQueueTab } from '../../components/DepartmentWorkspace/WorkQueueTab';
+import { WorkloadTab } from '../../components/DepartmentWorkspace/WorkloadTab';
+import { departmentService } from '../../services/departmentService';
 import { RequestsTab } from '../../components/DepartmentWorkspace/RequestsTab';
 import { KPITab } from '../../components/DepartmentWorkspace/KPITab';
 import { TAB_TO_SECTION, buildDeptSectionPath, type DeptTabId } from './deptSections';
@@ -197,6 +199,28 @@ export function DeptHistoryPage() {
       departmentId={ws.selectedDeptId}
       currentDept={ws.currentDept}
       deptMembers={ws.deptMembers}
+    />
+  );
+}
+
+export function DeptWorkloadPage() {
+  const ws = useWs();
+  const capacity = Number(ws.currentDept?.workloadCapacityHours) || 40;
+  const role = (ws.user as any)?.role as string | undefined;
+  const isDeptManager = ['Manager', 'Trưởng Phòng', 'Phó Phòng'].includes(role || '')
+    && (ws.userDept as any)?.id === ws.selectedDeptId;
+  const canEdit = !!ws.isAdminOrDirector || isDeptManager;
+  return (
+    <WorkloadTab
+      deptTasks={ws.deptTasks}
+      deptMembers={ws.deptMembers}
+      capacity={capacity}
+      todayStr={ws.todayStr}
+      canEditCapacity={canEdit}
+      onSaveCapacity={async (hours: number) => {
+        await departmentService.update(ws.selectedDeptId, { workloadCapacityHours: hours } as any);
+        await ws.refreshData();
+      }}
     />
   );
 }

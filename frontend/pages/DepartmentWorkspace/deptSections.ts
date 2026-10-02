@@ -1,17 +1,17 @@
 import {
   BarChart3, Inbox, ArrowRightLeft, Layers, Sparkles, Calendar,
-  FileText, CheckCircle2, PieChart, Clock,
+  FileText, CheckCircle2, PieChart, Clock, Gauge,
   type LucideIcon,
 } from 'lucide-react';
 
 /** Tab nội bộ (state cũ) <-> section trên URL. */
 export type DeptTabId =
   | 'dashboard' | 'queue' | 'requests' | 'domain' | 'workflow'
-  | 'calendar' | 'docs' | 'approvals' | 'reports' | 'kpi' | 'audit';
+  | 'calendar' | 'docs' | 'approvals' | 'reports' | 'kpi' | 'audit' | 'workload';
 
 export type DeptSection =
   | 'overview' | 'tasks' | 'requests' | 'domain' | 'workflow'
-  | 'calendar' | 'documents' | 'approvals' | 'reports' | 'kpi' | 'history';
+  | 'calendar' | 'documents' | 'approvals' | 'reports' | 'kpi' | 'history' | 'workload';
 
 export const TAB_TO_SECTION: Record<DeptTabId, DeptSection> = {
   dashboard: 'overview',
@@ -25,6 +25,7 @@ export const TAB_TO_SECTION: Record<DeptTabId, DeptSection> = {
   reports: 'reports',
   kpi: 'kpi',
   audit: 'history',
+  workload: 'workload',
 };
 
 export const SECTION_TO_TAB: Record<DeptSection, DeptTabId> = {
@@ -39,11 +40,12 @@ export const SECTION_TO_TAB: Record<DeptSection, DeptTabId> = {
   reports: 'reports',
   kpi: 'kpi',
   history: 'audit',
+  workload: 'workload',
 };
 
 export const DEPT_SECTIONS: DeptSection[] = [
   'overview', 'tasks', 'requests', 'domain', 'workflow',
-  'calendar', 'documents', 'approvals', 'reports', 'kpi', 'history',
+  'calendar', 'documents', 'approvals', 'reports', 'kpi', 'history', 'workload',
 ];
 
 export function isDeptSection(v: string | undefined): v is DeptSection {
@@ -56,7 +58,7 @@ export interface DeptSubmenuItem {
   icon: LucideIcon;
 }
 
-/** Đúng 11 mục submenu sidebar theo yêu cầu. */
+/** 12 mục submenu sidebar. */
 export const DEPT_SUBMENU: DeptSubmenuItem[] = [
   { section: 'overview', label: 'Tổng quan', icon: BarChart3 },
   { section: 'tasks', label: 'Công việc', icon: Inbox },
@@ -69,6 +71,7 @@ export const DEPT_SUBMENU: DeptSubmenuItem[] = [
   { section: 'reports', label: 'Báo cáo', icon: PieChart },
   { section: 'kpi', label: 'KPI', icon: BarChart3 },
   { section: 'history', label: 'Lịch sử', icon: Clock },
+  { section: 'workload', label: 'Tải công việc', icon: Gauge },
 ];
 
 export const DEFAULT_DEPT_SECTION: DeptSection = 'overview';

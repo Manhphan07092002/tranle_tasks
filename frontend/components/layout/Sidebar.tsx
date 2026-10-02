@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, ShieldCheck, Layers } from 'lucide-react';
+import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, ShieldCheck, Layers, Sun } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import { DEPT_SUBMENU, DEFAULT_DEPT_SECTION } from '../../pages/DepartmentWorkspace/deptSections';
@@ -20,6 +20,7 @@ const NAV_GROUPS = [
     label: 'Tổng quan',
     items: [
       { id: 'dashboard', icon: LayoutDashboard, path: '/', permission: null },
+      { id: 'my_work', icon: Sun, path: '/my-work', permission: null },
     ],
   },
   {
@@ -67,6 +68,7 @@ const NAV_GROUPS = [
 
 const NAV_LABELS: Record<string, string> = {
   dashboard:            'Tổng quan',
+  my_work:              'Không gian của tôi',
   organization:         'Sơ đồ tổ chức',
   department_workspace: 'Không gian phòng ban',
   tasks:                'Công việc',

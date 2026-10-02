@@ -9,10 +9,12 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { departmentWorkspaceService } from '../../../services/departmentWorkspaceService';
 import { useNotifications } from '../../../contexts/NotificationContext';
 import { statusLabel } from '../../../utils/workspaceStatus';
+import { useSlaPolicies, isSlaBreached } from '../hooks/useSla';
 
 export const CustomerCareWorkspace: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
+  const slaPolicies = useSlaPolicies();
   const [activeTab, setActiveTab] = useState<'tickets' | 'retention'>('tickets');
   const [tickets, setTickets] = useState<any[]>([]);
   const [renewals, setRenewals] = useState<any[]>([]);
@@ -237,7 +239,7 @@ export const CustomerCareWorkspace: React.FC = () => {
     ? Math.round((ratedTickets.reduce((s: number, t: any) => s + Number(t.csat), 0) / ratedTickets.length) * 10) / 10
     : null);
 
-  // Tuổi ticket (ngày) + SLA: Hotline quá 1 ngày, kênh khác quá 3 ngày mà chưa xong = tồn đọng.
+  // Tuổi ticket (ngày) + SLA policy-driven (fallback heuristic cũ khi chưa tải được policies).
   const ticketAgeDays = (t: any): number | null => {
     const base = t.createdAt || t.time;
     if (!base) return null;
@@ -247,6 +249,7 @@ export const CustomerCareWorkspace: React.FC = () => {
   };
   const isTicketStuck = (t: any) => {
     if (t.status === 'Resolved') return false;
+    if (slaPolicies.length > 0) return isSlaBreached('cs', t, slaPolicies);
     const age = ticketAgeDays(t);
     if (age === null) return false;
     return age > (t.channel === 'Hotline 24/7' ? 1 : 3);

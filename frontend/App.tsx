@@ -21,13 +21,23 @@ import ResetPasswordPage from './pages/ResetPassword/index';
 const NotificationsPage = React.lazy(() => import('./pages/Notifications/index'));
 const ProjectsPage = React.lazy(() => import('./pages/Projects/index'));
 const ProjectReportsPage = React.lazy(() => import('./pages/ProjectReports/index'));
+const ProjectWorkspaceLayout = React.lazy(() => import('./pages/ProjectWorkspace/layout'));
+const ProjectWorkspaceDefault = React.lazy(() => import('./pages/ProjectWorkspace/default'));
+import {
+  ProjOverviewPage, ProjChainPage, ProjSchedulePage, ProjFinancePage, ProjDocsPage, ProjTeamPage,
+} from './pages/ProjectWorkspace/sections';
 const DocumentsPage = React.lazy(() => import('./pages/DocumentAdmin/index'));
 const DepartmentWorkspaceLayout = React.lazy(() => import('./pages/DepartmentWorkspace/layout'));
 const DepartmentWorkspaceDefault = React.lazy(() => import('./pages/DepartmentWorkspace/default'));
+const MyWorkspaceLayout = React.lazy(() => import('./pages/MyWorkspace/layout'));
+const MyWorkspaceDefault = React.lazy(() => import('./pages/MyWorkspace/default'));
+import {
+  MyTodayPage, MyTasksPage, MyApprovalsPage, MyCalendarPage, MyInboxPage, MyKpiPage,
+} from './pages/MyWorkspace/sections';
 import {
   DeptOverviewPage, DeptTasksPage, DeptRequestsPage, DeptDomainPage, DeptWorkflowPage,
   DeptCalendarPage, DeptDocumentsPage, DeptApprovalsPage, DeptReportsPage, DeptKpiPage,
-  DeptHistoryPage,
+  DeptHistoryPage, DeptWorkloadPage,
 } from './pages/DepartmentWorkspace/sections';
 const ApprovalsPage = React.lazy(() => import('./pages/Approvals/index'));
 const OrganizationPage = React.lazy(() => import('./pages/Organization/index'));
@@ -458,11 +468,33 @@ export default function TranLeTaskApp() {
               <Route path="/reports" element={<React.Suspense fallback={<PageLoading label="Báo cáo" />}><ReportsPage /></React.Suspense>} />
               <Route path="/projects" element={<React.Suspense fallback={<PageLoading label="Dự án" />}><ProjectsPage /></React.Suspense>} />
               <Route path="/project-reports" element={<ProjectReportsPage />} />
+              <Route path="/projects/:projectId/workspace" element={<React.Suspense fallback={<PageLoading label="Không gian dự án" />}><ProjectWorkspaceDefault /></React.Suspense>} />
+              <Route path="/projects/:projectId/workspace/:section" element={<React.Suspense fallback={<PageLoading label="Không gian dự án" />}><ProjectWorkspaceLayout /></React.Suspense>}>
+                <Route index element={<Navigate to="/projects" replace />} />
+                <Route path="overview" element={<ProjOverviewPage />} />
+                <Route path="chain" element={<ProjChainPage />} />
+                <Route path="schedule" element={<ProjSchedulePage />} />
+                <Route path="finance" element={<ProjFinancePage />} />
+                <Route path="docs" element={<ProjDocsPage />} />
+                <Route path="team" element={<ProjTeamPage />} />
+                <Route path="*" element={<Navigate to="overview" replace />} />
+              </Route>
               <Route path="/contracts" element={<React.Suspense fallback={<PageLoading label="Hợp đồng" />}><ContractsPage /></React.Suspense>} />
               <Route path="/products" element={<React.Suspense fallback={<PageLoading label="Kho hàng" />}><ProductsPage /></React.Suspense>} />
               <Route path="/revenue" element={<React.Suspense fallback={<PageLoading label="Doanh thu" />}><RevenuePage /></React.Suspense>} />
               <Route path="/notifications" element={<React.Suspense fallback={<PageLoading label="Thông báo" />}><NotificationsPage /></React.Suspense>} />
               <Route path="/organization" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Sơ đồ tổ chức...</div>}><OrganizationPage /></React.Suspense>} />
+              <Route path="/my-work" element={<React.Suspense fallback={<PageLoading label="Không gian của tôi" />}><MyWorkspaceDefault /></React.Suspense>} />
+              <Route path="/my-work/:section" element={<React.Suspense fallback={<PageLoading label="Không gian của tôi" />}><MyWorkspaceLayout /></React.Suspense>}>
+                <Route index element={<Navigate to="/my-work/today" replace />} />
+                <Route path="today" element={<MyTodayPage />} />
+                <Route path="tasks" element={<MyTasksPage />} />
+                <Route path="approvals" element={<MyApprovalsPage />} />
+                <Route path="calendar" element={<MyCalendarPage />} />
+                <Route path="inbox" element={<MyInboxPage />} />
+                <Route path="kpi" element={<MyKpiPage />} />
+                <Route path="*" element={<Navigate to="/my-work/today" replace />} />
+              </Route>
               <Route path="/department-workspace" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspaceDefault /></React.Suspense>} />
               <Route path="/department-workspace/:departmentId" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspaceLayout /></React.Suspense>}>
                 <Route index element={<Navigate to="overview" replace />} />
@@ -477,6 +509,7 @@ export default function TranLeTaskApp() {
                 <Route path="reports" element={<DeptReportsPage />} />
                 <Route path="kpi" element={<DeptKpiPage />} />
                 <Route path="history" element={<DeptHistoryPage />} />
+                <Route path="workload" element={<DeptWorkloadPage />} />
                 <Route path="*" element={<Navigate to="overview" replace />} />
               </Route>
 

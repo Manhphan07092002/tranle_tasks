@@ -9,7 +9,11 @@ export const getProjects = async (): Promise<Project[]> => {
 
 export const getProjectDetails = async (id: string): Promise<{ project: Project, contracts: any[], reports: ProjectReport[] }> => {
   const res = await apiFetch(`/api/projects/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch project details');
+  if (!res.ok) {
+    const err: any = new Error('Failed to fetch project details');
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 };
 
@@ -98,5 +102,28 @@ export const removeProjectDepartment = async (projectId: string, departmentId: s
     method: 'DELETE'
   });
   if (!res.ok) throw new Error('Failed to remove project department');
+};
+
+// --- Project Members ---
+
+export const getProjectMembers = async (projectId: string): Promise<any[]> => {
+  const res = await apiFetch(`/api/projects/${projectId}/members`);
+  if (!res.ok) throw new Error('Failed to fetch project members');
+  return res.json();
+};
+
+export const addProjectMember = async (projectId: string, userId: string, role?: string): Promise<void> => {
+  const res = await apiFetch(`/api/projects/${projectId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, role })
+  });
+  if (!res.ok) throw new Error('Failed to add project member');
+};
+
+export const removeProjectMember = async (projectId: string, userId: string): Promise<void> => {
+  const res = await apiFetch(`/api/projects/${projectId}/members/${userId}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('Failed to remove project member');
 };
 

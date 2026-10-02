@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, canManageDepartment } from '../middleware/auth.js';
 
 export function departmentRoutes(db: any) {
   const router = Router();
@@ -137,18 +137,32 @@ export function departmentRoutes(db: any) {
     }
   });
 
-  // PUT /api/departments/:id
-  router.put('/:id', requireAdmin, async (req, res) => {
-    const { code, name, description, color, icon, managerId, sortOrder, isActive } = req.body;
+  // PUT /api/departments/:id — Admin toàn quyền; Trưởng phòng được sửa định mức workload phòng mình.
+  router.put('/:id', async (req, res) => {
+    const { code, name, description, color, icon, managerId, sortOrder, isActive, workloadCapacityHours } = req.body;
     try {
       const existing = await db.get('SELECT * FROM departments WHERE id = ?', [req.params.id]);
       if (!existing) return res.status(404).json({ error: 'Not found' });
+      const isAdmin = req.user?.role === 'Admin';
+      const isOwnManager = canManageDepartment(req.user, req.params.id);
+      if (!isAdmin && !isOwnManager) {
+        return res.status(403).json({ error: 'Forbidden: Chỉ Admin hoặc Trưởng phòng ban này được sửa' });
+      }
+      const rawCap = Number(workloadCapacityHours);
+      const capacity = workloadCapacityHours !== undefined
+        ? (Number.isFinite(rawCap) && rawCap > 0 ? Math.min(168, Math.floor(rawCap)) : 40)
+        : (existing.workloadCapacityHours ?? 40);
+      if (!isAdmin) {
+        // Trưởng phòng chỉ được đổi định mức workload, không đổi cấu trúc phòng.
+        await db.run('UPDATE departments SET workloadCapacityHours = ?, updatedAt = ? WHERE id = ?', [capacity, new Date().toISOString(), req.params.id]);
+        return res.json({ success: true });
+      }
       const oldName = existing.name;
       const newName = name?.trim() ?? oldName;
       const now = new Date().toISOString();
 
       await db.run(
-        'UPDATE departments SET code = ?, name = ?, description = ?, color = ?, icon = ?, managerId = ?, sortOrder = ?, isActive = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE departments SET code = ?, name = ?, description = ?, color = ?, icon = ?, managerId = ?, sortOrder = ?, isActive = ?, workloadCapacityHours = ?, updatedAt = ? WHERE id = ?',
         [
           code?.trim() ?? existing.code,
           newName,
@@ -156,8 +170,9 @@ export function departmentRoutes(db: any) {
           color ?? existing.color,
           icon ?? existing.icon,
           managerId ?? existing.managerId,
-          sortOrder !== undefined ? Number(sortOrder) : existing.sortOrder,
+          sortOrder !== undefined && Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : existing.sortOrder,
           isActive !== undefined ? (isActive ? 1 : 0) : existing.isActive,
+          capacity,
           now,
           req.params.id,
         ]

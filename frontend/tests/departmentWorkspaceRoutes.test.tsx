@@ -114,13 +114,16 @@ vi.mock('../components/workflow/CrossDepartmentWorkflowTracker', () => ({
 vi.mock('../components/TaskModal', () => ({
   TaskModal: () => null,
 }));
+vi.mock('../components/DepartmentWorkspace/WorkloadTab', () => ({
+  WorkloadTab: (p: any) => <div data-testid="tab-workload" data-cap={p.capacity ?? 0} />,
+}));
 
 import DepartmentWorkspaceLayout from '../pages/DepartmentWorkspace/layout';
 import DepartmentWorkspaceDefault from '../pages/DepartmentWorkspace/default';
 import {
   DeptOverviewPage, DeptTasksPage, DeptRequestsPage, DeptDomainPage, DeptWorkflowPage,
   DeptCalendarPage, DeptDocumentsPage, DeptApprovalsPage, DeptReportsPage, DeptKpiPage,
-  DeptHistoryPage,
+  DeptHistoryPage, DeptWorkloadPage,
 } from '../pages/DepartmentWorkspace/sections';
 
 /** Cây route workspace dựng đúng như App.tsx. */
@@ -142,6 +145,7 @@ function WorkspaceRoutes({ initialPath }: { initialPath: string }) {
           <Route path="reports" element={<DeptReportsPage />} />
           <Route path="kpi" element={<DeptKpiPage />} />
           <Route path="history" element={<DeptHistoryPage />} />
+          <Route path="workload" element={<DeptWorkloadPage />} />
           <Route path="*" element={<Navigate to="overview" replace />} />
         </Route>
       </Routes>
@@ -167,6 +171,7 @@ const SECTION_MARKER: Record<string, string> = {
   reports: 'tab-reports',
   kpi: 'tab-kpi',
   history: 'tab-audit',
+  workload: 'tab-workload',
 };
 
 beforeEach(() => {

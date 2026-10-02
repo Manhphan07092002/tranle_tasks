@@ -65,7 +65,7 @@ beforeEach(() => {
 });
 
 describe('sidebar submenu Không gian phòng ban', () => {
-  it('ngoài workspace: submenu đóng mặc định, bấm mũi tên xổ đúng 11 mục', () => {
+  it('ngoài workspace: submenu đóng mặc định, bấm mũi tên xổ đúng 12 mục', () => {
     mockControl.role = 'Employee';
     mockControl.permissions = [];
     renderSidebar('/');
@@ -74,7 +74,7 @@ describe('sidebar submenu Không gian phòng ban', () => {
     // Bấm mũi tên mở rộng
     fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }));
     const links = deptLinks();
-    expect(links).toHaveLength(11);
+    expect(links).toHaveLength(12);
     // Href trỏ đúng phòng của user (dept-sales)
     const hrefs = links.map((a) => a.getAttribute('href'));
     expect(hrefs).toEqual(DEPT_SUBMENU.map((m) => `/department-workspace/dept-sales/${m.section}`));
@@ -82,8 +82,8 @@ describe('sidebar submenu Không gian phòng ban', () => {
 
   it('trong workspace: submenu tự mở, menu cha active, mục con active đúng route', () => {
     renderSidebar('/department-workspace/dept-legal/kpi');
-    // Submenu tự mở với 11 mục của phòng đang xem
-    expect(deptLinks()).toHaveLength(11);
+    // Submenu tự mở với 12 mục của phòng đang xem
+    expect(deptLinks()).toHaveLength(12);
     const kpiLink = deptLinkByLabel(/KPI/);
     expect(kpiLink.getAttribute('href')).toBe('/department-workspace/dept-legal/kpi');
     expect(kpiLink.className).toMatch('bg-brand-50');
