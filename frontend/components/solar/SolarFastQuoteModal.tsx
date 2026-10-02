@@ -32,14 +32,15 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
   const { saveContract, saveDepartmentRequest, departments } = useData();
   const { showToast } = useNotifications();
 
-  // Inputs
-  const [clientName, setClientName] = useState('Công ty CP Sản Xuất May Mặc An Phú');
-  const [projectName, setProjectName] = useState('Dự Án Điện Mặt Trời Mái Nhà Xưởng An Phú 1.0 MWp');
+  // Inputs (định danh KH/dự án để trống — không dùng demo cứng; thông số kỹ thuật chỉnh được)
+  const [clientName, setClientName] = useState('');
+  const [projectName, setProjectName] = useState('');
   const [projectType, setProjectType] = useState<'ci_rooftop' | 'residential' | 'hybrid_ess' | 'agri_pv'>('ci_rooftop');
   const [targetKwp, setTargetKwp] = useState<number>(1000);
   const [roofType, setRoofType] = useState<'trapezoidal' | 'seam_lock' | 'concrete' | 'tile'>('seam_lock');
   const [cableDistance, setCableDistance] = useState<number>(120); // mét
   const [evnTariff, setEvnTariff] = useState<number>(2850); // VNĐ/kWh
+  const [vatPercent, setVatPercent] = useState<number>(8); // % GTGT, chỉnh được theo chính sách thuế
   
   // Equipment Selection
   const [panelModel, setPanelModel] = useState<'aiko_650' | 'aiko_610' | 'mono_580'>('aiko_650');
@@ -210,7 +211,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
 
   // Financial Summaries
   const totalPreTax = bomItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  const vatAmount = Math.round(totalPreTax * 0.08); // 8% VAT
+  const vatAmount = Math.round(totalPreTax * (vatPercent / 100));
   const totalAfterTax = totalPreTax + vatAmount;
   const costPerWp = Math.round(totalPreTax / (actualKwp * 1000));
 
@@ -227,6 +228,10 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
 
   // Action 1: Save as Contract / Proposal into MySQL
   const handleSaveAsContract = async () => {
+    if (!clientName.trim() || !projectName.trim()) {
+      showToast({ type: 'error', title: 'Thiếu thông tin', message: 'Vui lòng nhập Tên khách hàng và Tên dự án.' });
+      return;
+    }
     try {
       setIsSubmitting(true);
       const contractCode = `BG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -236,7 +241,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
         contractName: projectName,
         clientName: clientName,
         preTaxValue: totalPreTax,
-        vatRate: 8,
+        vatRate: vatPercent,
         department: 'Phòng Kinh Doanh',
         departmentId: 'dept-sales',
         type: 'output',
@@ -248,7 +253,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
           origin: item.origin,
           unitPrice: item.unitPrice,
           total: item.totalPrice,
-          vatRate: 8
+          vatRate: vatPercent
         })),
         _isNew: true
       } as any);
@@ -344,21 +349,23 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
           {/* Top Inputs: Project & Parameters */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 dark:bg-slate-800/60 p-5 rounded-2xl border border-gray-200 dark:border-slate-700">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">Tên Khách Hàng / Chủ Đầu Tư:</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">Tên Khách Hàng / Chủ Đầu Tư: *</label>
               <input
                 type="text"
                 value={clientName}
                 onChange={e => setClientName(e.target.value)}
+                placeholder="Nhập tên khách hàng"
                 className="w-full px-3.5 py-2 text-xs font-semibold bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">Tên Dự Án Công Trình:</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">Tên Dự Án Công Trình: *</label>
               <input
                 type="text"
                 value={projectName}
                 onChange={e => setProjectName(e.target.value)}
+                placeholder="Nhập tên dự án"
                 className="w-full px-3.5 py-2 text-xs font-semibold bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
               />
             </div>
@@ -419,6 +426,21 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
                   className="w-full px-3.5 py-2 text-xs font-semibold bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
                 />
                 <span className="text-xs font-bold text-gray-500">mét</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">Thuế GTGT (%):</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={vatPercent}
+                  onChange={e => setVatPercent(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 text-xs font-semibold bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                />
+                <span className="text-xs font-bold text-gray-500">%</span>
               </div>
             </div>
           </div>
@@ -624,7 +646,7 @@ export const SolarFastQuoteModal: React.FC<SolarFastQuoteModalProps> = ({ isOpen
                     <td></td>
                   </tr>
                   <tr className="bg-gray-50 dark:bg-slate-800 font-bold text-xs">
-                    <td colSpan={6} className="p-2 text-right text-gray-500">Thuế GTGT (VAT 8%):</td>
+                    <td colSpan={6} className="p-2 text-right text-gray-500">Thuế GTGT (VAT {vatPercent}%):</td>
                     <td className="p-2 text-right font-mono text-gray-600 dark:text-slate-400">{formatVND(vatAmount)}</td>
                     <td></td>
                   </tr>

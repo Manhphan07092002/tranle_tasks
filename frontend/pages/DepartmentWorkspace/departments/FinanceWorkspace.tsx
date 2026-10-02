@@ -630,6 +630,7 @@ export const FinanceWorkspace: React.FC = () => {
       <ArAgingDetailModal
         isOpen={isArAgingOpen}
         onClose={() => setIsArAgingOpen(false)}
+        arRecords={arRecords}
       />
 
       {/* MODAL: SỬA AP/AR */}
