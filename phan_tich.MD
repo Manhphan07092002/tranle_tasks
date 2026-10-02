@@ -1,6 +1,6 @@
 # 🔍 Phân Tích Toàn Diện Dự Án Tran Le Tasks
 
-> **Ngày cập nhật:** 13/09/2026 (Phiên bản 6.0 — Hệ thống 13 Không gian làm việc Phòng ban & 100% MySQL 8 Dynamic, đồng bộ từ source code thực tế)  
+> **Ngày cập nhật:** 13/09/2026 (Phiên bản 6.0 — Hệ thống 13 Không gian làm việc Phòng ban & 100% MySQL 8 Dynamic, đồng bộ từ source code thực tế) — cập nhật số liệu 02/10/2026: 77 bảng, 31 mounts, 6 schedulers  
 > **Mục đích:** Tài liệu kỹ thuật chi tiết về cấu trúc mã nguồn, kiến trúc hệ thống, cơ sở dữ liệu MySQL, quy trình nghiệp vụ 13 phòng ban và quy chuẩn phát triển dành cho kỹ sư & Agent AI.  
 > **Tham khảo thêm:** [CLAUDE.md](CLAUDE.md), `.agent/workflows/tranle-*.md`.
 
@@ -120,7 +120,7 @@ tranle_tasks/
 │
 └── backend/                          # Máy chủ ứng dụng Express 5 & MySQL 8
     ├── server.ts                     # Khởi tạo HTTP server, socket.io & 29 routes (server.ts:108-137)
-    ├── db_mysql.ts                   # MySQL 8 adapter + DDL 68 tables + seeds + SQL normalizer (~1285 dòng)
+    ├── db_mysql.ts                   # MySQL 8 adapter + DDL 77 tables + seeds + SQL normalizer (~1285 dòng)
     ├── socket.ts                     # Cấu hình Realtime WebSocket Server
     ├── mailer.ts                     # Trình gửi Email SMTP Transporter
     ├── middleware/                   # 2 middlewares
@@ -143,7 +143,7 @@ tranle_tasks/
 
 ---
 
-## 3. Kiến Trúc Cơ Sở Dữ Liệu MySQL 8 (68 Bảng — `backend/db_mysql.ts`)
+## 3. Kiến Trúc Cơ Sở Dữ Liệu MySQL 8 (77 bảng — `backend/db_mysql.ts`)
 
 Hệ thống hoạt động trên nền tảng **100% MySQL 8**, tuân thủ nguyên tắc không sử dụng mock data. Mọi chỉ số thống kê (KPIs, Charts, Workflows) đều được tính toán theo thời gian thực từ cơ sở dữ liệu.
 
@@ -306,4 +306,4 @@ npm run test --workspace=backend
 
 ---
 
-> **Cam kết chất lượng:** Toàn bộ hệ thống TranLe Tasks tuân thủ nguyên tắc **Zero-Hardcode**, 100% dữ liệu đồng bộ và lưu trữ an toàn trong MySQL 8 (68 bảng), phục vụ hoàn hảo cho quy trình làm việc thực tế của Công ty Cổ phần Tư vấn Xây dựng Điện Trần Lê. Tài liệu đồng bộ từ source code ngày 13/09/2026: 29 routes backend, 22 pages + 23 services frontend, 5 schedulers, 4 contexts.
+> **Cam kết chất lượng:** Toàn bộ hệ thống TranLe Tasks tuân thủ nguyên tắc **Zero-Hardcode**, 100% dữ liệu đồng bộ và lưu trữ an toàn trong MySQL 8 (77 bảng), phục vụ hoàn hảo cho quy trình làm việc thực tế của Công ty Cổ phần Tư vấn Xây dựng Điện Trần Lê. Tài liệu đồng bộ từ source code ngày 02/10/2026: 31 mounts backend, 22 pages + 23 services frontend, 6 schedulers, 4 contexts.

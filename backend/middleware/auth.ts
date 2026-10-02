@@ -72,16 +72,23 @@ export function isDepartmentManager(user?: JwtPayload) {
   return isGlobalManager(user) || user?.role === 'Manager' || user?.role === 'Trưởng Phòng' || user?.role === 'Phó Phòng';
 }
 
+const DEPT_ID_ALIASES: Record<string, string> = {
+  'dept-finance': 'dept-fin', 'dept-marketing': 'dept-mkt',
+  'dept-procurement': 'dept-proc', 'dept-warehouse': 'dept-wh',
+};
+
+function canonicalDeptId(id: string | undefined) {
+  if (!id) return '';
+  return DEPT_ID_ALIASES[id] || id;
+}
+
 export function canManageDepartment(user: JwtPayload | undefined, departmentId: string) {
   if (isGlobalManager(user)) return true;
   if (!isDepartmentManager(user)) return false;
   // Older tokens have only the legacy department field. New tokens carry departmentId.
-  const aliases: Record<string, string> = {
-    'dept-finance': 'dept-fin', 'dept-marketing': 'dept-mkt',
-    'dept-procurement': 'dept-proc', 'dept-warehouse': 'dept-wh',
-  };
-  const canonicalDepartmentId = aliases[departmentId] || departmentId;
-  return user?.departmentId === canonicalDepartmentId || user?.department === canonicalDepartmentId;
+  const canonicalDepartmentId = canonicalDeptId(departmentId);
+  return canonicalDeptId(user?.departmentId) === canonicalDepartmentId
+    || canonicalDeptId(user?.department) === canonicalDepartmentId;
 }
 
 export function requireDepartmentManager(paramName = 'departmentId') {
@@ -90,6 +97,32 @@ export function requireDepartmentManager(paramName = 'departmentId') {
     const departmentId = Array.isArray(rawDepartmentId) ? rawDepartmentId[0] : rawDepartmentId;
     if (!canManageDepartment(req.user, departmentId)) {
       return res.status(403).json({ error: 'Forbidden: Bạn chỉ được quản lý dữ liệu của phòng ban mình' });
+    }
+    next();
+  };
+}
+
+/**
+ * Quyền ĐỌC dữ liệu phòng ban: nới hơn requireDepartmentManager.
+ * - Admin/Director: toàn công ty.
+ * - Mọi user đã đăng nhập thuộc phòng ban đó (kể cả Employee): được đọc.
+ * - Phòng khác: 403.
+ * Dùng cho các route GET; ghi (POST/PUT/DELETE) vẫn giữ requireDepartmentManager.
+ */
+export function canViewDepartment(user: JwtPayload | undefined, departmentId: string) {
+  if (isGlobalManager(user)) return true;
+  if (!user) return false;
+  const canonicalDepartmentId = canonicalDeptId(departmentId);
+  return canonicalDeptId(user?.departmentId) === canonicalDepartmentId
+    || canonicalDeptId(user?.department) === canonicalDepartmentId;
+}
+
+export function requireDepartmentMember(paramName = 'departmentId') {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const rawDepartmentId = req.params[paramName];
+    const departmentId = Array.isArray(rawDepartmentId) ? rawDepartmentId[0] : rawDepartmentId;
+    if (!canViewDepartment(req.user, departmentId)) {
+      return res.status(403).json({ error: 'Forbidden: Bạn chỉ được xem dữ liệu của phòng ban mình' });
     }
     next();
   };

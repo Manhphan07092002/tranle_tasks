@@ -1,7 +1,9 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { PlusCircle, LogOut, LayoutDashboard, CheckSquare, Calendar, StickyNote, Users, Settings, Video, FileText, Bell, Shield, Mail, DollarSign, Briefcase, Package, FolderOpen, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, History, Link, CreditCard, ShieldCheck, Layers } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
+import { DEPT_SUBMENU, DEFAULT_DEPT_SECTION } from '../../pages/DepartmentWorkspace/deptSections';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Button, Avatar } from '../UI';
 import { apiFetch } from '../../services/api';
@@ -88,6 +90,8 @@ const NAV_LABELS: Record<string, string> = {
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen, openCreateModal }) => {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const { departments } = useData();
   const [unreadMailCount, setUnreadMailCount] = React.useState(0);
   const location = useLocation();
 
@@ -112,6 +116,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileM
     return location.pathname.startsWith('/revenue');
   });
 
+  // Không gian phòng ban: submenu 11 mục, URL là nguồn trạng thái chính.
+  const isDeptActive = location.pathname.startsWith('/department-workspace');
+  const urlDeptId = React.useMemo(() => {
+    const m = location.pathname.match(/^\/department-workspace\/([^/]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }, [location.pathname]);
+  const sidebarUserDeptId = React.useMemo(() => {
+    if (!user) return '';
+    const found = (departments || []).find(
+      (d: any) => d.id === (user as any).departmentId || d.name === (user as any).department,
+    );
+    return found?.id || (departments || [])[0]?.id || '';
+  }, [user, departments]);
+  // Khi đang xem 1 phòng ban, submenu trỏ đúng phòng đó; ngược lại dùng phòng của user.
+  const submenuDeptId = urlDeptId || sidebarUserDeptId;
+  const deptLinkFor = (section: string) =>
+    submenuDeptId ? `/department-workspace/${submenuDeptId}/${section}` : '/department-workspace';
+  const [isDeptExpanded, setIsDeptExpanded] = React.useState(() => {
+    return location.pathname.startsWith('/department-workspace');
+  });
+
   React.useEffect(() => {
     if (location.pathname.startsWith('/contracts')) {
       setIsContractsExpanded(true);
@@ -122,12 +147,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileM
     if (location.pathname.startsWith('/revenue')) {
       setIsRevenueExpanded(true);
     }
+    if (location.pathname.startsWith('/department-workspace')) {
+      setIsDeptExpanded(true);
+    }
   }, [location.pathname]);
 
 
   // Fetch unread mail count periodically
   React.useEffect(() => {
     if (!user) return;
+    // Token hết hạn/stale thì bỏ qua để khỏi spam 401; apiFetch sẽ xử lý khi user thao tác tiếp.
+    const token = localStorage.getItem('tranle_token') || localStorage.getItem('ctc_token');
+    if (!token) return;
 
     const fetchUnreadCount = async () => {
       try {
@@ -428,6 +459,66 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileMenuOpen, setIsMobileM
                                   <Calendar size={14} className="flex-shrink-0" />
                                   <span className="flex-1 truncate">Doanh thu theo kỳ</span>
                                 </NavLink>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (item.id === 'department_workspace') {
+                        return (
+                          <div key={item.id} className="space-y-0.5">
+                            {/* Hàng menu cha: bấm tên -> Tổng quan; bấm mũi tên -> xổ/đóng */}
+                            <div
+                              className={`
+                                w-full flex items-center gap-3 pl-3 pr-1.5 py-2.5 text-sm font-medium rounded-xl transition-all
+                                ${isDeptActive
+                                  ? 'bg-brand-50/60 text-brand-700 border border-brand-100/50 shadow-sm'
+                                  : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900'
+                                }
+                              `}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigate(deptLinkFor(DEFAULT_DEPT_SECTION));
+                                  setIsMobileMenuOpen(false);
+                                }}
+                                className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                              >
+                                <item.icon size={17} className="flex-shrink-0" />
+                                <span className="flex-1 truncate">{NAV_LABELS[item.id] || t(item.id)}</span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={isDeptExpanded ? 'Thu gọn' : 'Mở rộng'}
+                                onClick={() => setIsDeptExpanded(prev => !prev)}
+                                className="p-1 rounded-lg text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 transition-colors flex-shrink-0"
+                              >
+                                {isDeptExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                              </button>
+                            </div>
+
+                            {/* Submenu 11 mục */}
+                            {isDeptExpanded && (
+                              <div className="pl-6 pr-1 py-1 space-y-1 border-l-2 border-brand-100/50 ml-5 animate-in slide-in-from-top duration-200">
+                                {DEPT_SUBMENU.map(sub => (
+                                  <NavLink
+                                    key={sub.section}
+                                    to={deptLinkFor(sub.section)}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className={({ isActive }) => `
+                                      w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all
+                                      ${isActive
+                                        ? 'bg-brand-50 text-brand-700 shadow-sm border border-brand-100'
+                                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                      }
+                                    `}
+                                  >
+                                    <sub.icon size={14} className="flex-shrink-0" />
+                                    <span className="flex-1 truncate">{sub.label}</span>
+                                  </NavLink>
+                                ))}
                               </div>
                             )}
                           </div>

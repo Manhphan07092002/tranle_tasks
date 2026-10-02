@@ -32,7 +32,7 @@ import { organizationRoutes } from './routes/organization.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { adminRoutes } from './routes/admin.js';
 import { eventRoutes } from './routes/events.js';
-import { activityRoutes } from './routes/activity.js';
+import { activityRoutes, departmentActivityRoutes } from './routes/activity.js';
 import { mailRoutes } from './routes/mail.js';
 import { uploadRoutes } from './routes/upload.js';
 import { contractRoutes } from './routes/contracts.js';
@@ -142,6 +142,7 @@ async function startServer() {
   app.use('/api/admin', authenticated, requireAdmin, adminRoutes(db, mailer));
   app.use('/api/events', authenticated, eventRoutes(db));
   app.use('/api/activity', authenticated, activityRoutes(db));
+  app.use('/api/activity-logs', authenticated, departmentActivityRoutes(db));
   app.use('/api/mail', authenticated, mailRoutes(db));
   app.use('/api/contracts', authenticated, contractRoutes(db));
   app.use('/api/contract-links', authenticated, contractLinkRoutes(db));

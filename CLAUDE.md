@@ -89,17 +89,17 @@ tranle_tasks/
 │   ├── contexts/             # 4 contexts: AuthContext, DataContext, LanguageContext, NotificationContext
 │   └── services/             # 23 API service files (api, departmentWorkspaceService, taskService, contractService, projectService, productService, aiService, approvalService, ...)
 └── backend/                  # Express 5 + TypeScript (tsx runtime)
-    ├── server.ts             # Entry point — Express setup + mount 29 routes (server.ts:108-137)
-    ├── db_mysql.ts           # MySQL 8 adapter + DDL 68 tables + seeds + SQL normalizer (~1285 dòng)
+    ├── server.ts             # Entry point — Express setup + mount 31 routes (server.ts:127-166)
+    ├── db_mysql.ts           # MySQL 8 adapter + DDL 77 tables + seeds + SQL normalizer (~1285 dòng)
     ├── socket.ts             # Socket.io realtime server
     ├── mailer.ts             # Nodemailer transporter
     ├── middleware/           # 2 files: auth.ts (requireAuth/requireAdmin), validate.ts (zod)
-    ├── routes/               # 29 route modules: auth, users, roles, departments, teams, positions, organization, tasks, taskTemplates, notes, meetings, reports, notifications, events, activity, mail, upload, contracts, contractLinks, revenue, clients, products, projects, documents, departmentRequests, approvals, admin, ai, departmentWorkspace
-    ├── schedulers/           # 5 cron jobs: fridayReminder, noteReminder, dailyTaskReminder, mailScheduler, revenueAutoSubmit
+    ├── routes/               # 29 route modules + activity-logs (audit theo phòng ban): auth, users, roles, departments, teams, positions, organization, tasks, taskTemplates, notes, meetings, reports, notifications, events, activity, mail, upload, contracts, contractLinks, revenue, clients, products, projects, documents, departmentRequests, approvals, admin, ai, departmentWorkspace
+    ├── schedulers/           # 6 cron jobs: fridayReminder, noteReminder, dailyTaskReminder, mailScheduler, revenueAutoSubmit, chainReminders
     └── utils/                # cryptoUtils.ts, notify.ts
 ```
 
-Chi tiết đầy đủ (danh sách 29 routes, 68 bảng, 22 pages, 23 services): xem [phan_tich.MD](phan_tich.MD).
+Chi tiết đầy đủ (danh sách routes, 77 bảng, 22 pages, 23 services): xem [phan_tich.MD](phan_tich.MD).
 
 ---
 
@@ -159,4 +159,4 @@ docker logs -f tranle_task_app
 
 ---
 
-> **Lưu ý:** Tài liệu được đồng bộ tự động từ source code dự án ngày 13/09/2026. Mọi thay đổi về kiến trúc, bảng database hoặc API endpoints cần được cập nhật đồng thời tại [CLAUDE.md](CLAUDE.md) và [phan_tich.MD](phan_tich.MD).
+> **Lưu ý:** Tài liệu được đồng bộ tự động từ source code dự án ngày 02/10/2026. Mọi thay đổi về kiến trúc, bảng database hoặc API endpoints cần được cập nhật đồng thời tại [CLAUDE.md](CLAUDE.md) và [phan_tich.MD](phan_tich.MD).

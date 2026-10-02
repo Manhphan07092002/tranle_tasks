@@ -2,14 +2,30 @@ import { apiFetch } from './api';
 
 const API_BASE = '/api';
 
+async function readWorkspaceJson(response: Response, url: string) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err: any = new Error(
+      (data as any)?.error || `Không tải được dữ liệu (${response.status}) — ${url}`,
+    );
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
 export const departmentWorkspaceService = {
   getRecords: async (departmentId: string, type: string) => {
-    const response = await apiFetch(`${API_BASE}/department-workspace/${departmentId}/records?type=${type}`);
-    return response.json();
+    const url = `${API_BASE}/department-workspace/${departmentId}/records?type=${type}`;
+    const response = await apiFetch(url);
+    const data = await readWorkspaceJson(response, url);
+    // Backend trả mảng; nếu vì lý do nào đó không phải mảng thì chuẩn hóa về [] để UI .map an toàn.
+    return Array.isArray(data) ? data : [];
   },
   getKpis: async (departmentId: string) => {
-    const response = await apiFetch(`${API_BASE}/department-workspace/${departmentId}/kpis`);
-    return response.json();
+    const url = `${API_BASE}/department-workspace/${departmentId}/kpis`;
+    const response = await apiFetch(url);
+    return readWorkspaceJson(response, url);
   },
   createRecord: async (departmentId: string, type: string, data: any) => {
     const response = await apiFetch(`${API_BASE}/department-workspace/${departmentId}/records`, {

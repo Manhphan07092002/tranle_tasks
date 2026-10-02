@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { MysqlDb } from '../db_mysql.js';
 import { sendNotification } from '../utils/notify.js';
 import { validate } from '../middleware/validate.js';
-import { requireAdmin, requireDepartmentManager } from '../middleware/auth.js';
+import { requireAdmin, requireDepartmentManager, requireDepartmentMember } from '../middleware/auth.js';
 
 // P1: body records luôn có dạng { type, data } — chặn type lạ và data không phải object.
 const WorkspaceRecordSchema = z.object({
@@ -36,7 +36,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
   const router = express.Router();
 
   // Route: GET /api/department-workspace/:departmentId/records
-  router.get('/:departmentId/records', requireDepartmentManager(), async (req, res) => {
+  router.get('/:departmentId/records', requireDepartmentMember(), async (req, res) => {
     const departmentId = normalizeDepartmentId(req.params.departmentId);
     const { type } = req.query;
 
@@ -805,7 +805,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
 
   // Route: GET /api/department-workspace/:departmentId/kpis
   // Returns computed KPI metrics from MySQL for the dashboard cards
-  router.get('/:departmentId/kpis', requireDepartmentManager(), async (req, res) => {
+  router.get('/:departmentId/kpis', requireDepartmentMember(), async (req, res) => {
     const departmentId = normalizeDepartmentId(req.params.departmentId);
     try {
       let kpis: Record<string, any> = {};
@@ -836,7 +836,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           urgentRequests: urgentRequests?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-epc') {
-        const [activeProjects] = await db.all(`SELECT COUNT(DISTINCT project) AS cnt FROM epc_subcontractors WHERE status = 'active'`) as any[];
+        const [activeProjects] = await db.all(`SELECT COUNT(DISTINCT task) AS cnt FROM epc_subcontractors WHERE status = 'active'`) as any[];
         const [totalWorkers] = await db.all(`SELECT COUNT(*) AS cnt FROM epc_subcontractors WHERE status = 'active'`) as any[];
         const [inboundCount] = await db.all(`SELECT COUNT(*) AS cnt FROM warehouse_inbound`) as any[];
         const [openHse] = await db.all(`SELECT COUNT(*) AS cnt FROM epc_hse_logs WHERE status = 'open'`) as any[];
@@ -928,7 +928,7 @@ export function departmentWorkspaceRoutes(db: MysqlDb) {
           outboundToday: outboundToday?.cnt ?? 0,
         };
       } else if (departmentId === 'dept-exec') {
-        const [totalContracts] = await db.all(`SELECT COALESCE(SUM(value), 0) AS totalVal, COUNT(*) AS cnt FROM contracts`) as any[];
+        const [totalContracts] = await db.all(`SELECT COALESCE(SUM(postTaxValue), 0) AS totalVal, COUNT(*) AS cnt FROM contracts`) as any[];
         const [totalProjects] = await db.all(`SELECT COUNT(*) AS cnt FROM projects`) as any[];
         const [pendingApprovals] = await db.all(`SELECT COUNT(*) AS cnt FROM approvals WHERE status = 'pending'`) as any[];
         const [okrsCompleted] = await db.all(`SELECT COUNT(*) AS cnt FROM company_okrs WHERE status = 'completed'`) as any[];

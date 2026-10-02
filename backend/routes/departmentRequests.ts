@@ -1,6 +1,21 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
+import { isGlobalManager, canManageDepartment } from '../middleware/auth.js';
+
+/** Các định danh phòng ban của user (ID + tên legacy) để so khớp liên phòng. */
+function myDeptKeys(user: any): string[] {
+  return [user?.departmentId, user?.department].filter((v) => typeof v === 'string' && v.length > 0);
+}
+
+/** Request có liên quan tới user: thuộc 2 phòng ban gửi/nhận, hoặc user là người tạo/được giao. */
+function isInvolved(user: any, r: any): boolean {
+  if (!user || !r) return false;
+  if (isGlobalManager(user)) return true;
+  const keys = myDeptKeys(user);
+  if (keys.includes(r.sourceDepartmentId) || keys.includes(r.targetDepartmentId)) return true;
+  return r.requesterId === user.id || r.assigneeId === user.id;
+}
 
 export function departmentRequestRoutes(db: any) {
   const router = Router();
@@ -45,6 +60,19 @@ export function departmentRequestRoutes(db: any) {
         params.push(status);
       }
 
+      // Employee chỉ thấy request liên quan tới mình/phòng mình; Lãnh đạo thấy tất cả.
+      if (!isGlobalManager(req.user)) {
+        const keys = myDeptKeys(req.user);
+        if (keys.length > 0) {
+          const placeholders = keys.map(() => '?').join(', ');
+          query += ` AND (r.sourceDepartmentId IN (${placeholders}) OR r.targetDepartmentId IN (${placeholders}) OR r.requesterId = ? OR r.assigneeId = ?)`;
+          params.push(...keys, ...keys, req.user!.id, req.user!.id);
+        } else {
+          query += ' AND (r.requesterId = ? OR r.assigneeId = ?)';
+          params.push(req.user!.id, req.user!.id);
+        }
+      }
+
       query += ' ORDER BY r.createdAt DESC';
       const rows = await db.all(query, params);
 
@@ -79,6 +107,9 @@ export function departmentRequestRoutes(db: any) {
         [req.params.id]
       );
       if (!r) return res.status(404).json({ error: 'Request not found' });
+      if (!isInvolved(req.user, r)) {
+        return res.status(403).json({ error: 'Forbidden: Yêu cầu này không thuộc phòng ban của bạn' });
+      }
       res.json({
         ...r,
         attachments: r.attachments ? JSON.parse(r.attachments) : [],
@@ -92,12 +123,18 @@ export function departmentRequestRoutes(db: any) {
   // POST /api/department-requests - Create request
   router.post('/', async (req, res) => {
     const {
-      sourceDepartmentId, targetDepartmentId, requesterId, assigneeId,
+      sourceDepartmentId, targetDepartmentId, assigneeId,
       title, description, priority, relatedEntityType, relatedEntityId, dueDate, attachments
     } = req.body;
 
     if (!title?.trim()) return res.status(400).json({ error: 'Tiêu đề yêu cầu không được để trống' });
     if (!sourceDepartmentId || !targetDepartmentId) return res.status(400).json({ error: 'Phải chỉ định phòng ban gửi và phòng ban nhận' });
+
+    // Chống mạo danh: người tạo luôn là user đăng nhập; phòng gửi phải là phòng của mình (trừ Lãnh đạo).
+    const requesterId = req.user!.id;
+    if (!isGlobalManager(req.user) && !myDeptKeys(req.user).includes(sourceDepartmentId)) {
+      return res.status(403).json({ error: 'Forbidden: Bạn chỉ được tạo yêu cầu từ phòng ban của mình' });
+    }
 
     try {
       const id = `req-${randomUUID().slice(0, 8)}`;
@@ -156,6 +193,16 @@ export function departmentRequestRoutes(db: any) {
       const existing = await db.get('SELECT * FROM department_requests WHERE id = ?', [req.params.id]);
       if (!existing) return res.status(404).json({ error: 'Request not found' });
 
+      // Người tạo, người được giao, hoặc Quản lý 1 trong 2 phòng mới được cập nhật.
+      const allowed = isGlobalManager(req.user)
+        || existing.requesterId === req.user!.id
+        || existing.assigneeId === req.user!.id
+        || canManageDepartment(req.user, existing.sourceDepartmentId)
+        || canManageDepartment(req.user, existing.targetDepartmentId);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden: Bạn không có quyền cập nhật yêu cầu này' });
+      }
+
       const now = new Date().toISOString();
       await db.run(
         `UPDATE department_requests
@@ -196,6 +243,14 @@ export function departmentRequestRoutes(db: any) {
     try {
       const reqItem = await db.get('SELECT * FROM department_requests WHERE id = ?', [req.params.id]);
       if (!reqItem) return res.status(404).json({ error: 'Request not found' });
+
+      // Chỉ Quản lý phòng nhận (hoặc Lãnh đạo / người được giao) được chuyển thành task.
+      const allowed = isGlobalManager(req.user)
+        || reqItem.assigneeId === req.user!.id
+        || canManageDepartment(req.user, reqItem.targetDepartmentId);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden: Chỉ phòng ban nhận mới được chuyển yêu cầu thành công việc' });
+      }
 
       const targetDept = await db.get('SELECT id, name FROM departments WHERE id = ?', [reqItem.targetDepartmentId]);
       const taskId = `t-${Date.now()}`;
@@ -243,6 +298,15 @@ export function departmentRequestRoutes(db: any) {
   // DELETE /api/department-requests/:id
   router.delete('/:id', async (req, res) => {
     try {
+      const existing = await db.get('SELECT * FROM department_requests WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Request not found' });
+      const allowed = isGlobalManager(req.user)
+        || existing.requesterId === req.user!.id
+        || canManageDepartment(req.user, existing.sourceDepartmentId)
+        || canManageDepartment(req.user, existing.targetDepartmentId);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden: Bạn không có quyền xóa yêu cầu này' });
+      }
       await db.run('DELETE FROM department_requests WHERE id = ?', [req.params.id]);
       res.json({ success: true });
     } catch (e: any) {

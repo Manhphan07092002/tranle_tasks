@@ -22,7 +22,13 @@ const NotificationsPage = React.lazy(() => import('./pages/Notifications/index')
 const ProjectsPage = React.lazy(() => import('./pages/Projects/index'));
 const ProjectReportsPage = React.lazy(() => import('./pages/ProjectReports/index'));
 const DocumentsPage = React.lazy(() => import('./pages/DocumentAdmin/index'));
-const DepartmentWorkspacePage = React.lazy(() => import('./pages/DepartmentWorkspace/index'));
+const DepartmentWorkspaceLayout = React.lazy(() => import('./pages/DepartmentWorkspace/layout'));
+const DepartmentWorkspaceDefault = React.lazy(() => import('./pages/DepartmentWorkspace/default'));
+import {
+  DeptOverviewPage, DeptTasksPage, DeptRequestsPage, DeptDomainPage, DeptWorkflowPage,
+  DeptCalendarPage, DeptDocumentsPage, DeptApprovalsPage, DeptReportsPage, DeptKpiPage,
+  DeptHistoryPage,
+} from './pages/DepartmentWorkspace/sections';
 const ApprovalsPage = React.lazy(() => import('./pages/Approvals/index'));
 const OrganizationPage = React.lazy(() => import('./pages/Organization/index'));
 
@@ -457,7 +463,23 @@ export default function TranLeTaskApp() {
               <Route path="/revenue" element={<React.Suspense fallback={<PageLoading label="Doanh thu" />}><RevenuePage /></React.Suspense>} />
               <Route path="/notifications" element={<React.Suspense fallback={<PageLoading label="Thông báo" />}><NotificationsPage /></React.Suspense>} />
               <Route path="/organization" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Sơ đồ tổ chức...</div>}><OrganizationPage /></React.Suspense>} />
-              <Route path="/department-workspace" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspacePage /></React.Suspense>} />
+              <Route path="/department-workspace" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspaceDefault /></React.Suspense>} />
+              <Route path="/department-workspace/:departmentId" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Không gian làm việc...</div>}><DepartmentWorkspaceLayout /></React.Suspense>}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<DeptOverviewPage />} />
+                <Route path="tasks" element={<DeptTasksPage />} />
+                <Route path="requests" element={<DeptRequestsPage />} />
+                <Route path="domain" element={<DeptDomainPage />} />
+                <Route path="workflow" element={<DeptWorkflowPage />} />
+                <Route path="calendar" element={<DeptCalendarPage />} />
+                <Route path="documents" element={<DeptDocumentsPage />} />
+                <Route path="approvals" element={<DeptApprovalsPage />} />
+                <Route path="reports" element={<DeptReportsPage />} />
+                <Route path="kpi" element={<DeptKpiPage />} />
+                <Route path="history" element={<DeptHistoryPage />} />
+                <Route path="*" element={<Navigate to="overview" replace />} />
+              </Route>
+
               <Route path="/approvals" element={<React.Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải Phê duyệt...</div>}><ApprovalsPage /></React.Suspense>} />
               <Route path="/documents" element={<React.Suspense fallback={<PageLoading label="Tài liệu" />}><DocumentsPage /></React.Suspense>} />
 

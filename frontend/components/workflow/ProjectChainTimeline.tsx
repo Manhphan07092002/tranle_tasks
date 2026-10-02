@@ -34,17 +34,17 @@ export const ProjectChainTimeline: React.FC<Props> = ({ project, onChanged }) =>
         leads, engRequests, designs, prs, pos, inbounds, outbounds,
         milestones, ars, omSchedules, renewals,
       ] = await Promise.all([
-        departmentWorkspaceService.getRecords('dept-sales', 'leads'),
-        departmentWorkspaceService.getRecords('dept-eng', 'requests'),
-        departmentWorkspaceService.getRecords('dept-eng', 'design'),
-        departmentWorkspaceService.getRecords('dept-proc', 'prs'),
-        departmentWorkspaceService.getRecords('dept-proc', 'pos'),
-        departmentWorkspaceService.getRecords('dept-wh', 'inbound'),
-        departmentWorkspaceService.getRecords('dept-wh', 'outbound'),
+        departmentWorkspaceService.getRecords('dept-sales', 'leads').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-eng', 'requests').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-eng', 'design').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-proc', 'prs').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-proc', 'pos').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-wh', 'inbound').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-wh', 'outbound').catch(() => []),
         getProjectMilestones(project.id).catch(() => []),
-        departmentWorkspaceService.getRecords('dept-fin', 'ar'),
-        departmentWorkspaceService.getRecords('dept-om', 'pm'),
-        departmentWorkspaceService.getRecords('dept-cs', 'renewals'),
+        departmentWorkspaceService.getRecords('dept-fin', 'ar').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-om', 'pm').catch(() => []),
+        departmentWorkspaceService.getRecords('dept-cs', 'renewals').catch(() => []),
       ]);
 
       const name = project.name || '';

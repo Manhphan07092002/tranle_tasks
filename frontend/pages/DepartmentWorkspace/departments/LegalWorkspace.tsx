@@ -23,6 +23,7 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
   const [library, setLibrary] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<any>({ pendingApprovals: 0, totalContracts: 0 });
+  const [accessDenied, setAccessDenied] = useState(false);
 
   // Modal State
   const [isAddContractOpen, setIsAddContractOpen] = useState(false);
@@ -50,6 +51,7 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
 
   const fetchLegalData = async () => {
     setLoading(true);
+    setAccessDenied(false);
     try {
       const [contractData, approvalData, libraryData, freshKpis] = await Promise.all([
         departmentWorkspaceService.getRecords('dept-legal', 'contracts'),
@@ -57,11 +59,13 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
         departmentWorkspaceService.getRecords('dept-legal', 'library'),
         departmentWorkspaceService.getKpis('dept-legal')
       ]);
-      setContracts(contractData);
-      setApprovals(approvalData);
-      setLibrary(libraryData);
-      if (freshKpis) setKpis(freshKpis);
-    } catch (err) {
+      // Guard mảng để UI .map không bao giờ crash kể cả khi API trả hình dạng lạ.
+      setContracts(Array.isArray(contractData) ? contractData : []);
+      setApprovals(Array.isArray(approvalData) ? approvalData : []);
+      setLibrary(Array.isArray(libraryData) ? libraryData : []);
+      if (freshKpis && typeof freshKpis === 'object') setKpis(freshKpis);
+    } catch (err: any) {
+      if (err?.status === 403) setAccessDenied(true);
       console.error('Error fetching legal records:', err);
     } finally {
       setLoading(false);
@@ -174,6 +178,12 @@ export const LegalWorkspace: React.FC<LegalWorkspaceProps> = ({ contracts: propC
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-300">
+      {accessDenied && (
+        <div className="flex items-center gap-3 px-5 py-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm font-semibold">
+          <ShieldAlert size={18} className="flex-shrink-0" />
+          <span>Bạn không có quyền xem dữ liệu Pháp chế. Vui lòng liên hệ Trưởng phòng hoặc Quản trị viên để được cấp quyền.</span>
+        </div>
+      )}
       {/* 1. HEADER */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-gray-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden border border-slate-700/50">
         <div className="absolute right-0 top-0 w-96 h-96 bg-slate-600/10 rounded-full blur-3xl pointer-events-none" />
