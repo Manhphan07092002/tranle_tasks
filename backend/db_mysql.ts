@@ -496,18 +496,10 @@ async function seedIfEmpty(db: MysqlDb) {
   ];
 
   for (const r of INITIAL_ROLES) {
-    const existing = await db.get('SELECT id FROM roles WHERE name = ?', [r.name]);
-    if (!existing) {
-      await db.run(
-        'INSERT INTO roles (id, name, description, color, permissions, isSystem) VALUES (?, ?, ?, ?, ?, ?)',
-        [r.id, r.name, r.description, r.color, r.permissions, r.isSystem]
-      );
-    } else {
-      await db.run(
-        'UPDATE roles SET description = ?, color = ?, permissions = ? WHERE name = ?',
-        [r.description, r.color, r.permissions, r.name]
-      );
-    }
+    await db.run(
+      'INSERT INTO roles (id, name, description, color, permissions, isSystem) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE description = VALUES(description), color = VALUES(color), permissions = VALUES(permissions)',
+      [r.id, r.name, r.description, r.color, r.permissions, r.isSystem]
+    );
   }
 
   // ── 3. Departments (Tran Le Organizational Structure) ──────────────────────
@@ -530,18 +522,10 @@ async function seedIfEmpty(db: MysqlDb) {
   ];
 
   for (const d of TRANLE_DEPTS) {
-    const existing = await db.get('SELECT id FROM departments WHERE name = ?', [d.name]);
-    if (!existing) {
-      await db.run(
-        'INSERT INTO departments (id, name, description, color) VALUES (?, ?, ?, ?)',
-        [d.id, d.name, d.description, d.color]
-      );
-    } else {
-      await db.run(
-        'UPDATE departments SET description = ?, color = ? WHERE name = ?',
-        [d.description, d.color, d.name]
-      );
-    }
+    await db.run(
+      'INSERT INTO departments (id, name, description, color) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), color = VALUES(color)',
+      [d.id, d.name, d.description, d.color]
+    );
   }
 
   // ── 4. Users ───────────────────────────────────────────────────────────────
