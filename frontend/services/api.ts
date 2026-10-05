@@ -1,36 +1,48 @@
-export async function apiFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('tranle_token');
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const headers: any = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
+import { getAccessToken, refreshAccessToken, clearAccessToken } from './tokenStore';
 
-  const response = await fetch(url, { ...options, headers });
-  
+function hardLogout() {
+  clearAccessToken();
+  try {
+    localStorage.removeItem('tranle_user');
+    localStorage.removeItem('orange_task_user_id');
+    // Drop any legacy long-lived token that may predate the refresh-token rollout.
+    localStorage.removeItem('tranle_token');
+  } catch { /* ignore */ }
+  window.location.href = '/';
+}
+
+export async function apiFetch(url: string, options: RequestInit = {}) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const doFetch = (token: string | null) =>
+    fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+
+  let response = await doFetch(getAccessToken());
+
   if (response.status === 401) {
-    // Only clear token for actual auth failures (not mail IMAP auth failures)
-    // Mail endpoints return 401 when IMAP credentials are wrong - that's different from JWT expiry
     const isMailEndpoint = url.includes('/api/mail/');
+    // Access tokens live 15 minutes — try one silent refresh before giving up.
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await doFetch(getAccessToken());
+      if (response.status !== 401) return response;
+    }
+    // Refresh failed or retry still unauthorized.
     if (!isMailEndpoint) {
-      localStorage.removeItem('tranle_token');
-      localStorage.removeItem('tranle_user');
-      localStorage.removeItem('orange_task_user_id');
-      window.location.href = '/';
+      hardLogout();
     } else {
-      // If it's a mail endpoint, check if it's actually a JWT expiry by cloning the response
-      try {
-        const clone = response.clone();
-        const data = await clone.json();
-        if (data && data.error && (data.error.includes('token') || data.error.includes('Unauthorized'))) {
-          localStorage.removeItem('tranle_token');
-          localStorage.removeItem('tranle_user');
-          window.location.href = '/';
-        }
-      } catch (e) {}
+      // Mail endpoints also return 401 for wrong IMAP credentials.
+      // Only bounce to login when the session itself is dead (refresh failed).
+      if (!refreshed) hardLogout();
     }
   }
-  
+
   return response;
 }

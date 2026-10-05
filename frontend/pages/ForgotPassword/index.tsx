@@ -35,11 +35,7 @@ export default function ForgotPasswordPage() {
           setError(data.error || 'Không thể gửi link đặt lại mật khẩu.');
         }
       } else {
-        setSuccess(
-          data.emailSent
-            ? 'Đã gửi link đặt lại mật khẩu qua email. Anh vui lòng kiểm tra hộp thư.'
-            : 'Yêu cầu đã được ghi nhận nhưng email chưa gửi thành công. Vui lòng liên hệ quản trị viên để được hỗ trợ an toàn.'
-        );
+        setSuccess(data.message || 'Nếu email hợp lệ, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.');
       }
     } catch {
       setError('Không thể gửi yêu cầu quên mật khẩu.');

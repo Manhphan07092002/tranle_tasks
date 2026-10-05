@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function roleRoutes(db: any) {
   const router = Router();
@@ -14,7 +15,7 @@ export function roleRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to fetch roles' }); }
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, name, description, color, permissions } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
     try {
@@ -27,7 +28,7 @@ export function roleRoutes(db: any) {
     }
   });
 
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { name, description, color, permissions } = req.body;
     try {
       const existing = await db.get('SELECT * FROM roles WHERE id = ?', [req.params.id]);
@@ -44,7 +45,7 @@ export function roleRoutes(db: any) {
     }
   });
 
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       const role = await db.get('SELECT * FROM roles WHERE id = ?', [req.params.id]);
       if (!role) return res.status(404).json({ error: 'Not found' });

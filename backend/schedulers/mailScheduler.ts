@@ -57,7 +57,7 @@ export function initMailScheduler(db: any) {
             port: targetSmtpPort,
             secure: targetSmtpSecure,
             auth: { user: mailEmail, pass: mailPass },
-            tls: { rejectUnauthorized: false }
+            tls: { rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== 'true' }
           } as any);
 
           const fromLabel = user.name ? `"${user.name}" <${mailEmail}>` : mailEmail;

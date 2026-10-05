@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 
 export const productRoutes = (db: any) => {
   const router = Router();
@@ -141,7 +142,7 @@ export const productRoutes = (db: any) => {
         const finalImportPrice = Number(importPrice) || 0;
         const finalSalePrice = Number(salePrice) || Number(defaultPrice) || 0;
         
-        const id = 'prod-' + Math.random().toString(36).substr(2, 9);
+        const id = 'prod-' + crypto.randomBytes(9).toString('hex');
         
         await db.run(
           'INSERT INTO products (id, name, unit, origin, defaultPrice, category, importQuantity, remainingQuantity, importPrice, salePrice, importCode, invoiceDate, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',

@@ -28,7 +28,10 @@ export function revenueRoutes(db: any) {
 
   // CREATE
   router.post('/', async (req, res) => {
-    const { id, title, reportType, periodStart, periodEnd, content, totalPreTax, totalDelivered, totalCumulative, authorId, department, status, submittedAt, generationMode } = req.body;
+    const { id, title, reportType, periodStart, periodEnd, content, totalPreTax, totalDelivered, totalCumulative, department, status, submittedAt, generationMode } = req.body;
+    const authorId = (req as any).user?.id;
+    if (!authorId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!title) return res.status(400).json({ error: 'Thiếu tiêu đề' });
     try {
       const now = new Date().toISOString();
       await db.run(
@@ -57,19 +60,37 @@ export function revenueRoutes(db: any) {
 
   // UPDATE (also used for approve/reject)
   router.put('/:id', async (req, res) => {
-    const { title, content, reportType, periodStart, periodEnd, totalPreTax, totalDelivered, totalCumulative, status, submittedAt, approvedAt, approvedBy, managerFeedback, directorFeedback, generationMode } = req.body;
+    const { title, content, reportType, periodStart, periodEnd, totalPreTax, totalDelivered, totalCumulative, status, submittedAt, managerFeedback, directorFeedback, generationMode } = req.body;
     try {
       const existing = await db.get('SELECT * FROM revenue_reports WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const me = (req as any).user;
+      const isAdmin = me?.role === 'Admin';
+      const isDirector = me?.role === 'Director' || isAdmin;
+      const isOwner = existing.authorId === me?.id;
+      const statusChanging = status && status !== existing.status;
+      const wantsApprove = statusChanging && (status === 'Approved' || status === 'Rejected' || String(status).startsWith('Pending'));
+      if (wantsApprove && !(isAdmin || isDirector)) {
+        const isManager = me?.role === 'Manager';
+        if (!(isManager && me?.department === existing.department)) {
+          return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo doanh thu này' });
+        }
+      }
+      if (!isOwner && !isAdmin && !isDirector && me?.role !== 'Manager') {
+        return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
+      }
+      const approvedBy = (status === 'Approved' || status === 'Rejected') ? (me?.id ?? existing.approvedBy ?? null) : (existing.approvedBy ?? null);
+      const approvedAt = (status === 'Approved' || status === 'Rejected') ? new Date().toISOString() : (existing.approvedAt ?? null);
 
       await db.run(
         `UPDATE revenue_reports SET title=?, content=?, reportType=?, periodStart=?, periodEnd=?, totalPreTax=?, totalDelivered=?, totalCumulative=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, managerFeedback=?, directorFeedback=?, generationMode=? WHERE id=?`,
-        [title, content ?? null, reportType, periodStart, periodEnd, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, status, submittedAt ?? null, approvedAt ?? null, approvedBy ?? null, managerFeedback ?? null, directorFeedback ?? null, generationMode || 'manual', req.params.id]
+        [title, content ?? null, reportType, periodStart, periodEnd, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, status, submittedAt ?? null, approvedAt, approvedBy, managerFeedback ?? existing.managerFeedback ?? null, directorFeedback ?? existing.directorFeedback ?? null, generationMode || 'manual', req.params.id]
       );
 
       // Log
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), approvedBy || 'system', `revenue_report.${status}`, req.params.id, 'revenue_report', new Date().toISOString()]
+        [randomUUID(), me?.id || 'system', `revenue_report.${status}`, req.params.id, 'revenue_report', new Date().toISOString()]
       );
 
       // Notify on status change

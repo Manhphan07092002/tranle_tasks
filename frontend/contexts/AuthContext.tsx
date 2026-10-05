@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { User } from '../types';
+import { getAccessToken, setAccessToken, clearAccessToken, refreshAccessToken } from '../services/tokenStore';
 
 const LOGIN_API_URL = '/api/auth/login';
 
@@ -14,46 +16,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper to decode JWT without a library
-function parseJwt(token: string) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
-}
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('tranle_token');
-    const storedUser = localStorage.getItem('tranle_user');
-    
-    if (token && storedUser) {
-      const payload = parseJwt(token);
-      if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch (e) {
-          localStorage.removeItem('tranle_user');
-          localStorage.removeItem('tranle_token');
-        }
-      } else {
-        localStorage.removeItem('tranle_token');
-        localStorage.removeItem('tranle_user');
-      }
-    } else {
+    // Boot: the access token lives only in memory, so every page load restores
+    // the session silently via the httpOnly refresh cookie. Legacy localStorage
+    // tokens (pre-rotation) are dropped and never sent again.
+    try {
       localStorage.removeItem('tranle_token');
-      localStorage.removeItem('tranle_user');
-    }
-    setIsLoading(false);
+    } catch { /* ignore */ }
+    let cancelled = false;
+    (async () => {
+      if (await refreshAccessToken()) {
+        if (!cancelled) {
+          try {
+            const u = localStorage.getItem('tranle_user');
+            if (u) setUser(JSON.parse(u));
+          } catch { /* ignore */ }
+        }
+      } else if (!cancelled) {
+        try {
+          localStorage.removeItem('tranle_user');
+        } catch { /* ignore */ }
+      }
+      if (!cancelled) setIsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -61,14 +54,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const res = await fetch(LOGIN_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { success: false, error: data.error || 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.' };
       }
+      queryClient.clear();
       setUser(data.user);
-      localStorage.setItem('tranle_token', data.token);
+      // Access token stays in memory only; the refresh token arrives as httpOnly cookie.
+      setAccessToken(typeof data.token === 'string' ? data.token : null);
       localStorage.setItem('tranle_user', JSON.stringify(data.user));
       return { success: true };
     } catch (e) {
@@ -78,9 +74,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    queryClient.clear();
     setUser(null);
-    localStorage.removeItem('tranle_token');
+    clearAccessToken();
     localStorage.removeItem('tranle_user');
+    // Revoke the refresh session server-side (fire-and-forget; cookie clears regardless).
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
   };
 
 

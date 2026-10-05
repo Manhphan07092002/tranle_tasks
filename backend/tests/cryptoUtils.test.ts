@@ -17,9 +17,9 @@ describe('encrypt / decrypt', () => {
     expect(decrypt(encrypt(original)!)).toBe(original);
   });
 
-  it('encrypt trả về định dạng iv:ciphertext', () => {
+  it('encrypt trả về định dạng gcm:iv:tag:ciphertext (AES-256-GCM)', () => {
     const result = encrypt('test');
-    expect(result).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    expect(result).toMatch(/^gcm:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
   });
 
   it('encrypt tạo IV ngẫu nhiên — cùng input cho kết quả khác nhau', () => {

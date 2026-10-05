@@ -109,11 +109,31 @@ export default function AdminSystemConfig() {
   useEffect(() => { fetchInfo(); }, [fetchInfo]);
 
   const handleAddAiKey = () => setAiKeysMap(prev => ({ ...prev, [aiProvider]: [...(prev[aiProvider] || []), ''] }));
-  const handleRemoveAiKey = (index: number) => setAiKeysMap(prev => {
-    const newArr = [...(prev[aiProvider] || [])];
-    newArr.splice(index, 1);
-    return { ...prev, [aiProvider]: newArr };
-  });
+  const handleRemoveAiKey = (index: number) => {
+    const target = (aiKeysMap[aiProvider] || [])[index];
+    // Masked entries live on the server — delete immediately via removeMasked.
+    if (target && /\*{2,}/.test(target)) {
+      apiFetch('/api/admin/system-config/ai-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ removeMasked: { [aiProvider]: index } }),
+      }).then(() => {
+        setAiKeysMap(prev => {
+          const newArr = [...(prev[aiProvider] || [])];
+          newArr.splice(index, 1);
+          return { ...prev, [aiProvider]: newArr };
+        });
+      }).catch(() => {
+        setAiMessage({ type: 'error', text: 'Xóa key thất bại.' });
+      });
+      return;
+    }
+    setAiKeysMap(prev => {
+      const newArr = [...(prev[aiProvider] || [])];
+      newArr.splice(index, 1);
+      return { ...prev, [aiProvider]: newArr };
+    });
+  };
   const handleChangeAiKey = (index: number, value: string) => {
     setAiKeysMap(prev => {
       const newArr = [...(prev[aiProvider] || [])];
@@ -147,20 +167,28 @@ export default function AdminSystemConfig() {
     setAiKeysSaving(true);
     setAiMessage(null);
     try {
-      const cleanMap: Record<string, string[]> = {};
+      // Masked entries (contain ****) are existing server-side keys — never send them back.
+      // Only new raw keys are sent via addKeys; deletions use removeMasked immediately on click.
+      const addKeys: Record<string, string[]> = {};
       for (const p in aiKeysMap) {
-        cleanMap[p] = (aiKeysMap[p] || []).map(k => k.trim()).filter(k => k.length > 0);
+        const fresh = (aiKeysMap[p] || []).map(k => k.trim()).filter(k => k.length > 0 && !/\*{2,}/.test(k));
+        if (fresh.length > 0) addKeys[p] = fresh;
       }
-      
+
       const res = await apiFetch('/api/admin/system-config/ai-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keysMap: cleanMap, provider: aiProvider }),
+        body: JSON.stringify(Object.keys(addKeys).length > 0 ? { addKeys, provider: aiProvider } : { provider: aiProvider }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Lưu cấu hình AI thất bại');
       setAiMessage({ type: 'success', text: 'Đã lưu cấu hình AI thành công.' });
-      setAiKeysMap(cleanMap);
+      // Refresh masked list from server so new keys become masked entries.
+      const refresh = await apiFetch('/api/admin/system-config/ai-keys');
+      if (refresh.ok) {
+        const aiData = await refresh.json();
+        if (aiData.keysMap) setAiKeysMap(aiData.keysMap);
+      }
       // Refresh AI status after saving
       const statusRes = await apiFetch('/api/ai/status');
       if (statusRes.ok) setAiStatus(await statusRes.json());
@@ -357,7 +385,9 @@ export default function AdminSystemConfig() {
             <p className="text-xs text-gray-500 mb-2">Hệ thống sẽ tự động dùng key đầu tiên. Nếu bị giới hạn (Rate Limit), sẽ tự động chuyển sang key tiếp theo trong danh sách.</p>
             
             <div className="space-y-3">
-              {(aiKeysMap[aiProvider] || []).map((key, index) => (
+              {(aiKeysMap[aiProvider] || []).map((key, index) => {
+                const isMasked = /\*{2,}/.test(key);
+                return (
                 <div key={index} className="flex gap-2">
                   <span className="inline-flex items-center justify-center w-10 bg-gray-100 text-gray-500 font-mono text-sm rounded-xl border border-gray-200">
                     {index + 1}
@@ -366,14 +396,16 @@ export default function AdminSystemConfig() {
                     <input
                       type="text"
                       value={key}
+                      readOnly={isMasked}
                       onChange={(e) => handleChangeAiKey(index, e.target.value)}
-                      placeholder="AIzaSy..."
-                      className="w-full px-4 py-2 pr-24 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-400 outline-none font-mono text-sm"
+                      placeholder={isMasked ? 'Key đã lưu (ẩn vì bảo mật)' : 'AIzaSy...'}
+                      title={isMasked ? 'Key đã lưu — chỉ hiển thị dạng ẩn. Thêm key mới hoặc xóa nếu cần.' : undefined}
+                      className={`w-full px-4 py-2 pr-24 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-400 outline-none font-mono text-sm ${isMasked ? 'bg-gray-50 text-gray-500' : ''}`}
                     />
-                    {key.trim() && (
-                      <div className="absolute right-2">
-                        {(() => {
-                          const status = keyStatuses[key]?.status || 'Unknown';
+                    <div className="absolute right-2">
+                      {(() => {
+                          // keys-status is keyed by key-N (masked fingerprints), never raw keys.
+                          const status = (keyStatuses[`key-${index + 1}`] || keyStatuses[key])?.status || 'Unknown';
                           if (status === 'Active') return <span className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">Hoạt động</span>;
                           if (status === 'Rate Limited') return <span className="px-2 py-1 rounded-lg bg-orange-50 border border-orange-200 text-orange-700 text-[11px] font-bold">Quá tải</span>;
                           if (status === 'Quota Exceeded') return <span className="px-2 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">Hết Quota</span>;
@@ -381,12 +413,11 @@ export default function AdminSystemConfig() {
                           return <span className="px-2 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-500 text-[11px] font-bold">Chưa test</span>;
                         })()}
                       </div>
-                    )}
                   </div>
                   <div className="flex gap-1">
                     <button
                       onClick={() => handleTestKey(key)}
-                      disabled={testingKey === key || !key.trim()}
+                      disabled={isMasked || testingKey === key || !key.trim()}
                       className="px-3 py-2 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors whitespace-nowrap"
                       title="Kiểm tra Key"
                     >
@@ -401,7 +432,8 @@ export default function AdminSystemConfig() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">

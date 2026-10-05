@@ -1,0 +1,27 @@
+name: security
+on:
+  push:
+  pull_request:
+jobs:
+  audit-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backend audit (fail on HIGH)
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+      - name: Backend typecheck + tests
+        working-directory: backend
+        run: |
+          npx tsc --noEmit -p tsconfig.json
+          npx vitest run
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit -p tsconfig.json

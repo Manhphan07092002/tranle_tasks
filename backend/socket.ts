@@ -1,25 +1,62 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import jwt from 'jsonwebtoken';
+import type { JwtPayload } from './middleware/auth.js';
+import { getBearerToken } from './middleware/auth.js';
 
 let io: SocketIOServer;
+let _socketDb: any = null;
+
+export const setSocketDb = (db: any) => {
+  _socketDb = db;
+};
 
 export const initSocket = (server: HttpServer) => {
+  const allowedOrigins = (process.env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
   io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.ALLOWED_ORIGIN || '*',
+      origin: allowedOrigins.length > 0 ? allowedOrigins : [/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/],
       methods: ['GET', 'POST'],
       credentials: true
     }
   });
 
+  io.use(async (socket, next) => {
+    // Primary: explicit auth token (memory-held access token). Fallback: cookies
+    // (browser sends httpOnly cookies automatically on same-origin handshakes).
+    const fromAuth = socket.handshake.auth?.token;
+    const token = (typeof fromAuth === 'string' && fromAuth ? fromAuth : null)
+      ?? getBearerToken({ headers: socket.handshake.headers, cookies: (socket.handshake as any).cookies });
+    const secret = process.env.JWT_SECRET;
+    if (!token || !secret) {
+      return next(new Error('Unauthorized'));
+    }
+
+    try {
+      const payload = jwt.verify(token, secret) as JwtPayload;
+      // Same freshness check as HTTP requireAuth: locked/deleted/demoted tokens die here too.
+      if (_socketDb && payload?.id) {
+        try {
+          const row = await _socketDb.get('SELECT id, role, isLocked, lockedUntil FROM users WHERE id = ?', [payload.id]);
+          if (!row) return next(new Error('Unauthorized'));
+          if (row.isLocked) return next(new Error('Unauthorized'));
+          if (row.lockedUntil && new Date(row.lockedUntil).getTime() > Date.now()) return next(new Error('Unauthorized'));
+          payload.role = row.role || payload.role;
+        } catch {
+          return next(new Error('Unauthorized'));
+        }
+      }
+      socket.data.user = payload;
+      next();
+    } catch {
+      next(new Error('Unauthorized'));
+    }
+  });
+
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id}`);
-
-    // Client emits 'join' with their userId to receive private notifications
-    socket.on('join', (userId: string) => {
-      socket.join(userId);
-      console.log(`[Socket.IO] Socket ${socket.id} joined room ${userId}`);
-    });
+    const user = socket.data.user as JwtPayload;
+    socket.join(user.id);
 
     socket.on('disconnect', () => {
       console.log(`[Socket.IO] Client disconnected: ${socket.id}`);

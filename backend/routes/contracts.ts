@@ -383,11 +383,15 @@ export function contractRoutes(db: any) {
     const user = req.user;
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { id, contractNumber, clientName, contractName, products, preTaxValue, vatRate, postTaxValue, invoiceDate, invoiceNumber, department, createdBy, status, attachments, paidAmount, projectId, contractType, supplierName, documentChecklist, signedDate, startDate, endDate, warrantyMonths, payments, docSentDate, docReceivedDate, docAccountantDate, docReceiver, docAccountantUserId, docAccountantStatus } = req.body;
-
+    const { id, contractNumber, clientName, contractName, products, preTaxValue, vatRate, postTaxValue, invoiceDate, invoiceNumber, department, status, attachments, paidAmount, projectId, contractType, supplierName, documentChecklist, signedDate, startDate, endDate, warrantyMonths, payments, docSentDate, docReceivedDate, docAccountantDate, docReceiver, docAccountantUserId, docAccountantStatus } = req.body;
+    // createdBy / department ownership comes from the verified JWT, not the client body.
+    const createdBy = user.id;
+    const requestedDepartment = department || user.department;
     const perms = user.permissions || [];
     const isSystemAdmin = perms.includes('admin_panel') || perms.includes('director_feedback') || user.role === 'Admin' || user.role === 'Director';
-    const isDeptManager = (user.role && (user.role === 'Manager' || user.role.startsWith('Trưởng') || user.role.includes('Trưởng'))) && user.department === department;
+    const isDeptManager = (user.role && (user.role === 'Manager' || user.role.startsWith('Trưởng') || user.role.includes('Trưởng'))) && user.department === requestedDepartment;
+    // Only privileged users may file into another department; everyone else is bound to their own.
+    const effectiveDepartment = (isSystemAdmin || isDeptManager) ? requestedDepartment : user.department;
     const isManagerOrAdmin = isSystemAdmin || isDeptManager;
 
     if (!isManagerOrAdmin && status && status !== 'draft' && status !== 'pending') {
@@ -450,7 +454,7 @@ export function contractRoutes(db: any) {
       await db.run(
         `INSERT INTO contracts (id, contractNumber, clientName, contractName, products, preTaxValue, vatRate, postTaxValue, invoiceDate, invoiceNumber, department, createdBy, createdAt, status, attachments, paidAmount, projectId, contractType, supplierName, documentChecklist, signedDate, startDate, endDate, warrantyMonths, payments, docSentDate, docReceivedDate, docAccountantDate, docReceiver, docAccountantUserId, docAccountantStatus)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [contractId, contractNumber.trim(), clientName.trim(), contractName.trim(), products ? JSON.stringify(products) : null, preTaxValue ?? 0, vatRate ?? 0, postTaxValue ?? 0, invoiceDate ?? null, invoiceNumber ?? null, department, createdBy, now, status || 'draft', JSON.stringify(combinedAttachments), paidAmount ?? 0, projectId || null, contractType || 'output', supplierName || null, documentChecklist ? JSON.stringify(documentChecklist) : null, signedDate ?? null, startDate ?? null, endDate ?? null, Number(warrantyMonths) || 0, payments ? JSON.stringify(payments) : null, docSentDate ?? null, docReceivedDate ?? null, docAccountantDate ?? null, docReceiver ?? null, docAccountantUserId ?? null, accountantStatus]
+        [contractId, contractNumber.trim(), clientName.trim(), contractName.trim(), products ? JSON.stringify(products) : null, preTaxValue ?? 0, vatRate ?? 0, postTaxValue ?? 0, invoiceDate ?? null, invoiceNumber ?? null, effectiveDepartment, createdBy, now, status || 'draft', JSON.stringify(combinedAttachments), paidAmount ?? 0, projectId || null, contractType || 'output', supplierName || null, documentChecklist ? JSON.stringify(documentChecklist) : null, signedDate ?? null, startDate ?? null, endDate ?? null, Number(warrantyMonths) || 0, payments ? JSON.stringify(payments) : null, docSentDate ?? null, docReceivedDate ?? null, docAccountantDate ?? null, docReceiver ?? null, docAccountantUserId ?? null, accountantStatus]
       );
 
       // Send notification to accountant if assigned during creation
@@ -468,7 +472,7 @@ export function contractRoutes(db: any) {
       // Trưởng phòng notification if status is 'pending'
       if (status === 'pending') {
         const creatorName = req.user?.name || 'Nhân viên';
-        const managers = await db.all("SELECT id FROM users WHERE (role = 'Manager' OR role LIKE 'Trưởng%' OR role LIKE 'trưởng%') AND department = ?", [department]);
+        const managers = await db.all("SELECT id FROM users WHERE (role = 'Manager' OR role LIKE 'Trưởng%' OR role LIKE 'trưởng%') AND department = ?", [effectiveDepartment]);
         for (const manager of managers) {
           await sendNotification(
             db,
@@ -486,7 +490,7 @@ export function contractRoutes(db: any) {
         const taskId = randomUUID();
         await db.run(
           'INSERT INTO tasks (id, title, description, startDate, priority, status, createdBy, department, contractId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [taskId, `Thực hiện HĐ: ${contractNumber.trim()}`, `Hợp đồng: ${contractName.trim()}\nKhách hàng: ${clientName.trim()}`, now.split('T')[0], 'Medium', 'Todo', createdBy, department, contractId]
+          [taskId, `Thực hiện HĐ: ${contractNumber.trim()}`, `Hợp đồng: ${contractName.trim()}\nKhách hàng: ${clientName.trim()}`, now.split('T')[0], 'Medium', 'Todo', createdBy, effectiveDepartment, contractId]
         );
         if (createdBy) {
           await db.run('INSERT INTO task_assignees (taskId, userId) VALUES (?, ?)', [taskId, createdBy]);
@@ -568,7 +572,8 @@ export function contractRoutes(db: any) {
       } catch (rollbackErr) {
         console.error('Rollback error:', rollbackErr);
       }
-      res.status(500).json({ error: 'Failed to create contract', detail: e.message });
+      console.error('contract error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Failed to create contract' });
     }
   });
 
@@ -793,7 +798,8 @@ export function contractRoutes(db: any) {
       } catch (rollbackErr) {
         console.error('Rollback error:', rollbackErr);
       }
-      res.status(500).json({ error: 'Failed to update contract', detail: e.message });
+      console.error('contract update error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Failed to update contract' });
     }
   });
 
@@ -899,7 +905,8 @@ export function contractRoutes(db: any) {
       try {
         await db.run('ROLLBACK');
       } catch (rollbackErr) {}
-      res.status(500).json({ error: 'Failed to confirm receipt', detail: e.message });
+      console.error('contract confirm error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Failed to confirm receipt' });
     }
   });
 
@@ -956,7 +963,8 @@ export function contractRoutes(db: any) {
       } catch (rollbackErr) {
         console.error('Rollback error:', rollbackErr);
       }
-      res.status(500).json({ error: 'Failed to delete contract', detail: e.message });
+      console.error('contract delete error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Failed to delete contract' });
     }
   });
 
@@ -1006,7 +1014,8 @@ export function contractRoutes(db: any) {
 
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi khi phê duyệt hợp đồng', detail: e.message });
+      console.error('contract approve error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Lỗi khi phê duyệt hợp đồng' });
     }
   });
 
@@ -1060,7 +1069,8 @@ export function contractRoutes(db: any) {
 
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi khi từ chối hợp đồng', detail: e.message });
+      console.error('contract reject error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Lỗi khi từ chối hợp đồng' });
     }
   });
 
@@ -1114,7 +1124,8 @@ export function contractRoutes(db: any) {
 
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi khi hủy hợp đồng', detail: e.message });
+      console.error('contract cancel error:', (e as Error)?.message);
+      res.status(500).json({ error: 'Lỗi khi hủy hợp đồng' });
     }
   });
 

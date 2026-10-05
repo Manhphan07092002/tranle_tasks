@@ -1,5 +1,10 @@
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+
+function cryptoRandomHex(bytes: number): string {
+  return crypto.randomBytes(bytes).toString('hex');
+}
 
 // ─── SQL normalizer ──────────────────────────────────────────────────────────
 // Converts the SQLite-flavoured SQL used throughout the routes to MySQL,
@@ -239,6 +244,13 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id VARCHAR(191) PRIMARY KEY, userId VARCHAR(191) NOT NULL, email VARCHAR(255) NOT NULL,
   token VARCHAR(191) NOT NULL UNIQUE, expiresAt TEXT NOT NULL, usedAt TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id VARCHAR(191) PRIMARY KEY, userId VARCHAR(191) NOT NULL,
+  tokenHash VARCHAR(191) NOT NULL UNIQUE, expiresAt TEXT NOT NULL,
+  createdAt TEXT NOT NULL, revokedAt TEXT,
+  INDEX idx_refresh_user (userId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS system_config (
@@ -538,18 +550,36 @@ async function seedIfEmpty(db: MysqlDb) {
   // ── 4. Users ───────────────────────────────────────────────────────────────
   const userCount = await db.get('SELECT COUNT(*) as count FROM users');
   if (userCount && userCount.count === 0) {
-    const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD || 'TranLe@dmin2026!';
-    const INITIAL_USERS = [
-      { id: 'u1', name: 'Admin Tran Le', email: 'admin@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Admin', department: 'Ban Lãnh Đạo', avatar: 'https://i.pravatar.cc/150?u=u1', phone: '0939792428', dob: '1990-01-01', hometown: 'Đà Nẵng', bio: 'Quản trị viên hệ thống Tran Le Electricity.' },
-      { id: 'u2', name: 'Nguyễn Văn Đạt', email: 'vandat@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Manager', department: 'Khối Tổng Thầu EPC & Thi Công', avatar: 'https://i.pravatar.cc/150?u=u2', phone: '0987654321', dob: '1985-06-15', hometown: 'Đà Nẵng', bio: 'Chỉ huy trưởng thi công & Quản lý dự án EPC Điện mặt trời.' },
-      { id: 'u3', name: 'Phan Xuân Mạnh', email: 'xuanmanh@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Employee', department: 'Khối Tổng Thầu EPC & Thi Công', avatar: 'https://i.pravatar.cc/150?u=u3', phone: '0123456789', dob: '2002-09-07', hometown: 'Đà Nẵng', bio: 'Kỹ sư giải pháp năng lượng tái tạo & O&M Solar.' },
-      { id: 'u4', name: 'Nguyễn Văn Duy', email: 'vanduy@tranlecorp.com.vn', password: await bcrypt.hash(adminPwd, 10), role: 'Director', department: 'Ban Lãnh Đạo', avatar: 'https://i.pravatar.cc/150?u=u4', phone: '0939792428', dob: '1980-02-20', hometown: 'Đà Nẵng', bio: 'Ban Giám đốc Công ty Cổ phần Tư vấn xây dựng Điện Trần Lê.' },
-    ];
-    console.log(`🔑 Seed users created. Default password: ${adminPwd.slice(0, 3)}${'*'.repeat(Math.max(adminPwd.length - 3, 0))}`);
-    for (const u of INITIAL_USERS) {
+    const adminPwd = process.env.ADMIN_DEFAULT_PASSWORD;
+    if (!adminPwd) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('[SECURITY] ADMIN_DEFAULT_PASSWORD must be set in production (min 12 chars). Refusing to seed default accounts.');
+      }
+      // Dev-only: generate a unique random password per seed user so no shared default exists.
+      const randomPwd = () => 'Dev-' + cryptoRandomHex(12) + '!';
+      const devUsers: [string, string, string, string, string][] = [
+        ['u1', 'Admin Tran Le', 'admin@tranlecorp.com.vn', 'Admin', 'Ban Lãnh Đạo'],
+        ['u2', 'Nguyễn Văn Đạt', 'vandat@tranlecorp.com.vn', 'Manager', 'Khối Tổng Thầu EPC & Thi Công'],
+        ['u3', 'Phan Xuân Mạnh', 'xuanmanh@tranlecorp.com.vn', 'Employee', 'Khối Tổng Thầu EPC & Thi Công'],
+        ['u4', 'Nguyễn Văn Duy', 'vanduy@tranlecorp.com.vn', 'Director', 'Ban Lãnh Đạo'],
+      ];
+      for (const [id, name, email, role, dept] of devUsers) {
+        const pw = randomPwd();
+        console.log(`[seed] dev user ${email} password: ${pw} (change immediately)`);
+        await db.run(
+          'INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, name, email, await bcrypt.hash(pw, 10), role, dept, `https://i.pravatar.cc/150?u=${id}`, '', '', '', '']
+        );
+      }
+    } else {
+      if (adminPwd.length < 12) {
+        throw new Error('[SECURITY] ADMIN_DEFAULT_PASSWORD must be at least 12 characters.');
+      }
+      // Production seed: create exactly ONE admin. Operators create the rest via Admin panel.
+      console.log('[seed] Creating initial admin account. Change its password immediately after first login.');
       await db.run(
         'INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [u.id, u.name, u.email, u.password, u.role, u.department, u.avatar, u.phone, u.dob, u.hometown, u.bio]
+        ['u1', 'Admin Tran Le', 'admin@tranlecorp.com.vn', await bcrypt.hash(adminPwd, 10), 'Admin', 'Ban Lãnh Đạo', 'https://i.pravatar.cc/150?u=u1', '', '', '', 'Quản trị viên hệ thống Tran Le Electricity.']
       );
     }
   }

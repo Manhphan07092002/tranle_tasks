@@ -1,6 +1,20 @@
 import nodemailer from 'nodemailer';
+import { decrypt } from './utils/cryptoUtils.js';
 
 type DbType = any; // will be passed in at runtime
+
+function maybeDecrypt(value: any): any {
+  if (typeof value !== 'string' || !value) return value;
+  if (value.startsWith('gcm:')) {
+    try {
+      const out = decrypt(value);
+      return typeof out === 'string' ? out : value;
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
 
 export function createMailer(db: DbType) {
   const getSystemConfig = async () => {
@@ -13,7 +27,7 @@ export function createMailer(db: DbType) {
       SMTP_PORT: config.SMTP_PORT || process.env.SMTP_PORT || '587',
       SMTP_SECURE: config.SMTP_SECURE || process.env.SMTP_SECURE || 'false',
       SMTP_USER: config.SMTP_USER || process.env.SMTP_USER || '',
-      SMTP_PASS: config.SMTP_PASS || process.env.SMTP_PASS || '',
+      SMTP_PASS: maybeDecrypt(config.SMTP_PASS) || process.env.SMTP_PASS || '',
       SMTP_FROM: config.SMTP_FROM || process.env.SMTP_FROM || '',
     };
   };

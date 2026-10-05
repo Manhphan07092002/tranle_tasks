@@ -1,4 +1,5 @@
 import { apiFetch } from '../services/api';
+import { getAccessToken } from '../services/tokenStore';
 import { io } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
@@ -224,11 +225,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     // Connect to socket
     const socket = io(window.location.origin, {
       path: '/socket.io',
-      transports: ['websocket', 'polling']
-    });
-
-    socket.on('connect', () => {
-      socket.emit('join', user.id);
+      transports: ['websocket', 'polling'],
+      // Memory-held access token; the server also accepts the httpOnly cookie fallback.
+      auth: { token: getAccessToken() || '' },
     });
 
     socket.on('new_notification', (data: AppNotification) => {

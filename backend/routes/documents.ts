@@ -1,10 +1,23 @@
 import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const uploadsDir = path.resolve(__dirname, '../../uploads/reports');
+const uploadUrlPrefix = '/uploads/reports/';
+
+function resolveManagedUpload(url: unknown): string | null {
+  if (typeof url !== 'string' || !url.startsWith(uploadUrlPrefix)) return null;
+
+  const filename = url.slice(uploadUrlPrefix.length);
+  if (!filename || filename !== path.posix.basename(filename) || filename.includes('\\')) return null;
+
+  const absolutePath = path.resolve(uploadsDir, filename);
+  return absolutePath.startsWith(`${uploadsDir}${path.sep}`) ? absolutePath : null;
+}
 
 export function documentRoutes(db: any) {
   const router = Router();
@@ -60,7 +73,8 @@ export function documentRoutes(db: any) {
       const documents = await db.all(query, params);
       res.json(documents);
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi server khi tải tài liệu', detail: e.message });
+      console.error('documents list error');
+      res.status(500).json({ error: 'Lỗi server khi tải tài liệu' });
     }
   });
 
@@ -75,8 +89,11 @@ export function documentRoutes(db: any) {
       if (!name || !url || !category) {
         return res.status(400).json({ error: 'Tên, URL và phân loại tài liệu là bắt buộc' });
       }
+      if (!resolveManagedUpload(url)) {
+        return res.status(400).json({ error: 'URL tài liệu không hợp lệ' });
+      }
 
-      const docId = id || 'doc-' + Math.random().toString(36).substr(2, 9);
+      const docId = id || 'doc-' + crypto.randomBytes(9).toString('hex');
       const createdAt = new Date().toISOString();
 
       await db.run(
@@ -119,7 +136,8 @@ export function documentRoutes(db: any) {
 
       res.status(201).json({ id: docId });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi server khi lưu thông tin tài liệu', detail: e.message });
+      console.error('documents create error');
+      res.status(500).json({ error: 'Lỗi server khi lưu thông tin tài liệu' });
     }
   });
 
@@ -151,7 +169,8 @@ export function documentRoutes(db: any) {
 
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi server khi cập nhật tài liệu', detail: e.message });
+      console.error('documents update error');
+      res.status(500).json({ error: 'Lỗi server khi cập nhật tài liệu' });
     }
   });
 
@@ -177,8 +196,8 @@ export function documentRoutes(db: any) {
 
       // 1. Xóa tệp vật lý vật lý trên đĩa
       if (doc.url) {
-        const absolutePath = path.join(__dirname, '../..', doc.url);
-        if (fs.existsSync(absolutePath)) {
+        const absolutePath = resolveManagedUpload(doc.url);
+        if (absolutePath && fs.existsSync(absolutePath)) {
           try {
             fs.unlinkSync(absolutePath);
           } catch (unlinkErr) {
@@ -229,7 +248,8 @@ export function documentRoutes(db: any) {
 
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: 'Lỗi server khi xóa tài liệu', detail: e.message });
+      console.error('documents delete error');
+      res.status(500).json({ error: 'Lỗi server khi xóa tài liệu' });
     }
   });
 

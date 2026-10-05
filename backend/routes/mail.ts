@@ -6,9 +6,31 @@ import multer from 'multer';
 // @ts-ignore
 import MailComposer from 'nodemailer/lib/mail-composer';
 import tls from 'tls';
+import crypto from 'crypto';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createMailer } from '../mailer.js';
+
+const newTrackingId = () => crypto.randomBytes(9).toString('hex') + Date.now().toString(36);
+
+function sanitizeFolder(folder: unknown, fallback = 'INBOX'): string {
+  const f = String(folder ?? fallback);
+  // IMAP mailbox names can contain dots/spaces — reject only protocol metacharacters.
+  if (/["\\\r\n]/.test(f) || f.length > 128 || f.length === 0) return fallback;
+  return f;
+}
+
+function sanitizeUidList(uids: unknown): string | null {
+  if (!Array.isArray(uids) || uids.length === 0 || uids.length > 500) return null;
+  if (!uids.every((u) => /^\d{1,10}$/.test(String(u)))) return null;
+  return uids.map(String).join(',');
+}
+
+function mailError(status: number, error: any, fallback: string) {
+  console.error(`[mail] ${fallback}`);
+  // Auth failures keep 401 so the client can prompt reconnect; never echo raw IMAP text.
+  return status === 401 ? { error: 'Phiên mail hết hạn. Vui lòng kết nối lại.' } : { error: fallback };
+}
 
 export function mailRoutes(db: any) {
   const router = Router();
@@ -45,8 +67,14 @@ export function mailRoutes(db: any) {
   router.post('/connect', requireAuth, async (req: any, res: any) => {
     const { email, password, provider, customImapHost, customImapPort, customSmtpHost, customSmtpPort } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    // Reject CRLF/quote injection into the raw IMAP LOGIN command.
+    if (/[\r\n"]/.test(String(email)) || /[\r\n]/.test(String(password))) {
+      return res.status(400).json({ error: 'Email hoặc mật khẩu chứa ký tự không hợp lệ' });
+    }
 
-    console.log(`[IMAP Connect] Vừa nhận yêu cầu đăng nhập từ tài khoản: "${email}" (provider: ${provider})`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[IMAP Connect] Login request (provider: ${provider})`);
+    }
 
     try {
       const config = await getDynamicConfig();
@@ -67,8 +95,10 @@ export function mailRoutes(db: any) {
         targetSmtpPort = Number(customSmtpPort) || Number(config.SMTP_PORT);
       }
 
+      // TLS verify on by default; set ALLOW_INSECURE_TLS=true only for internal self-signed mailservers.
+      const insecureTls = process.env.ALLOW_INSECURE_TLS === 'true';
       const authResult = await new Promise<{ success: boolean, reason?: string }>((resolve, reject) => {
-        const socket = tls.connect(targetImapPort, targetImapHost, { rejectUnauthorized: false });
+        const socket = tls.connect(targetImapPort, targetImapHost, { rejectUnauthorized: !insecureTls });
 
         // Timeout after 15s
         const timer = setTimeout(() => {
@@ -82,12 +112,13 @@ export function mailRoutes(db: any) {
 
         socket.on('data', (data: any) => {
           buffer += data.toString();
-          console.log('[IMAP RAW]', data.toString().trim());
 
           // Wait for greeting
           if (!greetingReceived && buffer.includes('* OK')) {
             greetingReceived = true;
-            socket.write(`A1 LOGIN "${email}" "${password}"\r\n`);
+            const safeEmail = String(email).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const safePass = String(password).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            socket.write(`A1 LOGIN "${safeEmail}" "${safePass}"\r\n`);
           }
 
           if (greetingReceived) {
@@ -99,9 +130,9 @@ export function mailRoutes(db: any) {
               if (loginAttempt === 1) {
                 // Try just the username part
                 loginAttempt = 2;
-                const usernameOnly = email.split('@')[0];
-                console.log(`[IMAP Connect] Full email failed. Trying username only: ${usernameOnly}`);
-                socket.write(`A2 LOGIN "${usernameOnly}" "${password}"\r\n`);
+                const usernameOnly = String(email).split('@')[0].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                const safePass2 = String(password).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                socket.write(`A2 LOGIN "${usernameOnly}" "${safePass2}"\r\n`);
               }
             } else if (buffer.includes('A2 NO') || buffer.includes('A2 BAD')) {
               clearTimeout(timer);
@@ -118,7 +149,7 @@ export function mailRoutes(db: any) {
       });
 
       if (!authResult.success) {
-        console.error('Raw TLS Login failed:', authResult.reason);
+        console.error('Raw TLS Login failed');
         throw new Error('AUTHENTICATE failed');
       }
 
@@ -181,7 +212,7 @@ export function mailRoutes(db: any) {
       auth: { user: email, pass: password },
       logger: false as any,
       tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== 'true'
       }
     });
 
@@ -191,14 +222,13 @@ export function mailRoutes(db: any) {
       if (err.message?.includes('AUTHENTICATE failed')) {
         // Retry with just the username
         const usernameOnly = email.split('@')[0];
-        console.log(`[ImapFlow] Full email failed. Retrying with username: ${usernameOnly}`);
         client = new ImapFlow({
           host: finalImapHost,
           port: finalImapPort,
           secure: true,
           auth: { user: usernameOnly, pass: password },
           logger: false as any,
-          tls: { rejectUnauthorized: false }
+          tls: { rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== 'true' }
         });
         await client.connect();
       } else {
@@ -248,7 +278,7 @@ export function mailRoutes(db: any) {
       port: finalSmtpPort,
       secure: finalSmtpPort === 465 || config.SMTP_SECURE === 'true',
       auth: { user, pass: password },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== 'true' },
       connectionTimeout: 60000,
       greetingTimeout: 60000,
       socketTimeout: 60000,
@@ -263,7 +293,6 @@ export function mailRoutes(db: any) {
       const msg = err.message || '';
       if (msg.includes('Invalid login') || msg.includes('AuthError') || msg.includes('535')) {
         const usernameOnly = email.split('@')[0];
-        console.log(`[SMTP] Retrying with username only: ${usernameOnly}`);
         transporter = makeTransporter(usernameOnly);
         await transporter.verify();
       } else {
@@ -382,8 +411,8 @@ export function mailRoutes(db: any) {
 
       res.json({ company: companyContacts, external: externalContacts });
     } catch (error: any) {
-      console.error('Contacts error:', error);
-      res.status(500).json({ error: error.message });
+      console.error('Contacts error');
+      res.status(500).json({ error: 'Failed to fetch contacts' });
     }
   });
 
@@ -455,7 +484,8 @@ export function mailRoutes(db: any) {
       await db.run('UPDATE users SET mailPassword = NULL WHERE id = ?', [req.user.id]);
       res.json({ success: true, message: 'Đã ngắt kết nối email.' });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('mail disconnect error');
+      res.status(500).json({ error: 'Failed' });
     }
   });
 
@@ -493,7 +523,7 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(isMailAuthError(error) ? 401 : 500).json({ error: error.message });
+      res.status(isMailAuthError(error) ? 401 : 500).json(mailError(isMailAuthError(error) ? 401 : 500, error, 'Mail operation failed'));
     }
   });
 
@@ -524,7 +554,7 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(isMailAuthError(error) ? 401 : 500).json({ error: error.message });
+      res.status(isMailAuthError(error) ? 401 : 500).json(mailError(isMailAuthError(error) ? 401 : 500, error, 'Mail operation failed'));
     }
   });
 
@@ -592,18 +622,20 @@ export function mailRoutes(db: any) {
       }
     } catch (error: any) {
       console.error('Fetch folder error:', error);
-      res.status(isMailAuthError(error) ? 401 : 500).json({ error: error.message || 'Failed to fetch folder' });
+      res.status(isMailAuthError(error) ? 401 : 500).json(mailError(isMailAuthError(error) ? 401 : 500, error, 'Failed to fetch folder'));
     }
   });
 
   // 4b. Star / Unstar email
   router.patch('/message/:uid/star', requireAuth, async (req: any, res: any) => {
     const { folder = 'INBOX', starred } = req.body;
+    const safeFolder = sanitizeFolder(folder);
+    if (!/^\d{1,10}$/.test(String(req.params.uid))) return res.status(400).json({ error: 'Invalid uid' });
     try {
       const client = await getImapClient(req.user.id, req.user.email);
-      const lock = await client.getMailboxLock(folder);
+      const lock = await client.getMailboxLock(safeFolder);
       try {
-        const uid = req.params.uid;
+        const uid = String(req.params.uid);
         if (starred) {
           await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true });
         } else {
@@ -615,18 +647,21 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('mail action error');
+      res.status(500).json({ error: 'Mail action failed' });
     }
   });
 
   // 4b2. Mark read / unread
   router.patch('/message/:uid/read', requireAuth, async (req: any, res: any) => {
     const { folder = 'INBOX', isRead } = req.body;
+    const safeFolder = sanitizeFolder(folder);
+    if (!/^\d{1,10}$/.test(String(req.params.uid))) return res.status(400).json({ error: 'Invalid uid' });
     try {
       const client = await getImapClient(req.user.id, req.user.email);
-      const lock = await client.getMailboxLock(folder);
+      const lock = await client.getMailboxLock(safeFolder);
       try {
-        const uid = req.params.uid;
+        const uid = String(req.params.uid);
         if (isRead) {
           await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
         } else {
@@ -638,23 +673,26 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('mail action error');
+      res.status(500).json({ error: 'Mail action failed' });
     }
   });
 
   // 4c. Move to Trash or Permanent Delete
   router.delete('/message/:uid', requireAuth, async (req: any, res: any) => {
     const { folder = 'INBOX' } = req.query;
+    const safeFolder = sanitizeFolder(folder);
+    if (!/^\d{1,10}$/.test(String(req.params.uid))) return res.status(400).json({ error: 'Invalid uid' });
     try {
       const client = await getImapClient(req.user.id, req.user.email);
       const actualTrashName = await resolveFolder(client, 'trash');
-      const lock = await client.getMailboxLock(folder as string);
-      
+      const lock = await client.getMailboxLock(safeFolder);
+
       try {
-        const uid = req.params.uid;
+        const uid = String(req.params.uid);
         
         // If the email is already in the Trash folder, delete it permanently
-        if (folder.toLowerCase() === actualTrashName.toLowerCase() || folder.toLowerCase() === 'trash') {
+        if (safeFolder.toLowerCase() === actualTrashName.toLowerCase() || safeFolder.toLowerCase() === 'trash') {
           await client.messageDelete(uid, { uid: true });
         } else {
           // Otherwise, move it to the Trash folder
@@ -669,29 +707,36 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('mail action error');
+      res.status(500).json({ error: 'Mail action failed' });
     }
   });
 
   // 4d. Bulk Actions (Delete / Restore)
   router.post('/bulk', requireAuth, async (req: any, res: any) => {
     const { uids, action, folder = 'INBOX', allInFolder = false } = req.body;
-    if (!allInFolder && (!uids || !Array.isArray(uids) || uids.length === 0)) {
-      return res.status(400).json({ error: 'uids array is required' });
+    const safeFolder = sanitizeFolder(folder);
+    if (!['delete', 'restore'].includes(String(action))) return res.status(400).json({ error: 'Invalid action' });
+    let sequence: string;
+    if (allInFolder) {
+      sequence = '1:*';
+    } else {
+      const clean = sanitizeUidList(uids);
+      if (!clean) return res.status(400).json({ error: 'uids array is required (numeric UIDs, max 500)' });
+      sequence = clean;
     }
-    
+
     try {
       const client = await getImapClient(req.user.id, req.user.email);
       const actualTrashName = await resolveFolder(client, 'trash');
-      const lock = await client.getMailboxLock(folder as string);
-      
+      const lock = await client.getMailboxLock(safeFolder);
+
       try {
         // If allInFolder, use 1:* to target every message in the mailbox
-        const sequence = allInFolder ? '1:*' : uids.join(',');
         const useUid = !allInFolder; // 1:* is a seq range, not UID
         
         if (action === 'delete') {
-          if (folder.toLowerCase() === actualTrashName.toLowerCase() || folder.toLowerCase() === 'trash') {
+          if (safeFolder.toLowerCase() === actualTrashName.toLowerCase() || safeFolder.toLowerCase() === 'trash') {
             await client.messageDelete(sequence, { uid: useUid });
           } else {
             await client.messageMove(sequence, actualTrashName, { uid: useUid }).catch(() => {
@@ -714,13 +759,15 @@ export function mailRoutes(db: any) {
         await client.logout();
       }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('mail action error');
+      res.status(500).json({ error: 'Mail action failed' });
     }
   });
 
   // 5. Read Single Email (folder-aware)
   router.get('/message/:uid', requireAuth, async (req: any, res: any) => {
-    const folder = (req.query.folder as string) || 'INBOX';
+    const folder = sanitizeFolder((req.query.folder as string) || 'INBOX');
+    if (!/^\d{1,10}$/.test(String(req.params.uid))) return res.status(400).json({ error: 'Invalid uid' });
     try {
       const client = await getImapClient(req.user.id, req.user.email);
       const lock = await client.getMailboxLock(folder);
@@ -756,7 +803,7 @@ export function mailRoutes(db: any) {
       }
     } catch (error: any) {
       console.error('Fetch message error:', error);
-      res.status(isMailAuthError(error) ? 401 : 500).json({ error: error.message || 'Failed to fetch message' });
+      res.status(isMailAuthError(error) ? 401 : 500).json(mailError(isMailAuthError(error) ? 401 : 500, error, 'Failed to fetch message'));
     }
   });
 
@@ -815,7 +862,7 @@ export function mailRoutes(db: any) {
       let finalHtml = body || '';
       let trackingId = null;
       if (req.body.track === 'true' || req.body.track === true) {
-        trackingId = Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        trackingId = newTrackingId();
         const trackingUrl = `${req.protocol}://${req.get('host')}/api/mail/track/${trackingId}.gif`;
         finalHtml += `<img src="${trackingUrl}" width="1" height="1" style="display:none;" alt="" />`;
         
@@ -891,7 +938,8 @@ export function mailRoutes(db: any) {
 
     } catch (error: any) {
       console.error('Send email error:', error);
-      res.status(500).json({ error: error.message || 'Failed to send email' });
+      console.error('Send email error');
+      res.status(500).json({ error: 'Failed to send email' });
     }
   });
 
@@ -921,7 +969,7 @@ export function mailRoutes(db: any) {
         port: Number(config.SMTP_PORT || 587),
         secure: config.SMTP_SECURE === 'true',
         auth: { user: senderEmail, pass: password },
-        tls: { rejectUnauthorized: false }
+        tls: { rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== 'true' }
       });
 
       const mailAttachments = req.files ? (req.files as any[]).map(f => ({
@@ -930,7 +978,7 @@ export function mailRoutes(db: any) {
         contentType: f.mimetype
       })) : [];
 
-      const id = Math.random().toString(36).substr(2, 9);
+      const id = crypto.randomUUID();
       await db.run(
         'INSERT INTO scheduled_emails (id, userId, "to", cc, bcc, subject, body, attachments, scheduledAt, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [id, req.user.id, to, cc || null, bcc || null, subject, body || '', JSON.stringify(mailAttachments), scheduledAt, 'pending', new Date().toISOString()]
@@ -939,20 +987,26 @@ export function mailRoutes(db: any) {
       res.json({ success: true, message: 'Đã lên lịch gửi email.' });
     } catch (error: any) {
       console.error('Schedule email error:', error);
-      res.status(500).json({ error: error.message || 'Failed to schedule email' });
+      console.error('Schedule email error');
+      res.status(500).json({ error: 'Failed to schedule email' });
     }
   });
 
-  // 8. Tracking Pixel Route
+  // 8. Tracking Pixel Route (public by design — signed opaque ID, no enumeration value).
   router.get('/track/:trackingId.gif', async (req: any, res: any) => {
     const { trackingId } = req.params;
+    if (!/^[a-zA-Z0-9]{8,64}$/.test(String(trackingId || ''))) {
+      const img = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+      res.writeHead(200, { 'Content-Type': 'image/gif', 'Content-Length': img.length });
+      return res.end(img);
+    }
     try {
       await db.run(
         'UPDATE mail_tracking SET opens = opens + 1, lastOpen = ? WHERE id = ?',
         [new Date().toISOString(), trackingId]
       );
     } catch (err) {
-      console.error('Tracking error:', err);
+      console.error('Tracking error');
     }
     // 1x1 transparent GIF
     const img = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -975,7 +1029,8 @@ export function mailRoutes(db: any) {
       );
       res.json(stats);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error('tracking-stats error');
+      res.status(500).json({ error: 'Failed' });
     }
   });
 

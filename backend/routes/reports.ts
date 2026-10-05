@@ -28,7 +28,12 @@ export function reportRoutes(db: any) {
   });
 
   router.post('/', async (req, res) => {
-    const { id, title, content, authorId, department, status, createdAt, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback } = req.body;
+    const { id, title, content, department, status, createdAt, submittedAt } = req.body;
+    // Identity + timestamps come from the server, never from the client.
+    const authorId = (req as any).user?.id;
+    if (!authorId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!title) return res.status(400).json({ error: 'Thiếu tiêu đề báo cáo' });
+    const now = new Date().toISOString();
     try {
       let finalContent = content;
       try {
@@ -56,7 +61,7 @@ export function reportRoutes(db: any) {
 
       await db.run(
         'INSERT INTO reports (id, title, content, authorId, department, status, createdAt, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, title, finalContent ?? null, authorId, department, status, createdAt, submittedAt ?? null, approvedAt ?? null, approvedBy ?? null, directorFeedback ?? null, managerFeedback ?? null],
+        [id, title, finalContent ?? null, authorId, department, status, now, submittedAt ?? null, null, null, null, null],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
@@ -75,9 +80,26 @@ export function reportRoutes(db: any) {
   });
 
   router.put('/:id', async (req, res) => {
-    const { title, content, status, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback } = req.body;
+    const { title, content, status, submittedAt, directorFeedback, managerFeedback } = req.body;
     try {
       const existing = await db.get('SELECT * FROM reports WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Report not found' });
+      const me = (req as any).user;
+      const isAdmin = me?.role === 'Admin';
+      const isDirector = me?.role === 'Director' || isAdmin;
+      const isOwner = existing.authorId === me?.id;
+      // Only owner (draft edits) or privileged approvers may update.
+      const wantsApprove = status === 'Approved' || directorFeedback || (existing.status !== status && (status === 'Approved' || status === 'Rejected'));
+      if (wantsApprove && !(isAdmin || isDirector)) {
+        // Managers may approve their own department's reports.
+        const isManager = me?.role === 'Manager';
+        if (!(isManager && existing.department && me?.department === existing.department)) {
+          return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo này' });
+        }
+      }
+      if (!isOwner && !isAdmin && !isDirector && me?.role !== 'Manager') {
+        return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
+      }
 
       let finalContent = content;
       try {
@@ -105,11 +127,11 @@ export function reportRoutes(db: any) {
 
       await db.run(
         'UPDATE reports SET title=?, content=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, directorFeedback=?, managerFeedback=? WHERE id=?',
-        [title, finalContent ?? null, status, submittedAt ?? null, approvedAt ?? null, approvedBy ?? null, directorFeedback ?? null, managerFeedback ?? null, req.params.id],
+        [title, finalContent ?? null, status, submittedAt ?? null, (status === 'Approved' || status === 'Rejected') ? new Date().toISOString() : existing.approvedAt ?? null, (status === 'Approved' || status === 'Rejected') ? ((req as any).user?.id ?? existing.approvedBy ?? null) : existing.approvedBy ?? null, directorFeedback ?? existing.directorFeedback ?? null, managerFeedback ?? existing.managerFeedback ?? null, req.params.id],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [randomUUID(), approvedBy || 'system', `report.${status}`, req.params.id, 'report', new Date().toISOString()],
+        [randomUUID(), (req as any).user?.id || 'system', `report.${status}`, req.params.id, 'report', new Date().toISOString()],
       );
 
       if (existing && existing.status !== status) {

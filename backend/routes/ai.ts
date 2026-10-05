@@ -1,6 +1,24 @@
 import { Router } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TRANLE_KNOWLEDGE } from '../tranle_knowledge.js';
+import { requireAdmin } from '../middleware/auth.js';
+import { decrypt } from '../utils/cryptoUtils.js';
+
+function decryptStoredKeys(raw: any): string[] {
+  if (!raw) return [];
+  try {
+    const text = typeof raw === 'string' && raw.startsWith('gcm:') ? (decrypt(raw) ?? '[]') : raw;
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.filter((k: any) => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function maskKey(k: string): string {
+  if (k.length <= 8) return '****';
+  return `${k.slice(0, 4)}****${k.slice(-4)}`;
+}
 
 // ─── Key Rotation State (per-process, shared across requests) ─────────────────
 let _cachedProvider: string | null = null;
@@ -25,7 +43,7 @@ async function getAiConfig(db: any): Promise<{ provider: string; keys: string[] 
     const keysMap: Record<string, string[]> = {};
     for (const p of providers) {
       const row = await db.get('SELECT `value` FROM system_config WHERE `key` = ?', [`${p}_api_keys`]);
-      keysMap[p] = row?.value ? JSON.parse(row.value) : [];
+      keysMap[p] = decryptStoredKeys(row?.value);
     }
     const providerRow = await db.get("SELECT `value` FROM system_config WHERE `key` = 'ai_provider'");
     const provider = providerRow?.value || 'gemini';
@@ -180,7 +198,7 @@ export function aiRoutes(db: any) {
   });
 
   // POST /api/ai/test-key - test a specific API key
-  router.post('/test-key', async (req, res) => {
+  router.post('/test-key', requireAdmin, async (req, res) => {
     const { provider, apiKey } = req.body;
     if (!provider || !apiKey) return res.status(400).json({ error: 'provider and apiKey are required' });
     
@@ -226,24 +244,26 @@ export function aiRoutes(db: any) {
     }
   });
 
-  // GET /api/ai/keys-status - return current status of all keys
-  router.get('/keys-status', async (_req, res) => {
+  // GET /api/ai/keys-status - masked key identities only, never raw secrets.
+  // NOTE: _keyStatuses is keyed by raw key internally; only masked fingerprints leave this endpoint.
+  router.get('/keys-status', requireAdmin, async (_req, res) => {
     try {
       const { provider, keys } = await getAiConfig(db);
-      const result: Record<string, KeyStatus> = {};
-      for (const k of keys) {
-        result[k] = _keyStatuses[k] || { status: 'Unknown', lastChecked: 0 };
-      }
-      res.json({ provider, statuses: result });
+      const statuses: Record<string, KeyStatus & { masked: string }> = {};
+      keys.forEach((k, i) => {
+        const st = _keyStatuses[k] || { status: 'Unknown', lastChecked: 0 };
+        statuses[`key-${i + 1}`] = { ...st, masked: maskKey(k) };
+      });
+      res.json({ provider, keyCount: keys.length, statuses });
     } catch {
-      res.json({ provider: 'gemini', statuses: {} });
+      res.json({ provider: 'gemini', keyCount: 0, statuses: {} });
     }
   });
 
   // POST /api/ai/generate-subtasks
   router.post('/generate-subtasks', async (req, res) => {
     const { taskTitle } = req.body;
-    if (!taskTitle) return res.status(400).json({ error: 'taskTitle is required' });
+    if (!taskTitle || typeof taskTitle !== 'string' || taskTitle.length > 500) return res.status(400).json({ error: 'taskTitle is required (max 500 chars)' });
     try {
       const result = await withRotation(db, async (apiKey, provider) => {
         if (provider === 'gemini') {
@@ -263,7 +283,7 @@ export function aiRoutes(db: any) {
         }
       });
       res.json({ subtasks: Array.isArray(result) ? result : [] });
-    } catch (e: any) { console.error('[AI /generate-subtasks]', e); res.status(500).json({ error: e.message || 'AI generation failed' }); }
+    } catch (e: any) { console.error('[AI /generate-subtasks]'); res.status(500).json({ error: 'AI generation failed' }); }
   });
 
   // POST /api/ai/generate-details
@@ -288,7 +308,7 @@ export function aiRoutes(db: any) {
         }
       });
       res.json(result || { description: '', subtasks: [] });
-    } catch (e: any) { console.error('[AI /generate-details]', e); res.status(500).json({ error: e.message || 'AI generation failed' }); }
+    } catch (e: any) { console.error('[AI /generate-details]'); res.status(500).json({ error: 'AI generation failed' }); }
   });
 
   // POST /api/ai/generate-tasks-from-goal
@@ -314,7 +334,7 @@ export function aiRoutes(db: any) {
         }
       });
       res.json({ tasks: Array.isArray(result) ? result : [] });
-    } catch (e: any) { console.error('[AI /generate-tasks-from-goal]', e); res.status(500).json({ error: e.message || 'AI generation failed' }); }
+    } catch (e: any) { console.error('[AI /generate-tasks-from-goal]'); res.status(500).json({ error: 'AI generation failed' }); }
   });
 
   // POST /api/ai/chat-stream  (Server-Sent Events)
@@ -400,8 +420,8 @@ export function aiRoutes(db: any) {
       send({ type: 'done' });
       res.end();
     } catch (e: any) {
-      console.error('[AI /chat-stream]', e);
-      send({ type: 'error', content: e.message || 'AI error' });
+      console.error('[AI /chat-stream]');
+      send({ type: 'error', content: 'AI error' });
       send({ type: 'done' });
       res.end();
     }

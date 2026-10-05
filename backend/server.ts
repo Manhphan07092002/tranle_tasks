@@ -33,8 +33,8 @@ import { projectRoutes } from './routes/projects.js';
 import { documentRoutes } from './routes/documents.js';
 import { aiRoutes, invalidateAiKeyCache } from './routes/ai.js';
 
-import { initSocket } from './socket.js';
-import { requireAuth, requireAdmin } from './middleware/auth.js';
+import { initSocket, setSocketDb } from './socket.js';
+import { requireAuth, requireAdmin, setAuthDb, cookiesMiddleware } from './middleware/auth.js';
 
 import { scheduleFridayReminder } from './schedulers/fridayReminder.js';
 import { scheduleNoteReminders } from './schedulers/noteReminder.js';
@@ -47,7 +47,8 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  
+  app.disable('x-powered-by');
+
   // Trust the first proxy to correctly extract client IP for rate limiting
   app.set('trust proxy', 1);
 
@@ -66,9 +67,39 @@ async function startServer() {
 
   initSocket(httpServer);
 
-  app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // CORS allowlist — never '*' with credentials. Comma-separated ALLOWED_ORIGIN in prod.
+  const allowedOrigins = (process.env.ALLOWED_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // same-origin / curl / mobile
+      if (allowedOrigins.length === 0) {
+        // Dev default: allow localhost only.
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+        return cb(new Error('CORS blocked'));
+      }
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error('CORS blocked'));
+    },
+    credentials: true,
+  }));
+
+  // Baseline security headers (helmet-equivalent, no extra dep).
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  app.use(express.json({ limit: '5mb' }));
+  app.use(express.urlencoded({ limit: '5mb', extended: true }));
+
+  // Minimal cookie parser (shared helper — populates req.cookies for httpOnly auth cookies).
+  app.use(cookiesMiddleware);
 
   const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -80,12 +111,36 @@ async function startServer() {
     max: 10,
     message: { error: 'Too many login attempts from this IP' },
   });
+  const forgotPasswordLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many password reset attempts from this IP' },
+  });
+  const refreshLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: { error: 'Too many session refresh attempts from this IP' },
+  });
+  // Costly/abusable endpoints get their own tighter budgets (per IP).
+  const aiLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, message: { error: 'Too many AI requests' } });
+  const mailSendLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 50, message: { error: 'Too many emails sent' } });
+  const adminWriteLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: { error: 'Too many admin requests' } });
 
   app.use('/api', globalLimiter);
   app.use('/api/auth/login', loginLimiter);
+  app.use('/api/auth/refresh', refreshLimiter);
+  app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+  app.use('/api/auth/reset-password', forgotPasswordLimiter);
+  app.use('/api/ai', aiLimiter);
+  app.use('/api/mail/send', mailSendLimiter);
+  app.use('/api/mail/schedule', mailSendLimiter);
+  app.use('/api/mail/bulk', mailSendLimiter);
+  app.use('/api/admin/database/import', adminWriteLimiter);
 
   // Database: MySQL (duy nhất)
   const db = await initDbMysql();
+  setAuthDb(db);
+  setSocketDb(db);
 
   const mailer = createMailer(db);
 
@@ -125,9 +180,18 @@ async function startServer() {
 
   app.use('/api/upload', requireAuth, uploadRoutes());
 
-  // Serve uploaded files
+  // Serve uploaded files — authenticated, never public. Attachments force download
+  // so a stored .bin/.pdf can't execute as the app origin; nosniff blocks MIME sniffing.
   const uploadsPath = path.join(__dirname, '../uploads');
-  app.use('/uploads', express.static(uploadsPath));
+  app.use('/uploads', requireAuth, express.static(uploadsPath, {
+    setHeaders: (res, filePath) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      if (/\.(html|svg|xml|xhtml)$/i.test(filePath)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
+    },
+  }));
 
   const frontendPath = path.join(__dirname, '../frontend/dist');
   app.use(express.static(frontendPath));

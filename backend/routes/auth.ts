@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { validate } from '../middleware/validate.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const LoginSchema = z.object({
   email: z.string().email('Email không hợp lệ'),
@@ -13,17 +14,69 @@ const LoginSchema = z.object({
 const ChangePasswordSchema = z.object({
   userId: z.string(),
   currentPassword: z.string().optional(),
-  newPassword: z.string().min(6, 'Mật khẩu mới phải ít nhất 6 ký tự'),
+  newPassword: z.string().min(8, 'Mật khẩu mới phải ít nhất 8 ký tự'),
 });
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function hashResetToken(token: string): string {
+  return hashToken(token);
+}
+
+function isStrongPassword(pw: string): boolean {
+  if (pw.length < 8) return false;
+  return true;
+}
+
+// ─── Refresh-token session management ────────────────────────────────────────
+// Access tokens are short-lived (15m) and bearer-transported. Refresh tokens are
+// opaque, single-use (rotation), sha256-hashed at rest, and transported ONLY via
+// httpOnly cookie — never in JS-accessible storage, URLs, or logs.
+const ACCESS_TOKEN_TTL = '15m';
+const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE = 'tranle_refresh';
+
+function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: REFRESH_TOKEN_TTL_MS,
+  };
+}
+
+async function mintRefreshToken(db: any, userId: string): Promise<string> {
+  const raw = 'rt_' + crypto.randomBytes(48).toString('hex');
+  const now = new Date().toISOString();
+  await db.run(
+    'INSERT INTO refresh_tokens (id, userId, tokenHash, expiresAt, createdAt, revokedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    [crypto.randomUUID(), userId, hashToken(raw), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(), now, null]
+  );
+  return raw;
+}
+
+async function revokeUserRefreshTokens(db: any, userId: string) {
+  try {
+    await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE userId = ? AND revokedAt IS NULL', [new Date().toISOString(), userId]);
+  } catch { /* revocation must never break the request */ }
+}
 
 
 
 export function authRoutes(db: any) {
   const router = Router();
-  const getSecret = () => (process.env.JWT_SECRET || 'secret') as string;
+  const getSecret = () => {
+    const s = process.env.JWT_SECRET;
+    if (!s) throw new Error('JWT_SECRET is not configured');
+    return s;
+  };
 
   const generateToken = (userPayload: any) => {
-    return jwt.sign(userPayload, getSecret(), { expiresIn: '7d' });
+    return jwt.sign(userPayload, getSecret(), { expiresIn: ACCESS_TOKEN_TTL });
   };
 
   router.post('/login', validate(LoginSchema), async (req, res) => {
@@ -113,9 +166,11 @@ export function authRoutes(db: any) {
         department: user.department, avatar: user.avatar, 
         permissions: role?.permissions ? JSON.parse(role.permissions) : []
       };
-      const jwtPayload = { ...userClientData };
+      const jwtPayload = { ...userClientData, jti: crypto.randomUUID() };
       const token = generateToken(jwtPayload);
-      
+      const refreshToken = await mintRefreshToken(db, user.id);
+      res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+
       try {
         await db.run(
           `INSERT INTO activity_logs (id, userId, action, entityId, entityType, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -125,12 +180,73 @@ export function authRoutes(db: any) {
         console.error('Failed to log login activity', logErr);
       }
 
-      return res.json({ token, user: userClientData });
+      return res.json({ token, user: userClientData, expiresIn: ACCESS_TOKEN_TTL_MS / 1000 });
     } catch (e) { console.error('LOGIN ROUTE EXCEPTION:', e); res.status(500).json({ error: 'Failed' }); }
   });
 
-  router.post('/change-password', validate(ChangePasswordSchema), async (req, res) => {
+  // Silent session renewal: rotates the refresh token on every use.
+  // Reuse of an already-rotated token signals theft → all user sessions are revoked.
+  router.post('/refresh', async (req, res) => {
+    try {
+      const raw = req.cookies?.[REFRESH_COOKIE] || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '');
+      if (!raw) return res.status(401).json({ error: 'Unauthorized' });
+      const presented = hashToken(String(raw));
+      const row = await db.get('SELECT id, userId, expiresAt, revokedAt FROM refresh_tokens WHERE tokenHash = ?', [presented]);
+      if (!row) return res.status(401).json({ error: 'Unauthorized' });
+      if (row.revokedAt) {
+        // Token reuse after rotation — possible theft. Kill every session for this user.
+        await revokeUserRefreshTokens(db, row.userId);
+        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (new Date(row.expiresAt).getTime() < Date.now()) {
+        await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE id = ?', [new Date().toISOString(), row.id]);
+        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const user = await db.get('SELECT id, name, email, role, department, avatar FROM users WHERE id = ?', [row.userId]);
+      if (!user) {
+        await revokeUserRefreshTokens(db, row.userId);
+        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (user.isLocked) return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa.' });
+
+      const role = await db.get('SELECT permissions FROM roles WHERE name = ?', [user.role]);
+      const userClientData = {
+        id: user.id, name: user.name, email: user.email, role: user.role,
+        department: user.department, avatar: user.avatar,
+        permissions: role?.permissions ? JSON.parse(role.permissions) : []
+      };
+      // Rotate: revoke the presented token, mint a fresh pair.
+      await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE id = ?', [new Date().toISOString(), row.id]);
+      const refreshToken = await mintRefreshToken(db, user.id);
+      res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+      return res.json({ token: generateToken({ ...userClientData, jti: crypto.randomUUID() }), user: userClientData, expiresIn: ACCESS_TOKEN_TTL_MS / 1000 });
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed' });
+    }
+  });
+
+  router.post('/logout', async (req, res) => {
+    try {
+      const raw = req.cookies?.[REFRESH_COOKIE] || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '');
+      if (raw) {
+        await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE tokenHash = ?', [new Date().toISOString(), hashToken(String(raw))]);
+      }
+    } catch { /* ignore */ }
+    res.clearCookie(REFRESH_COOKIE, { path: '/' });
+    return res.json({ success: true });
+  });
+
+  router.post('/change-password', requireAuth, validate(ChangePasswordSchema), async (req, res) => {
     const { userId, currentPassword, newPassword } = req.body;
+    if (req.user?.id !== userId) {
+      return res.status(403).json({ error: 'Bạn chỉ có thể đổi mật khẩu của chính mình' });
+    }
+    if (!isStrongPassword(String(newPassword || ''))) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
+    }
     try {
       const user = await db.get('SELECT id, password FROM users WHERE id = ?', [userId]);
       if (!user || !user.password) return res.status(404).json({ error: 'User not found' });
@@ -138,6 +254,8 @@ export function authRoutes(db: any) {
       if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, userId]);
+      // Password change invalidates every session — stolen tokens die here.
+      await revokeUserRefreshTokens(db, userId);
       return res.json({ success: true });
     } catch (e) { console.error('CHANGE PASSWORD ROUTE EXCEPTION:', e); res.status(500).json({ error: 'Failed' }); }
   });
@@ -153,10 +271,10 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
     const { email } = req.body;
     try {
       const user = await db.get('SELECT id, email, isLocked FROM users WHERE lower(email) = lower(?)', [email]);
-      if (!user) return res.status(404).json({ error: 'Email không tồn tại trong hệ thống' });
-
-      if (user.isLocked) {
-        return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa. Không thể sử dụng tính năng quên mật khẩu. Vui lòng liên hệ Admin.' });
+      // Always return the same response so this endpoint does not reveal which
+      // email addresses exist or whether an account is locked.
+      if (!user || user.isLocked) {
+        return res.json({ success: true, message: 'Nếu email hợp lệ, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.' });
       }
 
       const recentPending = await db.get("SELECT id, createdAt FROM password_reset_requests WHERE userId = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1", [user.id]);
@@ -166,12 +284,13 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       }
 
       const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+      const tokenHash = hashResetToken(token);
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       const appBaseUrl = process.env.APP_BASE_URL || 'https://ai.hieuhomecloud.online';
       const resetLink = `${appBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
       await db.run('DELETE FROM password_reset_tokens WHERE userId = ? AND usedAt IS NULL', [user.id]);
-      await db.run('INSERT INTO password_reset_tokens (id, userId, email, token, expiresAt, usedAt) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), user.id, user.email, token, expiresAt, null]);
+      await db.run('INSERT INTO password_reset_tokens (id, userId, email, token, expiresAt, usedAt) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), user.id, user.email, tokenHash, expiresAt, null]);
 
       if (recentPending) {
         await db.run('UPDATE password_reset_requests SET email = ?, emailStatus = ?, emailSentAt = ?, createdAt = ? WHERE id = ?', [user.email, 'pending', null, new Date().toISOString(), recentPending.id]);
@@ -180,42 +299,44 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       }
 
       let emailSent = false;
-      let message = 'Đã tạo link đặt lại mật khẩu.';
       try {
         emailSent = await mailer.sendResetLinkEmail(user.email, resetLink);
-        message = emailSent ? 'Đã gửi link đặt lại mật khẩu qua email.' : 'Đã tạo link đặt lại mật khẩu nhưng chưa gửi được email.';
       } catch (mailError: any) {
         console.error('forgot-password mail error', mailError);
-        message = mailError?.message || 'Đã tạo link đặt lại mật khẩu nhưng gửi email thất bại.';
       }
 
       await db.run("UPDATE password_reset_requests SET emailStatus = ?, emailSentAt = ? WHERE userId = ? AND status = 'pending'", [emailSent ? 'sent' : 'failed', emailSent ? new Date().toISOString() : null, user.id]);
-      return res.json({ success: true, emailSent, message, resetLink, expiresAt });
+      return res.json({ success: true, message: 'Nếu email hợp lệ, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.' });
     } catch (e) { console.error('forgot-password error', e); res.status(500).json({ error: 'Failed' }); }
   });
 
   router.get('/reset-password/:token', async (req, res) => {
     try {
-      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [req.params.token]);
+      const tokenHash = hashResetToken(String(req.params.token || ''));
+      const rt = await db.get('SELECT userId, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
       if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
       if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
       if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
-      return res.json({ success: true, email: rt.email });
+      // Do not reveal the account email — prevents token oracle / account enumeration.
+      return res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
 
   router.post('/reset-password', async (req, res) => {
     const { token, newPassword } = req.body;
     try {
-      if (!newPassword || String(newPassword).trim().length < 6) return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
-      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [token]);
+      if (!newPassword || String(newPassword).trim().length < 8) return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
+      const tokenHash = hashResetToken(String(token || ''));
+      const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
       if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
       if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
       if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
       const hashedPassword = await bcrypt.hash(String(newPassword).trim(), 10);
       await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, rt.userId]);
       const now = new Date().toISOString();
-      await db.run('UPDATE password_reset_tokens SET usedAt = ? WHERE token = ?', [now, token]);
+      await db.run('UPDATE password_reset_tokens SET usedAt = ? WHERE token = ?', [now, tokenHash]);
+      // Reset invalidates every session, including any attacker-held ones.
+      await revokeUserRefreshTokens(db, rt.userId);
       await db.run("UPDATE password_reset_requests SET status = 'resolved', emailStatus = 'reset_done', emailSentAt = COALESCE(emailSentAt, ?) WHERE userId = ? AND status = 'pending'", [now, rt.userId]);
       return res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }

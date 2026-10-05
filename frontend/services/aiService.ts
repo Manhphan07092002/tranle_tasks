@@ -1,4 +1,5 @@
 import { apiFetch } from './api';
+import { getAccessToken, refreshAccessToken } from './tokenStore';
 
 // ─── Secure AI Service ────────────────────────────────────────────────────────
 // API Keys are stored and used exclusively on the backend.
@@ -75,20 +76,28 @@ export const createChatSession = async (
 ) => {
   return {
     sendMessageStream: async function* ({ message }: { message: string }) {
-      const token = localStorage.getItem('tranle_token') || '';
+      const buildRequest = (token: string | null) =>
+        fetch('/api/ai/chat-stream', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            message,
+            history: history || [],
+            contextString: contextString || '',
+          }),
+        });
 
-      const res = await fetch('/api/ai/chat-stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message,
-          history: history || [],
-          contextString: contextString || '',
-        }),
-      });
+      let res = await buildRequest(getAccessToken());
+      // Access token may have expired mid-session — refresh once and retry.
+      if (res.status === 401) {
+        if (await refreshAccessToken()) {
+          res = await buildRequest(getAccessToken());
+        }
+      }
 
       if (!res.ok || !res.body) {
         throw new Error(`Chat stream failed: HTTP ${res.status}`);

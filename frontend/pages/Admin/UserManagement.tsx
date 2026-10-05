@@ -431,29 +431,7 @@ export default function AdminUserManagement() {
         const depts = await dr.json();
         setDepartments(depts.map((d: any) => d.name));
       }
-      if (pr.ok) {
-        const requests = await pr.json();
-        const enriched = await Promise.all(
-          requests.map(async (request: PasswordResetRequest) => {
-            try {
-              const res = await apiFetch('/api/auth/forgot-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: request.email }),
-              });
-              const data = await res.json().catch(() => ({}));
-              return {
-                ...request,
-                resetLink: data.resetLink,
-                expiresAt: data.expiresAt,
-              };
-            } catch {
-              return request;
-            }
-          })
-        );
-        setResetRequests(enriched);
-      }
+      if (pr.ok) setResetRequests(await pr.json());
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, []);

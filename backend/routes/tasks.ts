@@ -5,6 +5,22 @@ import { sendNotification } from '../utils/notify.js';
 export function taskRoutes(db: any) {
   const router = Router();
 
+  const hasPermission = (user: any, permission: string) =>
+    user?.role === 'Admin' || user?.permissions?.includes(permission);
+
+  const canViewTask = (user: any, task: any, assignees: string[]) =>
+    hasPermission(user, 'admin_panel') ||
+    hasPermission(user, 'view_all_tasks') ||
+    (hasPermission(user, 'manage_dept_tasks') && task.department === user.department) ||
+    task.createdBy === user?.id ||
+    assignees.includes(user?.id);
+
+  const canEditTask = (user: any, task: any, assignees: string[]) =>
+    task.createdBy === user?.id || assignees.includes(user?.id);
+
+  const canDeleteTask = (user: any, task: any) =>
+    task.createdBy === user?.id || hasPermission(user, 'admin_panel');
+
   function groupByKey(rows: any[], key: string): Record<string, any[]> {
     return rows.reduce((acc: Record<string, any[]>, r: any) => {
       (acc[r[key]] ??= []).push(r);
@@ -12,7 +28,7 @@ export function taskRoutes(db: any) {
     }, {});
   }
 
-  async function buildTasks(thresholdDate?: string) {
+  async function buildTasks(user: any, thresholdDate?: string) {
     let tasksQuery = 'SELECT * FROM tasks WHERE 1=1';
     const params: any[] = [];
     if (thresholdDate) {
@@ -33,7 +49,9 @@ export function taskRoutes(db: any) {
     const sMap = groupByKey(subtasks, 'taskId');
     const cMap = groupByKey(comments, 'taskId');
 
-    return tasks.map((t: any) => ({
+    return tasks
+      .filter((t: any) => canViewTask(user, t, (aMap[t.id] ?? []).map((r: any) => r.userId)))
+      .map((t: any) => ({
       ...t,
       assignees: (aMap[t.id] ?? []).map((r: any) => r.userId),
       tags: (tMap[t.id] ?? []).map((r: any) => r.tag),
@@ -43,7 +61,7 @@ export function taskRoutes(db: any) {
       comments: (cMap[t.id] ?? []).map((r: any) => ({
         id: r.id, userId: r.userId, content: r.content, createdAt: r.createdAt,
       })),
-    }));
+      }));
   }
 
   async function saveRelated(taskId: string, t: any) {
@@ -74,40 +92,47 @@ export function taskRoutes(db: any) {
     }
   }
 
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     try {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      res.json(await buildTasks(sixMonthsAgo.toISOString()));
+      res.json(await buildTasks(req.user, sixMonthsAgo.toISOString()));
     } catch (e) { res.status(500).json({ error: 'Failed to fetch tasks' }); }
   });
 
-  router.get('/archive', async (_req, res) => {
+  router.get('/archive', async (req, res) => {
     try {
-      res.json(await buildTasks());
+      res.json(await buildTasks(req.user));
     } catch (e) { res.status(500).json({ error: 'Failed to fetch tasks archive' }); }
   });
 
   router.post('/', async (req, res) => {
     const t = req.body;
+    const user = req.user!;
+    const isManager = hasPermission(user, 'manage_dept_tasks');
+    const canAssignAcrossOrg = isManager || hasPermission(user, 'view_all_tasks') || hasPermission(user, 'admin_panel');
+    const assignees = Array.isArray(t.assignees) ? t.assignees : [];
+    if (!canAssignAcrossOrg && assignees.some((id: string) => id !== user.id)) {
+      return res.status(403).json({ error: 'Bạn chỉ có thể giao công việc cho chính mình' });
+    }
     try {
       await db.run(
         'INSERT INTO tasks (id, title, description, startDate, dueDate, estimatedEndAt, priority, status, createdBy, department, recurrence, contractId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [t.id, t.title, t.description ?? null, t.startDate ?? null, t.dueDate ?? null,
           t.estimatedEndAt ?? null, t.priority ?? null, t.status ?? null,
-          t.createdBy ?? null, t.department ?? null, t.recurrence ?? null, t.contractId ?? null],
+          user.id, canAssignAcrossOrg ? (t.department ?? user.department) : user.department, t.recurrence ?? null, t.contractId ?? null],
       );
-      await saveRelated(t.id, t);
+      await saveRelated(t.id, { ...t, assignees });
 
-      if (t.createdBy) {
+      if (user.id) {
         await db.run(
           'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-          [randomUUID(), t.createdBy, 'task.created', t.id, 'task', new Date().toISOString()],
+          [randomUUID(), user.id, 'task.created', t.id, 'task', new Date().toISOString()],
         );
       }
-      if (Array.isArray(t.assignees)) {
-        for (const assigneeId of t.assignees) {
-          if (assigneeId !== t.createdBy) {
+      if (Array.isArray(assignees)) {
+        for (const assigneeId of assignees) {
+          if (assigneeId !== user.id) {
             await sendNotification(db, assigneeId, 'task_assigned', 'Công việc mới', `Bạn vừa được giao một công việc mới: ${t.title}`, t.id);
           }
         }
@@ -119,6 +144,12 @@ export function taskRoutes(db: any) {
   router.put('/:id', async (req, res) => {
     const t = req.body;
     try {
+      const existing = await db.get('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Task not found' });
+      const existingAssignees = (await db.all('SELECT userId FROM task_assignees WHERE taskId = ?', [req.params.id])).map((row: any) => row.userId);
+      if (!canEditTask(req.user, existing, existingAssignees)) {
+        return res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa công việc này' });
+      }
       await db.run(
         'UPDATE tasks SET title=?, description=?, startDate=?, dueDate=?, estimatedEndAt=?, priority=?, status=?, department=?, recurrence=?, contractId=? WHERE id=?',
         [t.title, t.description ?? null, t.startDate ?? null, t.dueDate ?? null,
@@ -127,10 +158,10 @@ export function taskRoutes(db: any) {
       );
       await saveRelated(req.params.id, t);
 
-      if (t.updatedBy || t.createdBy) {
+      if (req.user?.id) {
         await db.run(
           'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-          [randomUUID(), t.updatedBy ?? t.createdBy ?? 'system', 'task.updated', req.params.id, 'task', new Date().toISOString()],
+          [randomUUID(), req.user.id, 'task.updated', req.params.id, 'task', new Date().toISOString()],
         );
       }
       res.json({ success: true });
@@ -139,6 +170,11 @@ export function taskRoutes(db: any) {
 
   router.delete('/:id', async (req, res) => {
     try {
+      const existing = await db.get('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
+      if (!existing) return res.status(404).json({ error: 'Task not found' });
+      if (!canDeleteTask(req.user, existing)) {
+        return res.status(403).json({ error: 'Bạn không có quyền xóa công việc này' });
+      }
       await db.run('DELETE FROM task_assignees WHERE taskId = ?', [req.params.id]);
       await db.run('DELETE FROM task_tags WHERE taskId = ?', [req.params.id]);
       await db.run('DELETE FROM task_subtasks WHERE taskId = ?', [req.params.id]);
