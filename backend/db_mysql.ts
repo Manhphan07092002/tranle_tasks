@@ -354,9 +354,9 @@ CREATE TABLE IF NOT EXISTS mail_quotas (
 `;
 
 export async function initDbMysql(): Promise<MysqlDb> {
-  const url = process.env.DATABASE_URL || 'mysql://root:@127.0.0.1:3306/ctctask';
+  const url = process.env.DATABASE_URL || 'mysql://root:@127.0.0.1:3306/tranletask';
   const parsed = new URL(url);
-  const dbName = parsed.pathname.replace(/^\//, '') || 'ctctask';
+  const dbName = parsed.pathname.replace(/^\//, '') || 'tranletask';
   const host = parsed.hostname || '127.0.0.1';
   const port = parseInt(parsed.port || '3306', 10);
   const user = decodeURIComponent(parsed.username || 'root');

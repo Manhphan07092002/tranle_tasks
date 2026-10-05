@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/index.tsx';
+const path = 'E:/web_tranle_new/frontend/pages/Reports/index.tsx';
 let src = fs.readFileSync(path, 'utf8');
 
 // Replace from tabClass definition to just before <ReportModal

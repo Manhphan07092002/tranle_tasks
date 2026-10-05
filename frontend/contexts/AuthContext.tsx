@@ -33,8 +33,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('ctc_token');
-    const storedUser = localStorage.getItem('ctc_user');
+    const token = localStorage.getItem('tranle_token');
+    const storedUser = localStorage.getItem('tranle_user');
     
     if (token && storedUser) {
       const payload = parseJwt(token);
@@ -42,16 +42,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           setUser(JSON.parse(storedUser));
         } catch (e) {
-          localStorage.removeItem('ctc_user');
-          localStorage.removeItem('ctc_token');
+          localStorage.removeItem('tranle_user');
+          localStorage.removeItem('tranle_token');
         }
       } else {
-        localStorage.removeItem('ctc_token');
-        localStorage.removeItem('ctc_user');
+        localStorage.removeItem('tranle_token');
+        localStorage.removeItem('tranle_user');
       }
     } else {
-      localStorage.removeItem('ctc_token');
-      localStorage.removeItem('ctc_user');
+      localStorage.removeItem('tranle_token');
+      localStorage.removeItem('tranle_user');
     }
     setIsLoading(false);
   }, []);
@@ -68,8 +68,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { success: false, error: data.error || 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.' };
       }
       setUser(data.user);
-      localStorage.setItem('ctc_token', data.token);
-      localStorage.setItem('ctc_user', JSON.stringify(data.user));
+      localStorage.setItem('tranle_token', data.token);
+      localStorage.setItem('tranle_user', JSON.stringify(data.user));
       return { success: true };
     } catch (e) {
       console.error('Login failed:', e);
@@ -79,15 +79,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('ctc_token');
-    localStorage.removeItem('ctc_user');
+    localStorage.removeItem('tranle_token');
+    localStorage.removeItem('tranle_user');
   };
 
 
 
   const updateUserSession = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('ctc_user', JSON.stringify(updatedUser));
+    localStorage.setItem('tranle_user', JSON.stringify(updatedUser));
   };
 
   return (

@@ -1,5 +1,5 @@
 ---
-name: ctc-backend
+name: tranle-backend
 description: Backend API conventions and security boundaries.
 activation: glob
 globs: backend/**/*.ts

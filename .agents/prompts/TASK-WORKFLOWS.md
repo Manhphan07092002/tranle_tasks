@@ -1,14 +1,14 @@
-# CTC Task — Workflow theo từng loại công việc
+# TranLe Tasks — Workflow theo từng loại công việc
 
 ## A. Feature frontend
 
-/ctc-plan
+/tranle-plan
 → inspect page/component/hook/service
 → identify API/query/cache
 → implement
 → frontend build
-→ /ctc-review
-→ /ctc-verify
+→ /tranle-review
+→ /tranle-verify
 
 Checklist:
 - loading
@@ -22,15 +22,15 @@ Checklist:
 
 ## B. Backend API
 
-/ctc-plan
+/tranle-plan
 → route
 → auth
 → validation
 → service/db
 → tests
 → frontend consumer
-→ /ctc-review
-→ /ctc-verify
+→ /tranle-review
+→ /tranle-verify
 
 Checklist:
 - authentication
@@ -44,18 +44,18 @@ Checklist:
 
 ## C. Bug
 
-/ctc-debug
+/tranle-debug
 → reproduce
 → root cause
 → regression test
 → fix
 → test
-→ /ctc-review
-→ /ctc-verify
+→ /tranle-review
+→ /tranle-verify
 
 ## D. Database migration
 
-/ctc-db
+/tranle-db
 → inspect SQLite/PostgreSQL
 → migration plan
 → data preservation
@@ -67,7 +67,7 @@ Checklist:
 
 ## E. RBAC
 
-/ctc-rbac
+/tranle-rbac
 → identify permission
 → identify resource scope
 → server enforcement
@@ -77,7 +77,7 @@ Checklist:
 
 ## F. Realtime
 
-/ctc-realtime
+/tranle-realtime
 → event producer
 → event payload
 → client listener
@@ -87,7 +87,7 @@ Checklist:
 
 ## G. Mail
 
-/ctc-mail
+/tranle-mail
 → route
 → mailer/IMAP
 → authorization
@@ -97,7 +97,7 @@ Checklist:
 
 ## H. AI
 
-/ctc-ai
+/tranle-ai
 → provider boundary
 → server-side credential
 → input validation
@@ -108,7 +108,7 @@ Checklist:
 
 ## I. Refactor
 
-/ctc-context
+/tranle-context
 → define current behavior
 → isolate one responsibility
 → refactor
@@ -120,7 +120,7 @@ Never combine a large refactor with unrelated feature work.
 
 ## J. Security audit
 
-/ctc-security
+/tranle-security
 → evidence
 → severity
 → remediation
@@ -129,7 +129,7 @@ Never combine a large refactor with unrelated feature work.
 
 ## K. Release
 
-/ctc-release
+/tranle-release
 → status
 → diff
 → secret scan

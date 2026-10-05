@@ -1,4 +1,4 @@
-# CTC Task — Antigravity Quick Reference
+# TranLe Tasks — Antigravity Quick Reference
 
 ## Core commands
 
@@ -7,41 +7,41 @@
 /goal <task>                 # chạy đến khi hoàn tất
 /browser                     # browser debugging
 
-## CTC workflows
+## TranLe workflows
 
-/ctc-context
-/ctc-plan
-/ctc-feature
-/ctc-debug
-/ctc-api
-/ctc-db
-/ctc-rbac
-/ctc-realtime
-/ctc-mail
-/ctc-ai
-/ctc-security
-/ctc-review
-/ctc-verify
-/ctc-release
+/tranle-context
+/tranle-plan
+/tranle-feature
+/tranle-debug
+/tranle-api
+/tranle-db
+/tranle-rbac
+/tranle-realtime
+/tranle-mail
+/tranle-ai
+/tranle-security
+/tranle-review
+/tranle-verify
+/tranle-release
 
 ## Golden flow
 
-/ctc-context
-→ /ctc-plan
-→ /ctc-feature
-→ /ctc-review
-→ /ctc-verify
+/tranle-context
+→ /tranle-plan
+→ /tranle-feature
+→ /tranle-review
+→ /tranle-verify
 
 ## Bug
 
-/ctc-debug
-→ /ctc-review
-→ /ctc-verify
+/tranle-debug
+→ /tranle-review
+→ /tranle-verify
 
 ## Security
 
-/ctc-security
+/tranle-security
 
 ## Before commit
 
-/ctc-release
+/tranle-release

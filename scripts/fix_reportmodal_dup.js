@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/ReportModal.tsx';
+const path = 'E:/web_tranle_new/frontend/pages/Reports/ReportModal.tsx';
 let c = fs.readFileSync(path, 'utf8');
 
 // The file has a duplicated JSX section inserted by a bad patch.

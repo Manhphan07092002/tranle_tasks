@@ -10,6 +10,6 @@ Official Antigravity documentation:
 - Slash commands: https://www.antigravity.google/docs/slash-commands/
 
 Project source:
-- https://github.com/Manhphan07092002/ctc-task
+- https://github.com/Manhphan07092002/web-task-tranle-new
 
 The pack is a project-specific adaptation of ECC-style research/plan/test/review/verify practices. It is not an official ECC or Google distribution.

@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/ReportModal.tsx';
+const path = 'E:/web_tranle_new/frontend/pages/Reports/ReportModal.tsx';
 let lines = fs.readFileSync(path, 'utf8').split('\n');
 
 // Find the bad block: starts at the line that has "{/* Rows */}" inside footer

@@ -1,23 +1,23 @@
-# HƯỚNG DẪN SỬ DỤNG `.claude/` — CTC TASK
+# HƯỚNG DẪN SỬ DỤNG `.claude/` — TRANLE TASKS
 
 ## 1. Cài đặt
 
 Giải nén thư mục `.claude` vào đúng project root:
 
 ```text
-E:\ctc-task\ctc-task-main\.claude\
+E:\web_tranle_new\.claude\
 ```
 
 Sau đó mở terminal tại project:
 
 ```powershell
-cd E:\ctc-task\ctc-task-main
+cd E:\web_tranle_new
 claude
 ```
 
 Claude Code sẽ sử dụng các rule/skill/agent/command trong `.claude/` của project.
 
-> Bộ này là cấu hình riêng cho CTC Task. Không chứa API key, password hoặc credential.
+> Bộ này là cấu hình riêng cho TranLe Tasks. Không chứa API key, password hoặc credential.
 
 ---
 
@@ -42,26 +42,26 @@ Sửa lỗi nút lưu ở trang Tasks. Hãy kiểm tra nguyên nhân, sửa tố
 Nên chạy:
 
 ```text
-/ctc-context
+/tranle-context
 ```
 
 để Claude đọc lại kiến trúc hiện tại, sau đó:
 
 ```text
-/ctc-plan
+/tranle-plan
 ```
 
 Khi kế hoạch hợp lý:
 
 ```text
-/ctc-implement
+/tranle-implement
 ```
 
 Cuối cùng:
 
 ```text
-/ctc-review
-/ctc-verify
+/tranle-review
+/tranle-verify
 ```
 
 ---
@@ -70,15 +70,15 @@ Cuối cùng:
 
 | Command | Dùng khi nào |
 |---|---|
-| `/ctc-context` | Đọc nhanh kiến trúc, stack, route và quy ước của project |
-| `/ctc-plan` | Phân tích yêu cầu và lập kế hoạch trước khi code |
-| `/ctc-implement` | Thực hiện một kế hoạch đã được xác định |
-| `/ctc-debug` | Điều tra và sửa bug theo nguyên nhân gốc |
-| `/ctc-review` | Review thay đổi như một senior engineer |
-| `/ctc-verify` | Chạy test/build/check và xác nhận kết quả |
-| `/ctc-security` | Audit security, secret, auth, RBAC, upload, API |
-| `/ctc-rbac` | Làm role/permission/ownership/department access |
-| `/ctc-release` | Chuẩn bị kiểm tra trước khi commit/release |
+| `/tranle-context` | Đọc nhanh kiến trúc, stack, route và quy ước của project |
+| `/tranle-plan` | Phân tích yêu cầu và lập kế hoạch trước khi code |
+| `/tranle-implement` | Thực hiện một kế hoạch đã được xác định |
+| `/tranle-debug` | Điều tra và sửa bug theo nguyên nhân gốc |
+| `/tranle-review` | Review thay đổi như một senior engineer |
+| `/tranle-verify` | Chạy test/build/check và xác nhận kết quả |
+| `/tranle-security` | Audit security, secret, auth, RBAC, upload, API |
+| `/tranle-rbac` | Làm role/permission/ownership/department access |
+| `/tranle-release` | Chuẩn bị kiểm tra trước khi commit/release |
 
 ---
 
@@ -89,7 +89,7 @@ Ví dụ muốn thêm chức năng **lọc công việc theo phòng ban**.
 ### Bước 1 — Context
 
 ```text
-/ctc-context
+/tranle-context
 ```
 
 Nếu Claude đã hiểu project, tiếp tục.
@@ -97,7 +97,7 @@ Nếu Claude đã hiểu project, tiếp tục.
 ### Bước 2 — Plan
 
 ```text
-/ctc-plan
+/tranle-plan
 
 Tôi muốn thêm bộ lọc task theo department ở màn hình quản lý công việc.
 Phân tích frontend, backend API, database và RBAC trước.
@@ -109,7 +109,7 @@ Claude phải xác định các file/API liên quan trước khi triển khai.
 ### Bước 3 — Implement
 
 ```text
-/ctc-implement
+/tranle-implement
 
 Thực hiện đúng kế hoạch vừa thống nhất.
 Không refactor các module không liên quan.
@@ -119,7 +119,7 @@ Sau khi sửa hãy chạy test liên quan.
 ### Bước 4 — Review
 
 ```text
-/ctc-review
+/tranle-review
 
 Review toàn bộ thay đổi vừa thực hiện.
 Tập trung vào API contract, RBAC, SQL/query, validation và regression.
@@ -128,7 +128,7 @@ Tập trung vào API contract, RBAC, SQL/query, validation và regression.
 ### Bước 5 — Verify
 
 ```text
-/ctc-verify
+/tranle-verify
 ```
 
 Claude phải báo rõ:
@@ -150,7 +150,7 @@ Sửa bug này đi.
 Nên cung cấp triệu chứng:
 
 ```text
-/ctc-debug
+/tranle-debug
 
 Khi tạo task mới, frontend báo thành công nhưng task không xuất hiện trong danh sách.
 Hãy reproduce nếu có thể, trace frontend → API → database, xác định root cause rồi sửa tối thiểu.
@@ -180,13 +180,13 @@ verify
 Khi thay đổi quyền truy cập, dùng:
 
 ```text
-/ctc-rbac
+/tranle-rbac
 ```
 
 Ví dụ:
 
 ```text
-/ctc-rbac
+/tranle-rbac
 
 Thêm quyền cho manager được xem task của department mình
 nhưng không được xem task của department khác.
@@ -205,7 +205,7 @@ Không được chỉ ẩn button ở frontend rồi coi đó là bảo mật.
 
 ## 7. Làm việc với database
 
-Dùng skill `ctc-db` khi có thay đổi schema/query/migration.
+Dùng skill `tranle-db` khi có thay đổi schema/query/migration.
 
 Ví dụ:
 
@@ -242,7 +242,7 @@ route
 Ví dụ:
 
 ```text
-/ctc-plan
+/tranle-plan
 
 Thêm GET /api/tasks/statistics.
 Hãy tìm pattern API hiện có và đề xuất implementation phù hợp,
@@ -274,10 +274,10 @@ Không nên tạo state management mới nếu chức năng hiện tại đã c�
 Khi làm chức năng AI dùng:
 
 ```text
-/ctc-security
+/tranle-security
 ```
 
-hoặc skill `ctc-ai`.
+hoặc skill `tranle-ai`.
 
 Quy tắc:
 
@@ -291,7 +291,7 @@ Quy tắc:
 
 ## 11. Mail / IMAP / SMTP
 
-Dùng skill `ctc-mail` khi sửa email.
+Dùng skill `tranle-mail` khi sửa email.
 
 Ví dụ:
 
@@ -305,7 +305,7 @@ Không log password/token.
 
 ## 12. Realtime / Socket.IO
 
-Dùng `ctc-realtime` khi làm notification/live update.
+Dùng `tranle-realtime` khi làm notification/live update.
 
 Claude cần kiểm tra:
 
@@ -328,7 +328,7 @@ server socket
 Chạy:
 
 ```text
-/ctc-security
+/tranle-security
 ```
 
 cho các thay đổi liên quan:
@@ -353,13 +353,13 @@ Nếu phát hiện lỗ hổng, Claude phải ưu tiên root cause và impact th
 Dùng:
 
 ```text
-/ctc-review
+/tranle-review
 ```
 
 Sau đó:
 
 ```text
-/ctc-verify
+/tranle-verify
 ```
 
 Chỉ commit khi biết rõ:
@@ -388,13 +388,13 @@ Trước khi sửa thêm hãy giải thích file nào thực sự cần thay đ�
 Nếu chưa rõ architecture:
 
 ```text
-/ctc-context
+/tranle-context
 ```
 
 Nếu chưa rõ giải pháp:
 
 ```text
-/ctc-plan
+/tranle-plan
 ```
 
 ---
@@ -403,7 +403,7 @@ Nếu chưa rõ giải pháp:
 
 ### Feature
 ```text
-/ctc-plan
+/tranle-plan
 
 [TÊN TÍNH NĂNG]
 
@@ -420,7 +420,7 @@ Hãy kiểm tra code hiện tại trước, xác định file/API/database liên
 
 ### Implement
 ```text
-/ctc-implement
+/tranle-implement
 
 Thực hiện plan đã thống nhất cho [TÍNH NĂNG].
 Giữ nguyên architecture hiện tại.
@@ -430,7 +430,7 @@ Sau khi code xong chạy test/build phù hợp và báo kết quả thật.
 
 ### Bug
 ```text
-/ctc-debug
+/tranle-debug
 
 Bug: [MÔ TẢ]
 Expected: [KẾT QUẢ ĐÚNG]
@@ -441,7 +441,7 @@ Hãy reproduce → trace → root cause → fix → regression test → verify.
 
 ### Review
 ```text
-/ctc-review
+/tranle-review
 
 Review các thay đổi hiện tại như senior engineer.
 Tập trung security, RBAC, API contract, data integrity, performance,
@@ -450,7 +450,7 @@ regression và code quality.
 
 ### Verify
 ```text
-/ctc-verify
+/tranle-verify
 
 Kiểm tra thay đổi hiện tại. Chạy các test/build/check phù hợp.
 Không được nói “pass” nếu chưa thực sự chạy command.
@@ -458,7 +458,7 @@ Không được nói “pass” nếu chưa thực sự chạy command.
 
 ---
 
-## 17. Quy tắc vàng cho CTC Task
+## 17. Quy tắc vàng cho TranLe Tasks
 
 ```text
 1. Đọc code trước khi đoán.
@@ -473,10 +473,10 @@ Không được nói “pass” nếu chưa thực sự chạy command.
 10. Nếu không chắc → nói rõ điều chưa chắc và kiểm tra tiếp.
 ```
 
-## 18. ECC và bộ CTC này
+## 18. ECC và bộ TranLe này
 
-Bộ này lấy tư tưởng workflow của ECC nhưng được thu gọn và chuyên biệt cho CTC Task. ECC hiện mô tả workflow cốt lõi là `plan → test → implement → review → verify → remember → improve` và có hệ thống agents, skills, commands, rules, hooks và memory.
+Bộ này lấy tư tưởng workflow của ECC nhưng được thu gọn và chuyên biệt cho TranLe Tasks. ECC hiện mô tả workflow cốt lõi là `plan → test → implement → review → verify → remember → improve` và có hệ thống agents, skills, commands, rules, hooks và memory.
 
 Nếu cài ECC chính thức cho Claude Code, chỉ chọn **một** phương thức cài đặt ECC; tài liệu chính thức cảnh báo không chồng nhiều phương thức cài đặt vì có thể tạo duplicate skills/commands/hooks/config.
 
-Bộ `.claude/` của CTC có thể được dùng độc lập như project-local rules/workflows.
+Bộ `.claude/` của TranLe có thể được dùng độc lập như project-local rules/workflows.

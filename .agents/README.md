@@ -1,4 +1,4 @@
-# CTC Task — Antigravity Project Agent Pack
+# TranLe Tasks — Antigravity Project Agent Pack
 
 This folder is the Antigravity-native companion to the project's `.claude/` harness.
 
@@ -9,4 +9,4 @@ Use:
 
 Antigravity currently uses `.agents/rules` and `.agents/skills` for workspace-local customizations; older `.agent/*` paths remain backward compatible. Rules and workflows are Markdown-based, and workflows are invoked with `/workflow-name`.
 
-This pack is intentionally project-specific to CTC Task. It does not contain API keys, provider credentials or secrets.
+This pack is intentionally project-specific to TranLe Tasks. It does not contain API keys, provider credentials or secrets.

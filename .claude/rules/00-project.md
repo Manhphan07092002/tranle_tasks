@@ -1,4 +1,4 @@
-# CTC Task project rules
+# TranLe Tasks project rules
 
 ## Repository layout
 

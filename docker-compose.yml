@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    container_name: ctc_task_app
+    container_name: tranle_task_app
     restart: unless-stopped
     ports:
       - "${PORT:-3500}:3500"
@@ -12,7 +12,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3500
-      - DATABASE_URL=${DATABASE_URL:-mysql://${MYSQL_USER:-ctc}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-ctctask}}
+      - DATABASE_URL=${DATABASE_URL:-mysql://${MYSQL_USER:-tranle}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-tranletask}}
       - JWT_SECRET=${JWT_SECRET}
       - MAIL_ENCRYPTION_KEY=${MAIL_ENCRYPTION_KEY}
     depends_on:
@@ -21,12 +21,12 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: ctc_mysql
+    container_name: tranle_mysql
     restart: unless-stopped
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-ctctask}
-      - MYSQL_USER=${MYSQL_USER:-ctc}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-tranletask}
+      - MYSQL_USER=${MYSQL_USER:-tranle}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - TZ=Asia/Ho_Chi_Minh

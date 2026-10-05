@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 // 1. Fix CSV Export in Reports/index.tsx
-const indexFile = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/index.tsx';
+const indexFile = 'E:/web_tranle_new/frontend/pages/Reports/index.tsx';
 let idxSrc = fs.readFileSync(indexFile, 'utf8');
 
 const oldCsv = "const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });";
@@ -16,7 +16,7 @@ if (idxSrc.includes(oldCsv)) {
 }
 
 // 2. Add Print function to ReportModal.tsx
-const modalFile = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/ReportModal.tsx';
+const modalFile = 'E:/web_tranle_new/frontend/pages/Reports/ReportModal.tsx';
 let modalSrc = fs.readFileSync(modalFile, 'utf8');
 
 // Insert handlePrint before handleAction

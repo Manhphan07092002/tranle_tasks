@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'ctc-task',
+      name: 'tranle-tasks',
       cwd: './backend',
       script: 'npm',
       args: 'start',

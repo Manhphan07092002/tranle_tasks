@@ -1,7 +1,7 @@
-# CTC Task — Project-local Claude Code harness
+# TranLe Tasks — Project-local Claude Code harness
 
 This `.claude/` configuration is written specifically for the public repository:
-`Manhphan07092002/ctc-task`, branch `main`, project root `ctc-task-main`.
+`Manhphan07092002/web-task-tranle-new`, branch `main`, project root `web_tranle_new`.
 
 It follows the ECC operating model:
 **research → plan → implement → test → review → verify → improve**.

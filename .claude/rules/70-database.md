@@ -1,6 +1,6 @@
 # Database rules
 
-CTC Task has both SQLite and PostgreSQL support.
+TranLe Tasks has both SQLite and PostgreSQL support.
 
 - Inspect both database paths before making storage assumptions.
 - Preserve existing records during schema changes.

@@ -29,7 +29,7 @@
 ## 2. Cấu Trúc Thư Mục
 
 ```
-ctc-task-main/
+web_tranle_new/
 ├── package.json                  # Root – npm workspaces (frontend, backend)
 ├── docker-compose.yml            # 3 services: App + MySQL 8 + Poste.io mail
 ├── Dockerfile                    # Multi-stage build (frontend build → backend serve)
@@ -120,7 +120,7 @@ ctc-task-main/
 │   ├── db_mysql.ts               # MySQL 8 adapter + schema DDL + seeds + SQL normalizer (540 dòng)
 │   ├── socket.ts                 # Socket.io init + room join
 │   ├── mailer.ts                 # Nodemailer SMTP transporter
-│   ├── ctc_knowledge.ts          # AI knowledge base cho Gemini (5KB)
+│   ├── tranle_knowledge.ts          # AI knowledge base cho Gemini (5KB)
 │   ├── db_history.json           # Lịch sử export/import database
 │   ├── middleware/
 │   │   ├── auth.ts                  # requireAuth + requireAdmin (JWT)
@@ -259,14 +259,14 @@ backend/server.ts ──▶ initDbMysql() ──▶ MySQL 8 (via DATABASE_URL)
 
 ### 4.2 Seed Data Mặc Định
 
-- **4 Users:** Admin (`admin@ctcdn.vn`), Nguyễn Văn Đạt (Manager, `vandat@ctcdn.vn`), Phan Xuân Mạnh (Employee, `xuanmanh@ctcdn.vn`), Nguyễn Văn Duy (Director, `vanduy@ctcdn.vn`)
+- **4 Users:** Admin (`admin@tranlecorp.com.vn`), Nguyễn Văn Đạt (Manager, `vandat@tranlecorp.com.vn`), Phan Xuân Mạnh (Employee, `xuanmanh@tranlecorp.com.vn`), Nguyễn Văn Duy (Director, `vanduy@tranlecorp.com.vn`)
 - **4 Roles:** Admin (16 perms), Director (7), Manager (9), Employee (4)
 - **7 Departments:** Board, Product, Marketing, Sales, IT, HR, Finance
 - **34 Clients:** VNPT các tỉnh/thành
 - **6 Events:** Các ngày lễ Việt Nam
 - **1 Task mẫu:** "Design System Review"
 - **1 Note mẫu:** "Brainstorming Ideas"
-- **Mật khẩu mặc định:** `CTC@dmin2026!` (env `ADMIN_DEFAULT_PASSWORD`)
+- **Mật khẩu mặc định:** `TranLe@dmin2026!` (env `ADMIN_DEFAULT_PASSWORD`)
 
 ---
 
@@ -395,10 +395,10 @@ GET/PUT              /api/admin/system-config
 
 ```yaml
 services:
-  app:         # CTC Task (Express + frontend/dist)
+  app:         # TranLe Tasks (Express + frontend/dist)
     ports: 3500, 5173→3500
     depends_on: mysql (healthy)
-    env: DATABASE_URL=mysql://ctc:***@mysql:3306/ctctask
+    env: DATABASE_URL=mysql://tranle:***@mysql:3306/tranletask
 
   mysql:       # MySQL 8.0
     ports: 3306
@@ -406,7 +406,7 @@ services:
     volumes: ./data/mysql:/var/lib/mysql
     healthcheck: mysqladmin ping (10s interval, 30s start_period)
 
-  mailserver:  # Poste.io (mail.ctcdn.vn)
+  mailserver:  # Poste.io (mail.tranlecorp.com.vn)
     ports: 25, 80→8080, 143, 465, 587, 993, 995
 ```
 
@@ -416,7 +416,7 @@ services:
 # Backend
 NODE_ENV=production
 PORT=3500
-DATABASE_URL=mysql://ctc:password@localhost:3306/ctctask  # Bắt buộc MySQL
+DATABASE_URL=mysql://tranle:password@localhost:3306/tranletask  # Bắt buộc MySQL
 JWT_SECRET=<random 32+ chars>
 MAIL_ENCRYPTION_KEY=<32 bytes>
 SMTP_HOST / SMTP_PORT / SMTP_SECURE / SMTP_USER / SMTP_PASS / SMTP_FROM

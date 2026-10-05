@@ -1,5 +1,5 @@
 ---
-name: ctc-database
+name: tranle-database
 description: SQLite/PostgreSQL database safety rules.
 activation: model_decision
 ---

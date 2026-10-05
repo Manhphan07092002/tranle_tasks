@@ -1,6 +1,6 @@
 ---
-name: ctc-rbac-security
-description: Security and authorization rules for protected CTC Task features.
+name: tranle-rbac-security
+description: Security and authorization rules for protected TranLe Tasks features.
 activation: model_decision
 ---
 

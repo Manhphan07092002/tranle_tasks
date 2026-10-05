@@ -70,5 +70,5 @@ Hệ thống đã được tự động tạo dữ liệu mẫu (Seed Data). B�
 
 ## 🤝 Hỗ trợ
 
-Nếu gặp bất kỳ khó khăn nào trong quá trình cài đặt và vận hành, vui lòng kiểm tra logs terminal hoặc liên hệ với đội ngũ phát triển. Chúc bạn có trải nghiệm tuyệt vời với CTC Task!
+Nếu gặp bất kỳ khó khăn nào trong quá trình cài đặt và vận hành, vui lòng kiểm tra logs terminal hoặc liên hệ với đội ngũ phát triển. Chúc bạn có trải nghiệm tuyệt vời với TranLe Tasks!
 "# tranle_tasks" 

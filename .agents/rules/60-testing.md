@@ -1,6 +1,6 @@
 ---
-name: ctc-testing
-description: CTC Task verification rules.
+name: tranle-testing
+description: TranLe Tasks verification rules.
 activation: always_on
 ---
 

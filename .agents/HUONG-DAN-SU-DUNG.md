@@ -1,14 +1,14 @@
-# Hướng dẫn sử dụng Antigravity cho CTC Task
+# Hướng dẫn sử dụng Antigravity cho TranLe Tasks
 
 ## 1. Cài đặt
 
 Giữ thư mục này ở Git root:
 
-E:\ctc-task\ctc-task-main\.agents\
+E:\web_tranle_new\.agents\
 
 Mở Antigravity và tạo/mở Project trỏ vào:
 
-E:\ctc-task\ctc-task-main
+E:\web_tranle_new
 
 Antigravity sẽ nhận workspace Rules và Skills từ `.agents/`.
 
@@ -28,31 +28,31 @@ Antigravity sẽ nhận workspace Rules và Skills từ `.agents/`.
 Prompt trực tiếp → inspect → edit → verify.
 
 ### Việc vừa/lớn
-/ctc-plan → /ctc-feature → /ctc-review → /ctc-verify
+/tranle-plan → /tranle-feature → /tranle-review → /tranle-verify
 
 ### Bug
-/ctc-debug → /ctc-review → /ctc-verify
+/tranle-debug → /tranle-review → /tranle-verify
 
 ### Security
-/ctc-security
+/tranle-security
 
 ### RBAC
-/ctc-rbac
+/tranle-rbac
 
 ### Database
-/ctc-db
+/tranle-db
 
 ### API
-/ctc-api
+/tranle-api
 
 ### Realtime
-/ctc-realtime
+/tranle-realtime
 
 ### Mail
-/ctc-mail
+/tranle-mail
 
 ### AI
-/ctc-ai
+/tranle-ai
 
 ## 4. Dùng /plan và /grill-me của Antigravity
 
@@ -62,7 +62,7 @@ Với yêu cầu chưa rõ:
 Với yêu cầu cần kế hoạch:
 `/plan <yêu cầu>`
 
-Sau khi duyệt plan, dùng workflow CTC để triển khai.
+Sau khi duyệt plan, dùng workflow TranLe để triển khai.
 
 ## 5. Dùng /goal
 

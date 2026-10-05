@@ -1,5 +1,5 @@
 ---
-name: ctc-git
+name: tranle-git
 description: Git hygiene and change-scope rules.
 activation: always_on
 ---

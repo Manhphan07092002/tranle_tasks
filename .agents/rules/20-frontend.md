@@ -1,5 +1,5 @@
 ---
-name: ctc-frontend
+name: tranle-frontend
 description: Frontend conventions for React/Vite/TypeScript/Tailwind/React Query/Socket.IO.
 activation: glob
 globs: frontend/**/*.{ts,tsx,css}

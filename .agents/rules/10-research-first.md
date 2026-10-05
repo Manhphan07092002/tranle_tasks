@@ -1,5 +1,5 @@
 ---
-name: ctc-research-first
+name: tranle-research-first
 description: Require repository inspection before implementation or architecture claims.
 activation: model_decision
 ---

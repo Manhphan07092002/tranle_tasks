@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
-import { CTC_KNOWLEDGE } from '../ctc_knowledge.js';
+import { TRANLE_KNOWLEDGE } from '../tranle_knowledge.js';
 
 // ─── Key Rotation State (per-process, shared across requests) ─────────────────
 let _cachedProvider: string | null = null;
@@ -133,7 +133,7 @@ Hãy mang lại năng lượng tích cực và sự hiệu quả tối đa cho m
 
 =============================================
 DƯỚI ĐÂY LÀ KIẾN THỨC NỘI BỘ VỀ CÔNG TY TRAN LE ELECTRICITY MÀ BẠN CẦN NẮM ĐỂ TRẢ LỜI CÁC CÂU HỎI VÀ TƯ VẤN:
-${CTC_KNOWLEDGE}
+${TRANLE_KNOWLEDGE}
 =============================================`;
 
 const OPENAI_TOOLS = [

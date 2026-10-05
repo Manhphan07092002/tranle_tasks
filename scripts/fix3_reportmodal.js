@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/ReportModal.tsx';
+const path = 'E:/web_tranle_new/frontend/pages/Reports/ReportModal.tsx';
 let lines = fs.readFileSync(path, 'utf8').split('\n');
 
 // After line 292 (handleDelete closing brace), insert executeDelete, executeHardDelete, and return opening

@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'd:/ctc-task/ctc-task-main/frontend/pages/Reports/ReportModal.tsx';
+const path = 'E:/web_tranle_new/frontend/pages/Reports/ReportModal.tsx';
 let src = fs.readFileSync(path, 'utf8');
 
 const startStr = '  // ─── Render ────────────────────────────────────────────────────────────────\n  return (\n    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">';

@@ -46,7 +46,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
         let parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           parsed = parsed.map((m: Message) => {
-            if (m.id === 'welcome' || m.text.includes('Bot CTC Tasks') || m.text.includes('CTC Task') || m.text.includes('CTC')) {
+            if (m.id === 'welcome' || m.text.includes('Bot TranLe Tasks') || m.text.includes('TranLe Task') || m.text.includes('TranLe')) {
               return { ...m, text: t('aiGreeting') };
             }
             return m;
@@ -834,7 +834,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
           <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
-            style={{ animation: 'ctcModalIn 0.18s cubic-bezier(.4,0,.2,1)' }}
+            style={{ animation: 'tranleModalIn 0.18s cubic-bezier(.4,0,.2,1)' }}
           >
             {/* Icon header */}
             <div className={`px-6 pt-6 pb-4 flex flex-col items-center text-center`}>
@@ -877,7 +877,7 @@ export const AIAssistant = forwardRef<AIAssistantHandle, {}>((_, ref) => {
               </button>
             </div>
           </div>
-          <style>{`@keyframes ctcModalIn{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+          <style>{`@keyframes tranleModalIn{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
         </div>
       )}
     </div>

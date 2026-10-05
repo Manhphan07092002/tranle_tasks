@@ -45,7 +45,7 @@ Domain production: `task.tranlecorp.com.vn` / `tasks.tranlecorp.com.vn` (hoặc 
 ## 3. Project structure
 
 ```
-ctc-task-main/
+web_tranle_new/
 ├── package.json              # Root — npm workspaces + scripts concurrently
 ├── docker-compose.yml        # app + poste.io mailserver
 ├── Dockerfile                # Multi-stage: build frontend → serve từ backend
@@ -128,7 +128,7 @@ docker-compose up -d --build   # Docker (app + mysql + mailserver)
 
 - **Cơ chế:** JWT (`jsonwebtoken`), hết hạn `7d`. Payload gồm `id, name, email, role, department, avatar, permissions`.
 - **Login:** `POST /api/auth/login` → `bcrypt.compare` → `jwt.sign(payload, JWT_SECRET)`.
-- **Client:** lưu token + user trong `localStorage` (`ctc_token`, `ctc_user`), gắn header `Authorization: Bearer <token>` mọi request.
+- **Client:** lưu token + user trong `localStorage` (`tranle_token`, `tranle_user`), gắn header `Authorization: Bearer <token>` mọi request.
 - **Middleware:** `requireAuth` (verify token → `req.user`) trong `backend/middleware/auth.ts`.
 - **Bảo vệ tài khoản:** account locking sau nhiều lần login sai (`failedLogins`, `lockedUntil`, `isLocked`).
 - **Reset password:** qua email link, có token hết hạn (bảng `password_reset_tokens`).

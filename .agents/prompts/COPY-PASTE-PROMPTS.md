@@ -1,10 +1,10 @@
-# CTC Task — Antigravity Prompt Library
+# TranLe Tasks — Antigravity Prompt Library
 
 These prompts are designed to paste directly into Antigravity Agent.
 
 ## 1. New feature
 
-/ctc-plan
+/tranle-plan
 
 Tôi muốn thêm chức năng:
 [ MÔ TẢ ]
@@ -16,11 +16,11 @@ Yêu cầu:
 - Không code trong bước này.
 - Đưa ra plan với file cụ thể và test cần chạy.
 
-Sau khi tôi duyệt plan, dùng /ctc-feature.
+Sau khi tôi duyệt plan, dùng /tranle-feature.
 
 ## 2. Implement after plan
 
-/ctc-feature
+/tranle-feature
 
 Thực hiện plan vừa duyệt.
 
@@ -31,7 +31,7 @@ Sau khi code xong phải chạy verification và báo cáo chính xác.
 
 ## 3. Bug
 
-/ctc-debug
+/tranle-debug
 
 Bug:
 [ MÔ TẢ BUG ]
@@ -46,7 +46,7 @@ Sau đó sửa tối thiểu và verify.
 
 ## 4. API
 
-/ctc-api
+/tranle-api
 
 Tôi muốn:
 [ API CHANGE ]
@@ -56,7 +56,7 @@ Giữ response contract nếu không có yêu cầu breaking change.
 
 ## 5. RBAC
 
-/ctc-rbac
+/tranle-rbac
 
 Tính năng:
 [ MÔ TẢ ]
@@ -74,7 +74,7 @@ Tạo test cho allowed và denied cases.
 
 ## 6. Database
 
-/ctc-db
+/tranle-db
 
 Tôi muốn thay đổi database:
 [ MÔ TẢ ]
@@ -86,7 +86,7 @@ Kiểm tra data preservation, index, FK, uniqueness và nullability.
 
 ## 7. Realtime
 
-/ctc-realtime
+/tranle-realtime
 
 Tôi muốn realtime:
 [ MÔ TẢ ]
@@ -97,7 +97,7 @@ Verify end-to-end flow.
 
 ## 8. Mail
 
-/ctc-mail
+/tranle-mail
 
 Tôi muốn thay đổi mail:
 [ MÔ TẢ ]
@@ -108,7 +108,7 @@ Kiểm tra HTML, attachment, authorization và provider failure.
 
 ## 9. AI
 
-/ctc-ai
+/tranle-ai
 
 Tôi muốn thay đổi AI:
 [ MÔ TẢ ]
@@ -121,7 +121,7 @@ Kiểm tra timeout, error và rate-limit.
 
 ## 10. Security audit
 
-/ctc-security
+/tranle-security
 
 Audit thay đổi hiện tại.
 Tập trung:
@@ -132,7 +132,7 @@ Không in secret value.
 
 ## 11. Code review
 
-/ctc-review
+/tranle-review
 
 Review diff hiện tại như senior engineer.
 Ưu tiên:
@@ -148,7 +148,7 @@ Báo cáo theo severity.
 
 ## 12. Verify
 
-/ctc-verify
+/tranle-verify
 
 Kiểm tra thay đổi hiện tại.
 Chạy đúng các test/build cần thiết.
@@ -158,7 +158,7 @@ và ghi chính xác command đã chạy.
 
 ## 13. Release
 
-/ctc-release
+/tranle-release
 
 Kiểm tra trước commit:
 - git status
@@ -184,7 +184,7 @@ Chỉ ra thay đổi nào đang nằm ngoài scope.
 
 ## 15. Architecture analysis
 
-/ctc-context
+/tranle-context
 
 Hãy phân tích architecture hiện tại của phần:
 [ MODULE ]
@@ -195,26 +195,26 @@ Không sửa code.
 
 ## 16. Full production feature
 
-/ctc-context
+/tranle-context
 
 Sau đó:
 
-/ctc-plan
+/tranle-plan
 
 Sau khi duyệt:
 
-/ctc-feature
+/tranle-feature
 
 Tiếp theo:
 
-/ctc-review
+/tranle-review
 
 Sau đó:
 
-/ctc-security
+/tranle-security
 
 Cuối cùng:
 
-/ctc-verify
+/tranle-verify
 
 Không bỏ qua bước nào.

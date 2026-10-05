@@ -1,6 +1,6 @@
 # RBAC and data-isolation rules
 
-CTC Task contains users, roles, departments, admin functions and business data.
+TranLe Tasks contains users, roles, departments, admin functions and business data.
 
 For every protected feature ask:
 
