@@ -437,6 +437,13 @@ async function seedIfEmpty(db: MysqlDb) {
     ['brand_primary_color', '#16A34A'],
     ['brand_secondary_color', '#F59E0B'],
     ['brand_dark_color', '#0F172A'],
+    // Quy mô công bố trong PROFILE TLEC VN - 2026.pdf
+    ['company_scale_staff', '50+ nhân sự'],
+    ['company_scale_certificates', '20+ chứng chỉ năng lực'],
+    ['company_scale_partners', '30+ đối tác quốc tế'],
+    ['company_scale_customers', '2000+ khách hàng'],
+    ['company_capital', '20 tỷ đồng vốn điều lệ'],
+    ['company_revenue_2020', 'Doanh thu trước thuế vượt mốc 1000 tỷ đồng (2020)'],
   ];
 
   for (const [key, value] of COMPANY_CONFIGS) {
@@ -676,8 +683,53 @@ async function seedIfEmpty(db: MysqlDb) {
     for (const pr of INITIAL_PROJECTS) {
       await db.run(
         `INSERT INTO projects (id, projectCode, name, clientName, department, managerId, status, startDate, endDate, budget, description, biddingPrice, winningPrice, priority, phase, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE projectCode = VALUES(projectCode), name = VALUES(name), clientName = VALUES(clientName),
+           department = VALUES(department), managerId = VALUES(managerId), status = VALUES(status),
+           startDate = VALUES(startDate), endDate = VALUES(endDate), budget = VALUES(budget),
+           description = VALUES(description), biddingPrice = VALUES(biddingPrice), winningPrice = VALUES(winningPrice),
+           priority = VALUES(priority), phase = VALUES(phase)`,
         [pr.id, pr.projectCode, pr.name, pr.clientName, pr.department, pr.managerId, pr.status, pr.startDate, pr.endDate, pr.budget, pr.description, pr.biddingPrice || 0, pr.winningPrice || 0, pr.priority, pr.phase, pr.createdAt]
+      );
+    }
+  }
+
+  // ── 6b. Đồng bộ dự án từ PROFILE TLEC VN - 2026.pdf (idempotent, chạy mọi lần) ─
+  {
+    const EPC = 'Khối Tổng Thầu EPC & Thi Công';
+    const PDF_PROJECTS = [
+      { id: 'proj-01', projectCode: 'DA-COCOTEX-4.5M', name: 'Dự án Điện mặt trời áp mái Công ty TNHH Cocotex (4,5 MWp)', clientName: 'Công ty TNHH Cocotex', department: EPC, managerId: 'u2', status: 'completed', startDate: '2024-03-01', endDate: '2024-11-30', budget: 65000000000, biddingPrice: 66000000000, winningPrice: 65000000000, priority: 'high', phase: 'closing', description: 'Tổng thầu EPC áp mái 4,5 MWp tại KCN Đất Đỏ, TP. Hồ Chí Minh (vốn FDI).', createdAt: '2024-03-01T08:00:00.000Z' },
+      { id: 'proj-02', projectCode: 'DA-CHAUGIANG-3.0M', name: 'Dự án Điện mặt trời áp mái NM Dệt may Châu Giang (3 MWp)', clientName: 'NM Dệt may Châu Giang', department: EPC, managerId: 'u2', status: 'completed', startDate: '2024-06-15', endDate: '2025-01-20', budget: 43500000000, biddingPrice: 45000000000, winningPrice: 43500000000, priority: 'high', phase: 'closing', description: 'Áp mái công nghiệp 3 MWp tại Nam Lý, Ninh Bình.', createdAt: '2024-06-15T08:00:00.000Z' },
+      { id: 'proj-03', projectCode: 'DA-GIOLINH-4.0M', name: 'Dự án Điện năng lượng mặt trời nông trại tại Gio Linh (4 MWp)', clientName: 'Nông trại Công nghệ cao Gio Linh', department: EPC, managerId: 'u2', status: 'completed', startDate: '2024-08-01', endDate: '2025-04-15', budget: 58000000000, biddingPrice: 59500000000, winningPrice: 58000000000, priority: 'high', phase: 'closing', description: 'Farm solar kết hợp nông nghiệp công nghệ cao 4 MWp tại Gio Linh, Quảng Trị.', createdAt: '2024-08-01T08:00:00.000Z' },
+      { id: 'proj-04', projectCode: 'DA-THIENHOANG-1.5M', name: 'Dự án Điện mặt trời áp mái NM Thiện Hoàng (1,5 MWp)', clientName: 'Nhà máy May mặc Thiện Hoàng', department: EPC, managerId: 'u2', status: 'completed', startDate: '2025-02-10', endDate: '2025-08-30', budget: 21800000000, biddingPrice: 22500000000, winningPrice: 21800000000, priority: 'medium', phase: 'closing', description: 'Áp mái tự dùng hòa lưới bám tải 1,5 MWp tại Nhơn Hòa, Bình Định.', createdAt: '2025-02-10T08:00:00.000Z' },
+      { id: 'proj-pdf-vinhlinh-1m', projectCode: 'DA-VINHLINH-1.0M', name: 'Dự án Điện mặt trời Solar Farm Vĩnh Linh (1 MWp)', clientName: 'Chủ đầu tư Vĩnh Linh', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Solar farm 1 MWp tại Vĩnh Linh, Quảng Trị (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-hoangha-1m', projectCode: 'DA-HOANGHA-1.0M', name: 'Dự án Điện mặt trời áp mái Hoàng Hà (1 MWp)', clientName: 'Hoàng Hà', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 1 MWp tại Quảng Nam (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-thienhoang-2m', projectCode: 'DA-THIENHOANG-2.0M', name: 'Dự án Điện mặt trời áp mái Thiện Hoàng (2 MWp)', clientName: 'Nhà máy May mặc Thiện Hoàng', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 2 MWp tại Bình Định (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-maxpack-06', projectCode: 'DA-MAXPACK-0.6M', name: 'Dự án Điện mặt trời áp mái NM Max Packaging (600 kWp)', clientName: 'NM Max Packaging', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 600 kWp tại Núi Thành, Quảng Nam - KCN Bắc Chu Lai (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-hvnn-026', projectCode: 'DA-HVNN-0.26M', name: 'Dự án Điện mặt trời áp mái Học viện Nông nghiệp Việt Nam (260 kWp)', clientName: 'Học viện Nông nghiệp Việt Nam', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 260 kWp tại Gia Lâm, Hà Nội (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-hyundai-0139', projectCode: 'DA-HYUNDAI-0.14M', name: 'Dự án Điện mặt trời áp mái nhà xưởng Hyundai (138,8 kWp)', clientName: 'Hyundai Thanh Hóa', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 138,8 kWp tại Đông Hải, Thanh Hóa (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-lumphat-7m', projectCode: 'DA-LUMPHAT-7.0M', name: 'Dự án Điện mặt trời Farm Solar Lumphat (7 MWp)', clientName: 'Chủ đầu tư Lumphat', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Farm solar 7 MWp tại Lumphat, Campuchia (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-duchoa-5m', projectCode: 'DA-DUHOA-5.0M', name: 'Dự án Điện mặt trời Farm Solar Đức Hòa (5 MWp)', clientName: 'Chủ đầu tư Đức Hòa', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Farm solar 5 MWp tại Đức Hòa, Quảng Ngãi (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-vanphat-3m', projectCode: 'DA-VANPHAT-3.0M', name: 'Dự án Điện mặt trời áp mái NM Vạn Phát (3 MWp)', clientName: 'NM Vạn Phát', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 3 MWp tại Gia Lai (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-tanlong-2m', projectCode: 'DA-TANLONG-2.0M', name: 'Dự án Điện mặt trời áp mái NM Tân Long (2 MWp)', clientName: 'NM Tân Long', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'medium', phase: 'closing', description: 'Áp mái 2 MWp tại Tân Long, Đà Nẵng (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-thai-1m', projectCode: 'DA-THAI-1.0M', name: 'Dự án Solar Power Plant Thái Lan (1 MWp, thầu phụ)', clientName: 'Đối tác Thái Lan', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: 'Vai trò nhà thầu phụ, 1 MWp tại Thái Lan (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-thaiboat-02', projectCode: 'DA-THAIBOAT-0.2M', name: 'Dự án Solarboat Floating Thái Lan (200 kWp, thầu phụ)', clientName: 'Đối tác Thái Lan', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: 'Hệ nổi Solarboat floating mounting 200 kWp, vai trò thầu phụ (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-indo-1m', projectCode: 'DA-INDO-1.0M', name: 'Dự án Solar Power Plant Indonesia (1 MWp, thầu phụ)', clientName: 'Đối tác Indonesia', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: 'Vai trò nhà thầu phụ, 1 MWp tại Indonesia (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-indo-5m', projectCode: 'DA-INDO-5.0M', name: 'Dự án Solar Power Plant Indonesia (5 MWp, thầu phụ)', clientName: 'Đối tác Indonesia', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: 'Vai trò nhà thầu phụ, 5 MWp tại Indonesia (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-cam-12m', projectCode: 'DA-CAM-1.2M', name: 'Dự án Solar Power Plant Campuchia (1,2 MWp)', clientName: 'Đối tác Campuchia', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: '1,2 MWp tại Campuchia (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-phil-187m', projectCode: 'DA-PHIL-1.87M', name: 'Dự án Solar Power Plant Philippines (1,87 MWp)', clientName: 'Đối tác Philippines', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: '1,87 MWp tại Philippines (PROFILE TLEC VN - 2026).', createdAt: now },
+      { id: 'proj-pdf-malay-1m', projectCode: 'DA-MALAY-1.0M', name: 'Dự án Solar Power Plant Malaysia (1 MWp)', clientName: 'Đối tác Malaysia', department: EPC, managerId: 'u2', status: 'completed', startDate: null, endDate: null, budget: 0, biddingPrice: 0, winningPrice: 0, priority: 'low', phase: 'closing', description: '1 MWp tại Malaysia (PROFILE TLEC VN - 2026).', createdAt: now },
+    ];
+    for (const pr of PDF_PROJECTS) {
+      await db.run(
+        `INSERT INTO projects (id, projectCode, name, clientName, department, managerId, status, startDate, endDate, budget, description, biddingPrice, winningPrice, priority, phase, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE projectCode = VALUES(projectCode), name = VALUES(name), clientName = VALUES(clientName),
+           department = VALUES(department), managerId = VALUES(managerId), status = VALUES(status),
+           startDate = VALUES(startDate), endDate = VALUES(endDate), budget = VALUES(budget),
+           description = VALUES(description), biddingPrice = VALUES(biddingPrice), winningPrice = VALUES(winningPrice),
+           priority = VALUES(priority), phase = VALUES(phase)`,
+        [pr.id, pr.projectCode, pr.name, pr.clientName, pr.department, pr.managerId, pr.status, pr.startDate, pr.endDate, pr.budget, pr.description, pr.biddingPrice, pr.winningPrice, pr.priority, pr.phase, pr.createdAt]
       );
     }
   }
@@ -707,7 +759,34 @@ async function seedIfEmpty(db: MysqlDb) {
       { id: 'client-30', name: 'VNPT Cần Thơ', region: 'Cần Thơ + Hậu Giang + Sóc Trăng' },
     ];
     for (const c of INITIAL_CLIENTS) {
-      await db.run('INSERT INTO clients (id, name, region, createdAt) VALUES (?, ?, ?, ?)', [c.id, c.name, c.region, now]);
+      await db.run('INSERT INTO clients (id, name, region, createdAt) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), region = VALUES(region)', [c.id, c.name, c.region, now]);
+    }
+  }
+
+  // ── 7b. Đồng bộ khách hàng/đối tác từ PROFILE TLEC VN - 2026.pdf (idempotent) ──
+  {
+    const PDF_CLIENTS = [
+      { id: 'client-chaugiang', name: 'NM Dệt may Châu Giang', region: 'Ninh Bình' },
+      { id: 'client-vinhlinh', name: 'Chủ đầu tư Vĩnh Linh', region: 'Quảng Trị' },
+      { id: 'client-hoangha', name: 'Hoàng Hà', region: 'Quảng Nam' },
+      { id: 'client-maxpack', name: 'NM Max Packaging', region: 'Quảng Nam' },
+      { id: 'client-hvnn', name: 'Học viện Nông nghiệp Việt Nam', region: 'Hà Nội' },
+      { id: 'client-hyundai', name: 'Hyundai Thanh Hóa', region: 'Thanh Hóa' },
+      { id: 'client-lumphat', name: 'Chủ đầu tư Lumphat', region: 'Campuchia' },
+      { id: 'client-duhoa', name: 'Chủ đầu tư Đức Hòa', region: 'Quảng Ngãi' },
+      { id: 'client-vanphat', name: 'NM Vạn Phát', region: 'Gia Lai' },
+      { id: 'client-tanlong', name: 'NM Tân Long', region: 'Đà Nẵng' },
+      { id: 'client-thai', name: 'Đối tác Thái Lan', region: 'Thái Lan (thầu phụ)' },
+      { id: 'client-indo', name: 'Đối tác Indonesia', region: 'Indonesia (thầu phụ)' },
+      { id: 'client-cam', name: 'Đối tác Campuchia', region: 'Campuchia' },
+      { id: 'client-phil', name: 'Đối tác Philippines', region: 'Philippines' },
+      { id: 'client-malay', name: 'Đối tác Malaysia', region: 'Malaysia' },
+      { id: 'client-tcl', name: 'TCL Solar', region: 'Đối tác Sản phẩm Quốc tế' },
+      { id: 'client-sunpower', name: 'SunPower', region: 'Đối tác Sản phẩm Quốc tế' },
+      { id: 'client-sigenergy', name: 'Sigenergy', region: 'Đối tác Sản phẩm Quốc tế' },
+    ];
+    for (const c of PDF_CLIENTS) {
+      await db.run('INSERT INTO clients (id, name, region, createdAt) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), region = VALUES(region)', [c.id, c.name, c.region, now]);
     }
   }
 
