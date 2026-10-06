@@ -1,3 +1,5 @@
+import { resolvePaging } from '../utils/paging.js';
+import { selectInlineAttachments } from '../utils/mailAttachments.js';
 import { Router } from 'express';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
@@ -612,8 +614,9 @@ export function mailRoutes(db: any) {
 
   router.get('/inbox', requireAuth, async (req: any, res: any) => {
     const folderKey = (req.query.folder as string || 'inbox').toLowerCase();
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    // ?limit khong clam: client gui limit lon se bi IMAP chap day hang loat, va
+    // page/limit am/NaN lam seq range cua imapflow sai. Clam o day.
+    const { limit, page } = resolvePaging(req.query);
 
     try {
       const client = await getImapClient(req.user.id, req.user.email);
@@ -833,6 +836,8 @@ export function mailRoutes(db: any) {
         // Mark as read
         await client.messageFlagsAdd(uid.toString(), ['\\Seen'], { uid: true });
 
+        const inline = selectInlineAttachments(parsed.attachments);
+
         res.json({
           id: uid,
           subject: parsed.subject,
@@ -840,12 +845,9 @@ export function mailRoutes(db: any) {
           to: Array.isArray(parsed.to) ? parsed.to.map((a: any) => a.text).join(', ') : (parsed.to as any)?.text,
           date: parsed.date,
           html: parsed.html || parsed.textAsHtml || parsed.text,
-          attachments: parsed.attachments.map((a: any) => ({
-            filename: a.filename,
-            contentType: a.contentType,
-            size: a.size,
-            content: a.size < 5 * 1024 * 1024 ? a.content.toString('base64') : null
-          }))
+          attachmentCount: parsed.attachments.length,
+          attachmentsOmitted: inline.omitted,
+          attachments: inline.attachments,
         });
       } finally {
         lock.release();

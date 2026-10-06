@@ -165,21 +165,37 @@ export default function ReadingPane({
                   ) : fullMail ? (
                     <>
                       {fullMail.attachments?.length > 0 && (
-                        <div className="px-6 py-3 border-b border-gray-50 flex flex-wrap gap-2 bg-gray-50/30">
-                          {fullMail.attachments.map((a, i) => (
-                            <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 shadow-sm hover:border-blue-300 transition-colors group">
-                              <Paperclip size={12} className="text-blue-400 flex-shrink-0" />
-                              <span className="truncate max-w-[160px]">{a.filename}</span>
-                              <span className="text-gray-400">({Math.round(a.size / 1024)}KB)</span>
-                              <button
-                                onClick={() => onDownloadAttachment(a)}
-                                className="ml-1 opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-all"
-                                title="Tải xuống"
-                              >
-                                <Download size={12} />
-                              </button>
-                            </div>
-                          ))}
+                        <div className="px-6 py-3 border-b border-gray-50 bg-gray-50/30">
+                          <div className="flex flex-wrap gap-2">
+                            {fullMail.attachments.map((a, i) => (
+                              <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 shadow-sm hover:border-blue-300 transition-colors group">
+                                <Paperclip size={12} className="text-blue-400 flex-shrink-0" />
+                                <span className="truncate max-w-[160px]">{a.filename}</span>
+                                <span className="text-gray-400">({Math.round(a.size / 1024)}KB)</span>
+                                {a.content === null ? (
+                                  <span
+                                    className="ml-1 text-amber-600"
+                                    title="Tệp quá lớn nên máy chủ không nhúng kèm. Mở bằng ứng dụng mail."
+                                  >
+                                    chưa tải được
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => onDownloadAttachment(a)}
+                                    className="ml-1 opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-all"
+                                    title="Tải xuống"
+                                  >
+                                    <Download size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {(fullMail.attachmentsOmitted ?? 0) > 0 && (
+                            <p className="mt-2 text-xs text-amber-700">
+                              {fullMail.attachmentsOmitted} tệp đính kèm quá lớn để tải trực tiếp — vui lòng mở bằng ứng dụng email.
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="px-6 py-6 overflow-x-auto">

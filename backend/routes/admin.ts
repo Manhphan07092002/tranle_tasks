@@ -1,3 +1,4 @@
+import { resolvePaging, resolveOffsetPaging } from '../utils/paging.js';
 import fs from 'fs';
 import crypto from 'crypto';
 import path from 'path';
@@ -123,8 +124,7 @@ export function adminRoutes(db: any, mailer: any) {
       if (!/^[a-zA-Z0-9_]+$/.test(table)) return res.status(400).json({ error: 'Tên bảng không hợp lệ' });
       if (!DB_BROWSER_ALLOWLIST.has(table)) return res.status(403).json({ error: 'Bảng này không được phép truy cập' });
 
-      const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
-      const offset = Math.max(Number(req.query.offset || 0), 0);
+      const { limit, offset } = resolveOffsetPaging(req.query, 20, 100);
       const totalRow = await db.get(`SELECT COUNT(*) as count FROM \`${table}\``);
       const rows = await db.all(`SELECT * FROM \`${table}\` LIMIT ? OFFSET ?`, [limit, offset]);
       res.json({ table, total: totalRow?.count ?? 0, rows: rows.map(redactRow) });
@@ -752,16 +752,18 @@ export function adminRoutes(db: any, mailer: any) {
   // --- Detailed Logs & Emails ---
   router.get('/activity-logs', async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const logs = await db.all('SELECT * FROM activity_logs ORDER BY createdAt DESC LIMIT ?', [limit]);
+      // ?limit=100000000 duoc chuyen thang vao SQL nen rut ca bang nhat ky cong
+      // ty ve may. Clam lai o day, dung ham chung voi /api/activity.
+      const { limit, offset } = resolvePaging(req.query);
+      const logs = await db.all('SELECT * FROM activity_logs ORDER BY createdAt DESC LIMIT ? OFFSET ?', [limit, offset]);
       res.json(logs);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch logs' }); }
   });
 
   router.get('/scheduled-emails', async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const emails = await db.all('SELECT * FROM scheduled_emails ORDER BY scheduledAt ASC LIMIT ?', [limit]);
+      const { limit, offset } = resolvePaging(req.query);
+      const emails = await db.all('SELECT * FROM scheduled_emails ORDER BY scheduledAt ASC LIMIT ? OFFSET ?', [limit, offset]);
       res.json(emails);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch emails' }); }
   });
