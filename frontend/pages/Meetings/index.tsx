@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Video, Plus, Calendar, Keyboard, Link2, Check, Copy, X, MoreVertical, Trash2 } from 'lucide-react';
 import { Meeting, User } from '../../types';
 import { subscribeToMeetings, deleteMeeting, saveMeeting, sendSignal } from '../../services/meetingService';
+import { apiFetch } from '../../services/api';
 import { Button, Avatar } from "../../components/UI";
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -71,14 +72,22 @@ export const MeetingView: React.FC<MeetingViewProps> = ({ onJoinMeeting, onCreat
     }
   };
 
-  const handleJoinByLink = () => {
+  const handleJoinByLink = async () => {
     if (!joinLink.trim()) return;
     const segments = joinLink.split('/');
-    const code = segments[segments.length - 1];
-    const meeting = meetings.find((m: any) => m.id === code || m.meetingLink.includes(code));
-    if (meeting) {
-      onJoinMeeting(meeting);
-    } else {
+    const code = segments[segments.length - 1].trim();
+    // Resolve the code server-side. The old version searched the locally loaded
+    // list for `meetingLink.includes(code)`, which required the server to hand out
+    // the join link of every meeting in the company — that is now withheld from
+    // non-participants, so only the host who receives the code can resolve it.
+    try {
+      const res = await apiFetch(`/api/meetings/by-code/${encodeURIComponent(code)}`);
+      if (!res.ok) {
+        alert(language === 'vi' ? 'Không tìm thấy cuộc họp!' : 'Meeting not found!');
+        return;
+      }
+      onJoinMeeting(await res.json());
+    } catch {
       alert(language === 'vi' ? 'Không tìm thấy cuộc họp!' : 'Meeting not found!');
     }
   };

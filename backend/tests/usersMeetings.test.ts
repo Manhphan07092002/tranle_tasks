@@ -162,11 +162,21 @@ describe('meetings routes', () => {
   });
 
   it('signal ép người gửi từ JWT', async () => {
-    const db = meetingsDb();
+    // Trước đây endpoint không kiểm tra cuộc họp tồn tại lẫn thành viên, nên mock
+    // rỗng vẫn trả 201 — tức là bất kỳ ai cũng gửi được signal vào phòng họp bất
+    // kỳ. Giờ cần meeting thật và người gửi phải là thành viên.
+    const db = meetingsDb({ id: 'm-1', hostId: 'emp-1' }, true);
     const app = authApp('/api/meetings', meetingRoutes(db));
     const res = await request(app).post('/api/meetings/m-1/signals').set('Authorization', `Bearer ${tokenFor(employee)}`).send({ from: 'fake-user', to: 'x', type: 'chat', data: {} });
     expect(res.status).toBe(201);
     expect(db.runs[0].params[2]).toBe('emp-1');
+  });
+
+  it('signal bị từ chối khi người gửi không phải thành viên', async () => {
+    const db = meetingsDb({ id: 'm-1', hostId: 'other-host' }, false);
+    const app = authApp('/api/meetings', meetingRoutes(db));
+    expect((await request(app).post('/api/meetings/m-1/signals').set('Authorization', `Bearer ${tokenFor(employee)}`).send({ to: 'x', type: 'chat', data: {} })).status).toBe(403);
+    expect(db.runs).toHaveLength(0);
   });
 });
 

@@ -95,15 +95,44 @@ describe('events/activity/clients', () => {
     expect((await request(app).delete('/api/events/e-1').set('Authorization', `Bearer ${a}`)).status).toBe(200);
   });
 
-  it('activity enrich + user scope', async () => {
+  // Trước đây test này chỉ kiểm tra "employee đọc được log" và coi đó là hành vi
+  // đúng — tức là nó đang bảo vệ chính lỗ hổng. Activity log là nhật ký toàn công
+  // ty (ai làm gì lên đối tượng nào), và AdminApp chỉ chặn ở phía UI
+  // (AdminApp.tsx:220) nên gọi API trực tiếp là vô hạn.
+  it('activity: nhan vien thuong bi tu choi khong doc duoc nhat ky', async () => {
+    const db = { all: async () => [{ id: 'l-1', userId: 'emp-1' }] };
+    const app = authApp('/api/activity', activityRoutes(db));
+    expect((await request(app).get('/api/activity').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);
+    expect((await request(app).get('/api/activity/user/admin-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);
+  });
+
+  it('activity: admin doc duoc va log duoc lam giau ten he thong', async () => {
     const db = {
       all: async (sql: string) => sql.includes('FROM users') ? [{ id: 'emp-1', name: 'Emp' }] : [{ id: 'l-1', userId: 'emp-1' }, { id: 'l-2', userId: 'system' }],
     };
     const app = authApp('/api/activity', activityRoutes(db));
-    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${tokenFor(employee)}`);
+    const res = await request(app).get('/api/activity').set('Authorization', `Bearer ${tokenFor(admin)}`);
     expect(res.status).toBe(200);
     expect(res.body.find((l: any) => l.id === 'l-2').user.name).toBe('Hệ thống');
-    expect((await request(app).get('/api/activity/user/emp-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(200);
+    expect((await request(app).get('/api/activity/user/emp-1').set('Authorization', `Bearer ${tokenFor(admin)}`)).status).toBe(200);
+  });
+
+  it('activity: limit bi kiem soat, khong the do cao nguyen nen', async () => {
+    const seen: Array<{ sql: string; params: unknown[] }> = [];
+    const db = { all: async (sql: string, params: unknown[] = []) => { seen.push({ sql, params }); return []; } };
+    const app = authApp('/api/activity', activityRoutes(db));
+
+    await request(app).get('/api/activity?limit=100000000').set('Authorization', `Bearer ${tokenFor(admin)}`);
+    expect(seen.at(-1)!.params[0]).toBe(200);
+
+    await request(app).get('/api/activity?limit=abc').set('Authorization', `Bearer ${tokenFor(admin)}`);
+    expect(seen.at(-1)!.params[0]).toBe(50);
+
+    // ?page= ho tro phan trang, offset bi gioi han de khong quet qua ca bang.
+    await request(app).get('/api/activity?limit=20&page=3').set('Authorization', `Bearer ${tokenFor(admin)}`);
+    expect(seen.at(-1)!.params).toEqual([20, 40]);
+    await request(app).get('/api/activity?limit=200&page=99999').set('Authorization', `Bearer ${tokenFor(admin)}`);
+    expect(seen.at(-1)!.params).toEqual([200, 99 * 200]);
   });
 
   it('clients list', async () => {
@@ -177,7 +206,7 @@ describe('departments/documents/products/roles', () => {
     const dbFor = (ownerId: string) => ({
       all: async () => [],
       get: async (sql: string) => {
-        if (sql.includes('SELECT createdBy FROM documents')) return { createdBy: ownerId };
+        if (sql.includes('SELECT createdBy, category FROM documents')) return { createdBy: ownerId, category: 'others' };
         if (sql.includes('SELECT * FROM documents')) return { id: 'd-1', createdBy: ownerId, url: '/uploads/reports/a.png', category: 'others', linkedId: null };
         return undefined;
       },

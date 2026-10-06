@@ -4,9 +4,28 @@ import { randomUUID } from 'crypto';
 export function meetingRoutes(db: any) {
   const router = Router();
 
-  async function buildMeeting(m: any) {
+  const isMeetingAdmin = (user: any, m: any) =>
+    user?.role === 'Admin'
+    || (user?.permissions || []).includes('admin_panel')
+    || m.hostId === user?.id;
+
+  async function isParticipant(meetingId: string, userId: string) {
+    if (!userId) return false;
+    const part = await db.get('SELECT userId FROM meeting_participants WHERE meetingId = ? AND userId = ?', [meetingId, userId]);
+    return Boolean(part);
+  }
+
+  /**
+   * meetingLink doubles as the join credential: whoever holds it walks into the
+   * call. Returning it in the list let any authenticated employee harvest the
+   * join code for every meeting in the company. Hide it unless the caller already
+   * has a legitimate claim on the room, or just proved it by presenting the code.
+   */
+  async function buildMeeting(m: any, viewer: any, revealLink = false) {
     const parts = await db.all('SELECT userId FROM meeting_participants WHERE meetingId = ?', [m.id]);
-    return { ...m, participants: parts.map((p: any) => p.userId) };
+    const ids = parts.map((p: any) => p.userId);
+    const maySeeLink = revealLink || isMeetingAdmin(viewer, m) || ids.includes(viewer?.id);
+    return { ...m, participants: ids, meetingLink: maySeeLink ? (m.meetingLink ?? null) : null };
   }
 
   async function saveParticipants(meetingId: string, participants: string[]) {
@@ -16,10 +35,30 @@ export function meetingRoutes(db: any) {
     }
   }
 
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     try {
-      const meetings = await db.all('SELECT * FROM meetings');
-      res.json(await Promise.all(meetings.map(buildMeeting)));
+      const meetings = await db.all('SELECT * FROM meetings ORDER BY startTime DESC LIMIT 500');
+      res.json(await Promise.all(meetings.map((m: any) => buildMeeting(m, (req as any).user))));
+    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+  });
+
+  /**
+   * Resolve a join code without exposing the code of every other room. The UI used
+   * to search the whole list for meetingLink.includes(code), which is exactly the
+   * enumeration this endpoint replaces. Callers still join via PUT /:id/join.
+   */
+  router.get('/by-code/:code', async (req, res) => {
+    try {
+      const code = String(req.params.code || '').trim();
+      // Short codes would match almost anything; the app only ever issues ids and
+      // 12-char slugs, so a minimum keeps this from becoming a search primitive.
+      if (code.length < 6) return res.status(400).json({ error: 'Mã cuộc họp không hợp lệ' });
+      const m = await db.get(
+        'SELECT * FROM meetings WHERE id = ? OR meetingLink LIKE ? ORDER BY startTime DESC LIMIT 1',
+        [code, `%${code}%`],
+      );
+      if (!m) return res.status(404).json({ error: 'Không tìm thấy cuộc họp' });
+      res.json(await buildMeeting(m, (req as any).user, true));
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
 
@@ -27,7 +66,7 @@ export function meetingRoutes(db: any) {
     try {
       const m = await db.get('SELECT * FROM meetings WHERE id = ?', [req.params.id]);
       if (!m) return res.status(404).json({ error: 'Not found' });
-      res.json(await buildMeeting(m));
+      res.json(await buildMeeting(m, (req as any).user));
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
 
@@ -124,6 +163,14 @@ export function meetingRoutes(db: any) {
   router.get('/:meetingId/signals', async (req, res) => {
     const { since } = req.query;
     try {
+      // Signals carry whiteboard strokes, chat and live cursors — they describe the
+      // meeting itself, so only people in the room may read or write them.
+      const m = await db.get('SELECT id, hostId FROM meetings WHERE id = ?', [req.params.meetingId]);
+      if (!m) return res.status(404).json({ error: 'Not found' });
+      const user = (req as any).user;
+      if (!isMeetingAdmin(user, m) && !(await isParticipant(req.params.meetingId, user?.id))) {
+        return res.status(403).json({ error: 'Bạn không phải thành viên của cuộc họp này' });
+      }
       const signals = await db.all(
         'SELECT * FROM signals WHERE meetingId = ? AND timestamp > ? ORDER BY timestamp ASC',
         [req.params.meetingId, since || 0],
@@ -138,12 +185,23 @@ export function meetingRoutes(db: any) {
     const from = (req as any).user?.id;
     if (!from) return res.status(401).json({ error: 'Unauthorized' });
     try {
+      // Same membership gate as the read path: otherwise anyone could inject
+      // strokes/chat into a meeting they are not part of.
+      const m = await db.get('SELECT id, hostId FROM meetings WHERE id = ?', [req.params.meetingId]);
+      if (!m) return res.status(404).json({ error: 'Not found' });
+      const user = (req as any).user;
+      if (!isMeetingAdmin(user, m) && !(await isParticipant(req.params.meetingId, from))) {
+        return res.status(403).json({ error: 'Bạn không phải thành viên của cuộc họp này' });
+      }
       const timestamp = Date.now();
+      const signalId = id || randomUUID();
       await db.run(
         'INSERT INTO signals (id, meetingId, `from`, `to`, type, data, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id || randomUUID(), req.params.meetingId, from, to, type, JSON.stringify(data), timestamp],
+        [signalId, req.params.meetingId, from, to, type, JSON.stringify(data), timestamp],
       );
-      res.status(201).json({ id, timestamp });
+      // Used to echo back the client's id, which is null whenever the server
+      // generated one — so clients could never address their own signal.
+      res.status(201).json({ id: signalId, timestamp });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
 

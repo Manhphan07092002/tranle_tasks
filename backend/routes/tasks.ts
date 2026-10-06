@@ -64,7 +64,18 @@ export function taskRoutes(db: any) {
       }));
   }
 
-  async function saveRelated(taskId: string, t: any) {
+  /**
+   * Comments arrive inside the task payload, so `userId` and `createdAt` are
+   * client-supplied. Trusting them let any assignee rewrite history and post
+   * comments as the director or the CEO. Known comment ids keep their original
+   * author and timestamp; anything new is attributed to whoever sent the request.
+   */
+  async function saveRelated(
+    taskId: string,
+    t: any,
+    authorId: string,
+    existingComments: Map<string, { userId: string; createdAt: string }> = new Map(),
+  ) {
     await db.run('DELETE FROM task_assignees WHERE taskId = ?', [taskId]);
     await db.run('DELETE FROM task_tags WHERE taskId = ?', [taskId]);
     await db.run('DELETE FROM task_subtasks WHERE taskId = ?', [taskId]);
@@ -85,9 +96,16 @@ export function taskRoutes(db: any) {
       );
     }
     for (const c of (t.comments ?? [])) {
+      const prior = c.id ? existingComments.get(c.id) : undefined;
       await db.run(
         'INSERT INTO task_comments (id, taskId, userId, content, createdAt) VALUES (?, ?, ?, ?, ?)',
-        [c.id ?? randomUUID(), taskId, c.userId, c.content, c.createdAt ?? new Date().toISOString()],
+        [
+          c.id ?? randomUUID(),
+          taskId,
+          prior ? prior.userId : authorId,
+          c.content,
+          prior ? prior.createdAt : new Date().toISOString(),
+        ],
       );
     }
   }
@@ -122,7 +140,7 @@ export function taskRoutes(db: any) {
           t.estimatedEndAt ?? null, t.priority ?? null, t.status ?? null,
           user.id, canAssignAcrossOrg ? (t.department ?? user.department) : user.department, t.recurrence ?? null, t.contractId ?? null],
       );
-      await saveRelated(t.id, { ...t, assignees });
+      await saveRelated(t.id, { ...t, assignees }, user.id);
 
       if (user.id) {
         await db.run(
@@ -150,13 +168,31 @@ export function taskRoutes(db: any) {
       if (!canEditTask(req.user, existing, existingAssignees)) {
         return res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa công việc này' });
       }
+      // POST already refuses cross-org assignment; PUT had no such check, so any
+      // assignee could hand the task to arbitrary users — each of whom then gains
+      // canEditTask on it.
+      const isManager = hasPermission(req.user, 'manage_dept_tasks');
+      const canAssignAcrossOrg = isManager || hasPermission(req.user, 'view_all_tasks') || hasPermission(req.user, 'admin_panel');
+      const nextAssignees = Array.isArray(t.assignees) ? t.assignees : [];
+      if (!canAssignAcrossOrg && nextAssignees.some((id: string) => id !== req.user?.id)) {
+        return res.status(403).json({ error: 'Bạn chỉ có thể giao công việc cho chính mình' });
+      }
+      // department drives canViewTask's manage_dept_tasks scoping, so letting an
+      // assignee rewrite it moves the task out from under the department head who
+      // is supposed to review it. Also stops 't.department ?? null' from silently
+      // erasing the department on any PUT that omits the field.
+      const nextDepartment = canAssignAcrossOrg ? (t.department ?? existing.department) : existing.department;
+      const existingComments = new Map<string, { userId: string; createdAt: string }>(
+        (await db.all('SELECT id, userId, createdAt FROM task_comments WHERE taskId = ?', [req.params.id]))
+          .map((row: any) => [row.id, { userId: row.userId, createdAt: row.createdAt }]),
+      );
       await db.run(
         'UPDATE tasks SET title=?, description=?, startDate=?, dueDate=?, estimatedEndAt=?, priority=?, status=?, department=?, recurrence=?, contractId=? WHERE id=?',
         [t.title, t.description ?? null, t.startDate ?? null, t.dueDate ?? null,
           t.estimatedEndAt ?? null, t.priority ?? null, t.status ?? null,
-          t.department ?? null, t.recurrence ?? null, t.contractId ?? null, req.params.id],
+          nextDepartment, t.recurrence ?? null, t.contractId ?? null, req.params.id],
       );
-      await saveRelated(req.params.id, t);
+      await saveRelated(req.params.id, t, req.user?.id ?? 'system', existingComments);
 
       if (req.user?.id) {
         await db.run(

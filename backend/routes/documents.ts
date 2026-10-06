@@ -177,7 +177,7 @@ export function documentRoutes(db: any) {
       const docId = req.params.id;
       const { name, category, linkedId } = req.body;
 
-      const existingDoc = await db.get('SELECT createdBy FROM documents WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [docId]);
+      const existingDoc = await db.get('SELECT createdBy, category FROM documents WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [docId]);
       if (!existingDoc) {
         return res.status(404).json({ error: 'Tài liệu không tồn tại' });
       }
@@ -189,9 +189,20 @@ export function documentRoutes(db: any) {
         return res.status(403).json({ error: 'Bạn không có quyền sửa tài liệu này' });
       }
 
+      // POST validates the link target, PUT did not — so re-pointing a document you
+      // own at another team's contract or report (and re-labelling its category)
+      // bypassed canLinkTo entirely. Validate against the *new* category, which is
+      // what decides how the document is interpreted downstream.
+      const nextCategory = category || existingDoc.category;
+      if (linkedId !== undefined && !(await canLinkTo(currentUser, nextCategory, linkedId))) {
+        return res.status(403).json({ error: 'Bạn không có quyền liên kết tài liệu này vào mục đó' });
+      }
+
+      // No updatedAt column exists on documents (db_mysql.ts DDL), so this UPDATE
+      // threw "Unknown column" for every caller. Nothing reads that field.
       await db.run(
-        'UPDATE documents SET name = ?, category = ?, linkedId = ?, updatedAt = ? WHERE id = ?',
-        [name, category, linkedId || null, new Date().toISOString(), docId]
+        'UPDATE documents SET name = ?, category = ?, linkedId = ? WHERE id = ?',
+        [name, nextCategory, linkedId || null, docId]
       );
 
       res.json({ success: true });

@@ -24,7 +24,9 @@ export default function AdminActivityLogsManagement() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch('/api/activity?limit=500');
+      // Server clamps `limit` to 200, so ask for exactly that ceiling rather
+      // than a number that silently gets cut. Paging is available via ?page=.
+      const res = await apiFetch('/api/activity?limit=200');
       if (!res.ok) throw new Error('Không thể tải log hệ thống');
       const data = await res.json();
       setLogs(data || []);
