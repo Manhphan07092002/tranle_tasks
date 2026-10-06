@@ -22,6 +22,29 @@ function resolveManagedUpload(url: unknown): string | null {
 export function documentRoutes(db: any) {
   const router = Router();
 
+  // Verify the caller may attach files to the linked entity (contract/report).
+  // Prevents user A from polluting user B's contracts with junk attachments.
+  async function canLinkTo(user: any, category: string, linkedId: string): Promise<boolean> {
+    if (!linkedId) return true;
+    const perms = user?.permissions || [];
+    if (perms.includes('admin_panel') || user?.role === 'Admin' || user?.role === 'Director' || user?.role === 'Manager') return true;
+    try {
+      if (category === 'contracts') {
+        const c = await db.get('SELECT createdBy, department FROM contracts WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [linkedId]);
+        if (!c) return false;
+        return c.createdBy === user?.id || (c.department && c.department === user?.department);
+      }
+      if (category === 'reports') {
+        const r = await db.get('SELECT authorId, department FROM reports WHERE id = ?', [linkedId]);
+        if (!r) return false;
+        return r.authorId === user?.id || (r.department && r.department === user?.department);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // GET: Lấy danh sách tài liệu với bộ lọc
   router.get('/', async (req, res) => {
     try {
@@ -84,7 +107,7 @@ export function documentRoutes(db: any) {
       const currentUser = req.user;
       if (!currentUser) return res.status(401).json({ error: 'Unauthorized' });
 
-      const { id, name, url, size, type, category, linkedId } = req.body;
+      const { name, url, size, type, category, linkedId } = req.body;
 
       if (!name || !url || !category) {
         return res.status(400).json({ error: 'Tên, URL và phân loại tài liệu là bắt buộc' });
@@ -92,8 +115,12 @@ export function documentRoutes(db: any) {
       if (!resolveManagedUpload(url)) {
         return res.status(400).json({ error: 'URL tài liệu không hợp lệ' });
       }
+      if (linkedId && !(await canLinkTo(currentUser, category, linkedId))) {
+        return res.status(403).json({ error: 'Bạn không có quyền đính kèm vào tài liệu này' });
+      }
 
-      const docId = id || 'doc-' + crypto.randomBytes(9).toString('hex');
+      // IDs are always server-generated — client-supplied IDs allow squatting/collision.
+      const docId = 'doc-' + crypto.randomBytes(9).toString('hex');
       const createdAt = new Date().toISOString();
 
       await db.run(

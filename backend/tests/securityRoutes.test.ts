@@ -18,6 +18,7 @@ import { initSocket } from '../socket.js';
 
 const secret = crypto.randomBytes(32).toString('hex');
 process.env.JWT_SECRET = secret;
+process.env.APP_BASE_URL = process.env.APP_BASE_URL || 'https://task.tranlecorp.com.vn';
 
 const employee = {
   id: 'employee-1', name: 'Employee', email: 'employee@example.test', role: 'Employee',

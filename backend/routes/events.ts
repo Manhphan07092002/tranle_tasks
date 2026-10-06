@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function eventRoutes(db: any) {
   const router = Router();
@@ -10,7 +11,7 @@ export function eventRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to fetch events' }); }
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, title, date, endDate, type, color, description, isRecurringYearly } = req.body;
     if (!title?.trim() || !date) return res.status(400).json({ error: 'Tiêu đề và ngày không được trống' });
     try {
@@ -22,7 +23,7 @@ export function eventRoutes(db: any) {
     } catch (e: any) { res.status(500).json({ error: 'Failed to create event' }); }
   });
 
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { title, date, endDate, type, color, description, isRecurringYearly } = req.body;
     try {
       const existing = await db.get('SELECT id FROM events WHERE id = ?', [req.params.id]);
@@ -35,7 +36,7 @@ export function eventRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to update event' }); }
   });
 
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       await db.run('DELETE FROM events WHERE id = ?', [req.params.id]);
       res.json({ success: true });

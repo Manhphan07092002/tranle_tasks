@@ -88,13 +88,14 @@ describe('users routes', () => {
     expect(db.runs[0].sql).not.toContain('role');
   });
 
-  it('Admin reset-password sinh pass mạnh + gửi mail, lock/unlock + revoke', async () => {
+  it('Admin reset-password không bao giờ trả plaintext + lock/unlock + revoke', async () => {
     const db = usersDb({ 'admin-1': 'Admin' });
     const app = authApp('/api/users', userRoutes(db, mailer));
     const reset = await request(app).post('/api/users/u-1/reset-password').set('Authorization', `Bearer ${tokenFor(admin)}`).send({});
     expect(reset.status).toBe(200);
     expect(reset.body.emailSent).toBe(true);
-    expect(String(reset.body.generatedPassword).length).toBeGreaterThanOrEqual(8);
+    expect(reset.body.generatedPassword).toBeUndefined();
+    expect(JSON.stringify(reset.body)).not.toContain('@');
     const lock = await request(app).put('/api/users/u-1/lock').set('Authorization', `Bearer ${tokenFor(admin)}`);
     expect(lock.status).toBe(200);
     expect(db.runs.some((r) => r.sql.includes('refresh_tokens'))).toBe(true);

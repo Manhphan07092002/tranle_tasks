@@ -18,6 +18,7 @@ import { aiRoutes } from '../routes/ai.js';
 import { mailRoutes } from '../routes/mail.js';
 import { uploadRoutes } from '../routes/upload.js';
 import { requireAuth, requireAdmin, setAuthDb } from '../middleware/auth.js';
+import { ensureBody } from '../middleware/ensureBody.js';
 
 const secret = crypto.randomBytes(32).toString('hex');
 process.env.JWT_SECRET = secret;
@@ -28,9 +29,50 @@ const tokenFor = (u: typeof employee) => jwt.sign(u, secret);
 const authApp = (prefix: string, router: express.Router) => {
   const app = express();
   app.use(express.json());
+  app.use(ensureBody);
   app.use(prefix, requireAuth, router);
   return app;
 };
+
+describe('departments/events admin gates', () => {
+  it('Employee không tạo/sửa/xóa phòng ban và sự kiện', async () => {
+    const db = {
+      all: async () => [],
+      get: async () => undefined,
+      run: async () => ({ changes: 1 }),
+    };
+    const deptApp = authApp('/api/departments', departmentRoutes(db));
+    const evtApp = authApp('/api/events', eventRoutes(db));
+    const t = tokenFor(employee);
+    expect((await request(deptApp).post('/api/departments').set('Authorization', `Bearer ${t}`).send({ name: 'X' })).status).toBe(403);
+    expect((await request(deptApp).put('/api/departments/d-1').set('Authorization', `Bearer ${t}`).send({ name: 'Y' })).status).toBe(403);
+    expect((await request(deptApp).delete('/api/departments/d-1').set('Authorization', `Bearer ${t}`)).status).toBe(403);
+    expect((await request(evtApp).post('/api/events').set('Authorization', `Bearer ${t}`).send({ title: 'T', date: '2026-01-01' })).status).toBe(403);
+    expect((await request(evtApp).delete('/api/events/e-1').set('Authorization', `Bearer ${t}`)).status).toBe(403);
+  });
+});
+
+describe('documents ownership', () => {
+  it('id luôn do server sinh, linkedId lạ bị chặn', async () => {
+    const runs: Array<{ sql: string; params: unknown[] }> = [];
+    const db = {
+      all: async () => [],
+      get: async (sql: string) => {
+        if (sql.includes('FROM contracts')) return { createdBy: 'someone-else', department: 'Sales' };
+        return undefined;
+      },
+      run: async (sql: string, params: unknown[] = []) => { runs.push({ sql, params }); return { changes: 1 }; },
+    };
+    const app = authApp('/api/documents', documentRoutes(db));
+    const t = tokenFor(employee);
+    const blocked = await request(app).post('/api/documents').set('Authorization', `Bearer ${t}`).send({ id: 'squat-id', name: 'x', url: '/uploads/reports/a.png', category: 'contracts', linkedId: 'c-other' });
+    expect(blocked.status).toBe(403);
+    const created = await request(app).post('/api/documents').set('Authorization', `Bearer ${t}`).send({ id: 'squat-id', name: 'x', url: '/uploads/reports/a.png', category: 'others' });
+    expect(created.status).toBe(201);
+    expect(created.body.id).not.toBe('squat-id');
+    expect(created.body.id.startsWith('doc-')).toBe(true);
+  });
+});
 
 describe('events/activity/clients', () => {
   it('events CRUD + validate', async () => {
@@ -42,11 +84,15 @@ describe('events/activity/clients', () => {
     };
     const app = authApp('/api/events', eventRoutes(db));
     const t = tokenFor(employee);
+    const a = tokenFor({ ...employee, id: 'admin-1', role: 'Admin' });
     expect((await request(app).get('/api/events').set('Authorization', `Bearer ${t}`)).body).toEqual([{ id: 'e-1' }]);
-    expect((await request(app).post('/api/events').set('Authorization', `Bearer ${t}`).send({})).status).toBe(400);
-    expect((await request(app).post('/api/events').set('Authorization', `Bearer ${t}`).send({ title: 'T', date: '2026-01-01' })).status).toBe(201);
-    expect((await request(app).put('/api/events/nope').set('Authorization', `Bearer ${t}`).send({})).status).toBe(404);
-    expect((await request(app).delete('/api/events/e-1').set('Authorization', `Bearer ${t}`)).status).toBe(200);
+    // Employee bị chặn từ guard (403) trước cả validate; Admin thiếu field thì 400.
+    expect((await request(app).post('/api/events').set('Authorization', `Bearer ${t}`).send({})).status).toBe(403);
+    expect((await request(app).post('/api/events').set('Authorization', `Bearer ${a}`).send({})).status).toBe(400);
+    expect((await request(app).post('/api/events').set('Authorization', `Bearer ${a}`).send({ title: 'T', date: '2026-01-01' })).status).toBe(201);
+    // PUT không body / không Content-Type cũng phải 404 gọn gàng, không 500.
+    expect((await request(app).put('/api/events/nope').set('Authorization', `Bearer ${a}`)).status).toBe(404);
+    expect((await request(app).delete('/api/events/e-1').set('Authorization', `Bearer ${a}`)).status).toBe(200);
   });
 
   it('activity enrich + user scope', async () => {
@@ -211,6 +257,15 @@ describe('ai endpoints', () => {
     expect((await request(app).post('/api/ai/generate-tasks-from-goal').set('Authorization', `Bearer ${tokenFor(admin)}`).send({})).status).toBe(400);
     expect((await request(app).post('/api/ai/chat-stream').set('Authorization', `Bearer ${tokenFor(admin)}`).send({})).status).toBe(400);
   });
+
+  it('từ chối input quá khổ (quota-DoS guard)', async () => {
+    const app = authApp('/api/ai', aiRoutes(db));
+    const t = tokenFor(admin);
+    expect((await request(app).post('/api/ai/chat-stream').set('Authorization', `Bearer ${t}`).send({ message: 'x'.repeat(5000) })).status).toBe(400);
+    expect((await request(app).post('/api/ai/chat-stream').set('Authorization', `Bearer ${t}`).send({ message: 'hi', history: Array.from({ length: 25 }, () => ({ role: 'user', text: 'hi' })) })).status).toBe(400);
+    expect((await request(app).post('/api/ai/chat-stream').set('Authorization', `Bearer ${t}`).send({ message: 'hi', contextString: 'x'.repeat(25000) })).status).toBe(400);
+    expect((await request(app).post('/api/ai/generate-subtasks').set('Authorization', `Bearer ${t}`).send({ taskTitle: 'x'.repeat(600) })).status).toBe(400);
+  });
 });
 
 describe('mail validation', () => {
@@ -225,13 +280,29 @@ describe('mail validation', () => {
   const app = bareApp();
   const t = () => `Bearer ${tokenFor(employee)}`;
 
+  it('chặn custom host nội bộ/metadata + port lạ', async () => {
+    const evilHosts = ['127.0.0.1', '10.0.0.5', '192.168.1.1', '172.16.0.1', '169.254.169.254', 'localhost', 'mysql:3306', '0.0.0.0'];
+    for (const h of evilHosts) {
+      const res = await request(app).post('/api/mail/connect').set('Authorization', t()).send({ email: 'a@b.c', password: 'x', provider: 'custom', customImapHost: h, customSmtpHost: h });
+      expect(res.status).toBe(400);
+    }
+    const badPort = await request(app).post('/api/mail/connect').set('Authorization', t()).send({ email: 'a@b.c', password: 'x', provider: 'custom', customImapHost: 'mail.example.com', customImapPort: 3306, customSmtpHost: 'mail.example.com' });
+    expect(badPort.status).toBe(400);
+  });
+
   it('connect validate + chặn CRLF injection', async () => {
     expect((await request(app).post('/api/mail/connect').set('Authorization', t()).send({})).status).toBe(400);
     expect((await request(app).post('/api/mail/connect').set('Authorization', t()).send({ email: 'a@b.c\r\nINJECT', password: 'x' })).status).toBe(400);
   });
 
-  it('send/bulk/star/read/message validate', async () => {
+  it('send validate', async () => {
     expect((await request(app).post('/api/mail/send').set('Authorization', t()).send({})).status).toBe(400);
+    expect((await request(app).post('/api/mail/send').set('Authorization', t()).send({ to: 'not-an-email', subject: 's' })).status).toBe(400);
+    expect((await request(app).post('/api/mail/send').set('Authorization', t()).send({ to: 'a@b.c\r\nBcc:evil@x.y', subject: 's' })).status).toBe(400);
+    expect((await request(app).post('/api/mail/send').set('Authorization', t()).send({ to: 'a@b.c', subject: 'x'.repeat(300) })).status).toBe(400);
+  });
+
+  it('bulk/star/read/message validate', async () => {
     expect((await request(app).post('/api/mail/bulk').set('Authorization', t()).send({ action: 'delete' })).status).toBe(400);
     expect((await request(app).post('/api/mail/bulk').set('Authorization', t()).send({ uids: ['1;DROP'], action: 'delete' })).status).toBe(400);
     expect((await request(app).patch('/api/mail/message/abc/star').set('Authorization', t()).send({})).status).toBe(400);
@@ -298,14 +369,16 @@ describe('auth middleware', () => {
     expect((await request(app).get('/private').set('Authorization', `Bearer ${expired}`)).status).toBe(401);
   });
 
-  it('cookie access dự phòng hoạt động', async () => {
+  it('không còn fallback cookie access — chỉ Bearer header', async () => {
     const app = express();
     app.use(express.json());
     const { cookiesMiddleware } = await import('../middleware/auth.js');
     app.use(cookiesMiddleware);
     app.get('/private', requireAuth, (_req, res) => res.json({ ok: true }));
+    // Cookie lạ không xác thực được (tránh nhầm lẫn audit: chỉ refresh cookie mới có ý nghĩa).
     const res = await request(app).get('/private').set('Cookie', `tranle_access=${tokenFor(employee)}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+    expect((await request(app).get('/private').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(200);
   });
 
   it('DB freshness: khóa/xóa/hạ quyền có hiệu lực ngay', async () => {

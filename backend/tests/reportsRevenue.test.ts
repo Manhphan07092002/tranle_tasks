@@ -97,6 +97,49 @@ describe('reports routes', () => {
   });
 });
 
+describe('reports delete/get guards', () => {
+  it('người ngoài không xóa được báo cáo của người khác', async () => {
+    const db = reportsDb({ id: 'r-1', authorId: 'other', department: 'Engineering', status: 'Draft', approvedAt: null, approvedBy: null, directorFeedback: null, managerFeedback: null });
+    const app = authApp('/api/reports', reportRoutes(db));
+    expect((await request(app).delete('/api/reports/r-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);
+  });
+
+  it('chủ sở hữu xóa được draft của mình', async () => {
+    const db = reportsDb({ id: 'r-1', authorId: 'emp-1', department: 'Engineering', status: 'Draft', approvedAt: null, approvedBy: null, directorFeedback: null, managerFeedback: null });
+    const app = authApp('/api/reports', reportRoutes(db));
+    expect((await request(app).delete('/api/reports/r-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(200);
+  });
+
+  it('GET lọc theo author/department với user thường', async () => {
+    let captured: any[] = [];
+    const db = {
+      all: async (_sql: string, params: unknown[] = []) => { captured = params; return []; },
+      get: async () => undefined,
+      run: async () => ({ changes: 1 }),
+    };
+    const app = authApp('/api/reports', reportRoutes(db));
+    await request(app).get('/api/reports').set('Authorization', `Bearer ${tokenFor(employee)}`);
+    expect(captured).toContain('emp-1');
+    expect(captured).toContain('Engineering');
+  });
+
+  it('POST ép department của chính mình với user thường', async () => {
+    const db = reportsDb();
+    const app = authApp('/api/reports', reportRoutes(db));
+    await request(app).post('/api/reports').set('Authorization', `Bearer ${tokenFor(employee)}`).send({ id: 'r-9', title: 'T', content: '{}', department: 'Sales', status: 'Draft' });
+    const insert = db.runs.find((r) => r.sql.startsWith('INSERT INTO reports'));
+    expect(insert!.params[4]).toBe('Engineering');
+  });
+});
+
+describe('revenue delete guards', () => {
+  it('người ngoài không xóa được', async () => {
+    const db = revenueDb({ id: 'v-1', authorId: 'other', department: 'Engineering', status: 'Draft', approvedBy: null, approvedAt: null, managerFeedback: null, directorFeedback: null });
+    const app = authApp('/api/revenue-reports', revenueRoutes(db));
+    expect((await request(app).delete('/api/revenue-reports/v-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);
+  });
+});
+
 describe('revenue routes', () => {
   it('tạo báo cáo doanh thu ép authorId từ JWT', async () => {
     const db = revenueDb();

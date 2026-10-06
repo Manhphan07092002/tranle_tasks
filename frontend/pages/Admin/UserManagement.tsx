@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, PlusCircle, Edit2, Trash2, Shield, Briefcase,
   Search, RefreshCw, AlertCircle, X, Mail, User as UserIcon,
-  CheckCircle, ChevronDown, Lock, Unlock, ImagePlus, KeyRound, Copy, ExternalLink, Link as LinkIcon
+  CheckCircle, ChevronDown, Lock, Unlock, ImagePlus, KeyRound, ExternalLink, Link as LinkIcon
 } from 'lucide-react';
 import { User, UserRole } from '../../types';
 
@@ -257,14 +257,13 @@ const UserFormModal: React.FC<{
 const ResetPasswordModal: React.FC<{
   user: User;
   onCancel: () => void;
-  onConfirm: (newPassword: string) => Promise<{ emailSent?: boolean; generatedPassword?: string; message?: string }>;
+  onConfirm: (newPassword: string) => Promise<{ emailSent?: boolean; message?: string }>;
 }> = ({ user, onCancel, onConfirm }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ emailSent?: boolean; generatedPassword?: string; message?: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<{ emailSent?: boolean; message?: string } | null>(null);
 
   const submit = async () => {
     setError('');
@@ -281,7 +280,6 @@ const ResetPasswordModal: React.FC<{
     try {
       const response = await onConfirm(newPassword);
       setResult(response);
-      setCopied(false);
     } catch {
       setError('Đặt lại mật khẩu thất bại.');
     } finally {
@@ -325,21 +323,8 @@ const ResetPasswordModal: React.FC<{
           {result && (
             <div className={`text-sm rounded-xl px-3 py-3 border ${result.emailSent ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'}`}>
               <div className="font-semibold">{result.emailSent ? 'Đã gửi mail thành công cho người dùng.' : 'Đã đặt lại mật khẩu nhưng gửi mail chưa thành công.'}</div>
-              {result.generatedPassword && (
-                <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-white/70 px-3 py-2 border border-white/60">
-                  <div>Mật khẩu hiện tại: <span className="font-bold">{result.generatedPassword}</span></div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(result.generatedPassword || '');
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1800);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 transition-colors"
-                  >
-                    <Copy size={12} /> {copied ? 'Đã copy' : 'Copy'}
-                  </button>
-                </div>
+              {!result.emailSent && (
+                <div className="mt-2 text-xs opacity-80">Vì lý do bảo mật, hệ thống không hiển thị mật khẩu. Hãy đặt một mật khẩu bạn biết rõ rồi gửi cho người dùng qua kênh an toàn.</div>
               )}
               {result.message && <div className="mt-2 text-xs opacity-80">{result.message}</div>}
             </div>
@@ -486,7 +471,6 @@ export default function AdminUserManagement() {
     await fetchUsers();
     return {
       emailSent: data.emailSent,
-      generatedPassword: data.generatedPassword,
       message: data.emailSent ? 'Người dùng đã được thông báo qua email.' : 'Anh vui lòng kiểm tra lại cấu hình SMTP hoặc tự gửi mật khẩu cho người dùng.',
     };
   };

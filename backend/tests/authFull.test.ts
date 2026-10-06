@@ -9,6 +9,7 @@ import { cookiesMiddleware, requireAuth } from '../middleware/auth.js';
 
 const secret = crypto.randomBytes(32).toString('hex');
 process.env.JWT_SECRET = secret;
+process.env.APP_BASE_URL = 'https://task.tranlecorp.com.vn';
 
 const PASSWORD = 'correct-password';
 let passwordHash = '';
@@ -160,10 +161,12 @@ describe('auth forgot/reset password', () => {
     expect(res.body.message).toContain('Nếu email hợp lệ');
   });
 
-  it('GET reset token lạ 404, POST mật khẩu ngắn 400, token đã dùng 400', async () => {
+  it('GET reset token lạ 400 chung, POST mật khẩu ngắn 400, token đã dùng 400 chung', async () => {
     const db = makeDb(makeUser());
     const app = forgotApp(db);
-    expect((await request(app).get('/api/auth/reset-password/nope')).status).toBe(404);
+    const badGet = await request(app).get('/api/auth/reset-password/nope');
+    expect(badGet.status).toBe(400);
+    expect(badGet.body.error).toContain('không hợp lệ hoặc đã hết hạn');
     expect((await request(app).post('/api/auth/reset-password').send({ token: 'x', newPassword: '123' })).status).toBe(400);
     db.resetTokens.push({ token: crypto.createHash('sha256').update('used-token').digest('hex'), usedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60000).toISOString() });
     expect((await request(app).post('/api/auth/reset-password').send({ token: 'used-token', newPassword: 'newpass123' })).status).toBe(400);

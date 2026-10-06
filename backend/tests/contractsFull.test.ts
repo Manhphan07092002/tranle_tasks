@@ -136,6 +136,12 @@ describe('contracts update/approve', () => {
     expect((await request(app).put('/api/contracts/c-1/confirm-receipt').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);
   });
 
+  it('TP khác phòng không xóa được hợp đồng', async () => {
+    const target = { createdBy: 'other', department: 'Engineering', contractNumber: 'HD-001' };
+    const app = appFor(contractsDb({ existingContract: target }));
+    expect((await request(app).delete('/api/contracts/c-1').set('Authorization', `Bearer ${tokenFor(managerSales)}`)).status).toBe(403);
+  });
+
   it('xóa: người ngoài 403, chủ sở hữu 200', async () => {
     const appOther = appFor(contractsDb({ existingContract: { createdBy: 'someone-else', contractNumber: 'HD-001' } }));
     expect((await request(appOther).delete('/api/contracts/c-1').set('Authorization', `Bearer ${tokenFor(employee)}`)).status).toBe(403);

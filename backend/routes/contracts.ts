@@ -919,17 +919,19 @@ export function contractRoutes(db: any) {
 
     try {
       // Get existing contract to check existence and creator
-      const existingContract = await db.get('SELECT createdBy, contractNumber FROM contracts WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [contractId]);
+      const existingContract = await db.get('SELECT createdBy, department, contractNumber FROM contracts WHERE id = ? AND (isDeleted IS NULL OR isDeleted = 0)', [contractId]);
       if (!existingContract) {
         return res.status(404).json({ error: 'Hợp đồng không tồn tại hoặc đã bị xóa' });
       }
 
-      // IDOR / Authorization Check
+      // IDOR / Authorization Check — same bar as approve/update:
+      // owner, system admin/director, or the owning department's manager.
       const perms = user.permissions || [];
       const isOwner = existingContract.createdBy === user.id;
-      const isAdmin = perms.includes('admin_panel') || perms.includes('director_feedback') || (user.role && (user.role === 'Manager' || user.role.startsWith('Trưởng') || user.role.includes('Trưởng')));
+      const isSystemAdmin = perms.includes('admin_panel') || perms.includes('director_feedback') || user.role === 'Admin' || user.role === 'Director';
+      const isDeptManager = (user.role && (user.role === 'Manager' || user.role.startsWith('Trưởng') || user.role.includes('Trưởng'))) && user.department === existingContract.department;
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !isSystemAdmin && !isDeptManager) {
         return res.status(403).json({ error: 'Bạn không có quyền xóa hợp đồng này' });
       }
 

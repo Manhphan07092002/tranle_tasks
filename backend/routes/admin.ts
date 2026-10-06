@@ -216,27 +216,42 @@ export function adminRoutes(db: any, mailer: any) {
       });
 
       // Import data table by table — allowlisted only, never users/system_config/tokens.
+      // Wrapped in a transaction: a half-applied import must never leave the DB inconsistent.
       const BLOCKED_IMPORT = new Set(['users', 'system_config', 'password_reset_tokens', 'password_reset_requests', 'mail_quotas', '_migrations']);
-      for (const [tableName, rows] of Object.entries(importData)) {
-        if (!Array.isArray(rows) || rows.length === 0) continue;
-        if (!/^[a-zA-Z0-9_]+$/.test(tableName)) continue;
-        if (!DB_BROWSER_ALLOWLIST.has(tableName) || BLOCKED_IMPORT.has(tableName)) continue;
-        if (rows.length > 5000) return res.status(400).json({ error: `Bảng ${tableName} vượt quá 5000 dòng cho phép` });
-        // Validate shape: every row must be a plain object with sane column names.
-        const valid = (rows as any[]).every(r => r && typeof r === 'object' && !Array.isArray(r)
-          && Object.keys(r).every(c => /^[a-zA-Z0-9_]+$/.test(c) && c.length <= 64));
-        if (!valid) return res.status(400).json({ error: `Dữ liệu bảng ${tableName} không hợp lệ` });
-        // Clear existing data
-        await db.run(`DELETE FROM \`${tableName}\``);
-        // Insert rows
-        for (const row of rows as Record<string, any>[]) {
-          const cols = Object.keys(row);
-          const placeholders = cols.map(() => '?').join(', ');
-          const values = cols.map(c => {
-            const v = row[c];
-            return typeof v === 'string' && v.length > 200000 ? String(v).slice(0, 200000) : v;
-          });
-          await db.run(`INSERT INTO \`${tableName}\` (${cols.map(c => '\`' + c + '\`').join(', ')}) VALUES (${placeholders})`, values);
+      const failImport = async (message: string) => {
+        try { await db.run('ROLLBACK'); } catch { /* ignore */ }
+        return res.status(400).json({ error: message });
+      };
+      await db.run('BEGIN TRANSACTION');
+      let committed = false;
+      try {
+        for (const [tableName, rows] of Object.entries(importData)) {
+          if (!Array.isArray(rows) || rows.length === 0) continue;
+          if (!/^[a-zA-Z0-9_]+$/.test(tableName)) continue;
+          if (!DB_BROWSER_ALLOWLIST.has(tableName) || BLOCKED_IMPORT.has(tableName)) continue;
+          if (rows.length > 5000) { await failImport(`Bảng ${tableName} vượt quá 5000 dòng cho phép`); return; }
+          // Validate shape: every row must be a plain object with sane column names.
+          const valid = (rows as any[]).every(r => r && typeof r === 'object' && !Array.isArray(r)
+            && Object.keys(r).every(c => /^[a-zA-Z0-9_]+$/.test(c) && c.length <= 64));
+          if (!valid) { await failImport(`Dữ liệu bảng ${tableName} không hợp lệ`); return; }
+          // Clear existing data
+          await db.run(`DELETE FROM \`${tableName}\``);
+          // Insert rows
+          for (const row of rows as Record<string, any>[]) {
+            const cols = Object.keys(row);
+            const placeholders = cols.map(() => '?').join(', ');
+            const values = cols.map(c => {
+              const v = row[c];
+              return typeof v === 'string' && v.length > 200000 ? String(v).slice(0, 200000) : v;
+            });
+            await db.run(`INSERT INTO \`${tableName}\` (${cols.map(c => '\`' + c + '\`').join(', ')}) VALUES (${placeholders})`, values);
+          }
+        }
+        await db.run('COMMIT');
+        committed = true;
+      } finally {
+        if (!committed) {
+          try { await db.run('ROLLBACK'); } catch { /* ignore */ }
         }
       }
 
@@ -446,6 +461,14 @@ export function adminRoutes(db: any, mailer: any) {
     if (parsed.username || parsed.password || trimmed.includes('@')) return null;
     const host = parsed.hostname.toLowerCase();
     if (host === '169.254.169.254' || host === 'metadata.google.internal' || host === 'metadata.google.com') return null;
+    // Block private/loopback/link-local literals. The docker-internal mail host
+    // stays allowed because the mail server legitimately lives in the compose network.
+    if (host === 'tranle_mailserver') return trimmed;
+    if (host === 'localhost' || host === '::1' || host === '::' || host === '0.0.0.0') return null;
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || host === '169.254.169.254') return null;
+    const m172 = host.match(/^172\.(\d+)\./);
+    if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return null;
+    if (/^\[(::1|::ffff:[0-9.]+|fe80:)/i.test(host)) return null;
     return trimmed;
   }
 

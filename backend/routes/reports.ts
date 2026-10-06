@@ -5,17 +5,25 @@ import { sendNotification } from '../utils/notify.js';
 export function reportRoutes(db: any) {
   const router = Router();
 
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     try {
+      const user = (req as any).user;
+      const perms = user?.permissions || [];
+      const canViewAll = perms.includes('view_all_reports') || perms.includes('director_feedback') || perms.includes('admin_panel') || perms.includes('view_all_tasks');
       // Time-boxing: only load data from the last 6 months
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const thresholdDate = sixMonthsAgo.toISOString();
-      
-      const reports = await db.all(
-        'SELECT * FROM reports WHERE (isDeleted IS NULL OR isDeleted = 0) AND createdAt >= ?',
-        [thresholdDate]
-      );
+
+      let query = 'SELECT * FROM reports WHERE (isDeleted IS NULL OR isDeleted = 0) AND createdAt >= ?';
+      const params: any[] = [thresholdDate];
+      if (!canViewAll && user) {
+        query += ' AND (authorId = ? OR department = ?)';
+        params.push(user.id, user.department || '');
+      }
+      query += ' ORDER BY createdAt DESC';
+
+      const reports = await db.all(query, params);
       res.json(reports);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch reports' }); }
   });
@@ -33,6 +41,10 @@ export function reportRoutes(db: any) {
     const authorId = (req as any).user?.id;
     if (!authorId) return res.status(401).json({ error: 'Unauthorized' });
     if (!title) return res.status(400).json({ error: 'Thiếu tiêu đề báo cáo' });
+    // Only privileged users may file into another department.
+    const me = (req as any).user;
+    const canFileAnywhere = me?.role === 'Admin' || me?.role === 'Director' || me?.role === 'Giám đốc' || me?.role === 'Manager';
+    const effectiveDepartment = canFileAnywhere ? (department || me?.department) : me?.department;
     const now = new Date().toISOString();
     try {
       let finalContent = content;
@@ -61,7 +73,7 @@ export function reportRoutes(db: any) {
 
       await db.run(
         'INSERT INTO reports (id, title, content, authorId, department, status, createdAt, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, title, finalContent ?? null, authorId, department, status, now, submittedAt ?? null, null, null, null, null],
+        [id, title, finalContent ?? null, authorId, effectiveDepartment, status, now, submittedAt ?? null, null, null, null, null],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
@@ -69,7 +81,7 @@ export function reportRoutes(db: any) {
       );
 
       if (status === 'Pending Manager') {
-        const dept = await db.get('SELECT managerId FROM departments WHERE name = ? OR id = ?', [department, department]);
+        const dept = await db.get('SELECT managerId FROM departments WHERE name = ? OR id = ?', [effectiveDepartment, effectiveDepartment]);
         if (dept?.managerId) {
           await sendNotification(db, dept.managerId, 'report_submitted', 'Báo cáo mới', `Nhân viên vừa nộp báo cáo: ${title}`, id);
         }
@@ -145,18 +157,24 @@ export function reportRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to update report' }); }
   });
 
-  // Soft delete – only allow deleting Draft or Rejected reports, unless user is Admin or Giám đốc
+  // Soft delete – only allow deleting Draft or Rejected reports, unless user is Admin or Giám đốc.
+  // Ownership required: non-privileged users can only delete their own reports.
   router.delete('/:id', async (req, res) => {
     try {
-      const report = await db.get('SELECT status FROM reports WHERE id = ?', [req.params.id]);
+      const report = await db.get('SELECT authorId, department, status FROM reports WHERE id = ?', [req.params.id]);
       if (!report) return res.status(404).json({ error: 'Report not found' });
-      
-      const isSuperUser = req.user?.role === 'Admin' || req.user?.role === 'Giám đốc';
-      
+
+      const me = (req as any).user;
+      const isSuperUser = me?.role === 'Admin' || me?.role === 'Giám đốc' || me?.role === 'Director';
+
+      if (!isSuperUser && report.authorId !== me?.id) {
+        return res.status(403).json({ error: 'Bạn không có quyền xóa báo cáo này' });
+      }
+
       if (!isSuperUser && (report.status === 'Approved' || report.status === 'Pending')) {
         return res.status(403).json({ error: 'Cannot delete an approved or pending report' });
       }
-      
+
       if (!req.user || isSuperUser) {
         await db.run('DELETE FROM reports WHERE id = ?', [req.params.id]);
       } else {

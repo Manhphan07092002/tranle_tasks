@@ -469,12 +469,21 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    // Escape every user-controlled value interpolated into the print document.
+    // Without this, a stored report field becomes stored XSS in the victim's origin.
+    const esc = (s: unknown) => String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
     const logoUrl = `${window.location.origin}/logo.png`;
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>In Báo Cáo - ${title || 'Báo cáo công việc'}</title>
+        <title>In Báo Cáo - ${esc(title) || 'Báo cáo công việc'}</title>
         <style>
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 30px; }
           .header { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; border-bottom: 2px solid #2563eb; padding-bottom: 20px; }
@@ -503,11 +512,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           <img src="${logoUrl}" alt="Logo" class="header-logo" />
           <div class="header-text">
             <div class="company">CÔNG TY CỔ PHẦN TƯ VẤN XÂY DỰNG ĐIỆN TRẦN LÊ</div>
-            <div class="dept">${currentUser.department || 'Phòng ban'}</div>
+            <div class="dept">${esc(currentUser.department) || 'Phòng ban'}</div>
             <div class="title">BÁO CÁO CÔNG VIỆC THỰC HIỆN</div>
             <div class="meta">
-              <span><strong>Tuần:</strong> ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}</span>
-              <span><strong>Người báo cáo:</strong> ${initialReport ? (users.find(u => u.id === initialReport.authorId)?.name || currentUser.name) : currentUser.name}</span>
+              <span><strong>Tuần:</strong> ${esc(fmtDate(weekStart))} - ${esc(fmtDate(weekEnd))}</span>
+              <span><strong>Người báo cáo:</strong> ${esc(initialReport ? (users.find(u => u.id === initialReport.authorId)?.name || currentUser.name) : currentUser.name)}</span>
             </div>
           </div>
         </div>
@@ -528,29 +537,29 @@ export const ReportModal: React.FC<ReportModalProps> = ({
             ${rows.map((r, i) => `
               <tr>
                 <td align="center">${i + 1}</td>
-                <td>${r.content || ''}</td>
-                <td>${RESULT_OPTIONS.find(o => o.value === r.result)?.label || ''}</td>
-                <td>${r.nextAction || ''}</td>
-                <td>${r.assignee || ''}</td>
-                <td>${r.note || ''}</td>
+                <td>${esc(r.content)}</td>
+                <td>${esc(RESULT_OPTIONS.find(o => o.value === r.result)?.label)}</td>
+                <td>${esc(r.nextAction)}</td>
+                <td>${esc(r.assignee)}</td>
+                <td>${esc(r.note)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
         <div class="section-title">2. Kế hoạch tuần tới</div>
-        <div class="plan-box">${nextWeekPlan || 'Không có'}</div>
+        <div class="plan-box">${esc(nextWeekPlan) || 'Không có'}</div>
 
         ${managerFeedback || directorFeedback ? `
           <div class="section-title">3. Ý kiến chỉ đạo / Nhận xét</div>
-          ${managerFeedback ? `<div class="feedback-box"><strong>Trưởng phòng:</strong><br/>${managerFeedback}</div>` : ''}
-          ${directorFeedback ? `<div class="feedback-box"><strong>Giám đốc:</strong><br/>${directorFeedback}</div>` : ''}
+          ${managerFeedback ? `<div class="feedback-box"><strong>Trưởng phòng:</strong><br/>${esc(managerFeedback)}</div>` : ''}
+          ${directorFeedback ? `<div class="feedback-box"><strong>Giám đốc:</strong><br/>${esc(directorFeedback)}</div>` : ''}
         ` : ''}
 
         <div class="footer">
           <div class="sig-box">
             <div class="sig-title">Người báo cáo</div>
-            <div>${initialReport ? (users.find(u => u.id === initialReport.authorId)?.name || currentUser.name) : currentUser.name}</div>
+            <div>${esc(initialReport ? (users.find(u => u.id === initialReport.authorId)?.name || currentUser.name) : currentUser.name)}</div>
           </div>
           <div class="sig-box">
             <div class="sig-title">Trưởng phòng</div>
@@ -558,21 +567,20 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           </div>
           <div class="sig-box">
             <div class="sig-title">Giám đốc</div>
-            <div>${initialReport?.approvedBy ? users.find(u => u.id === initialReport.approvedBy)?.name : ''}</div>
+            <div>${esc(initialReport?.approvedBy ? users.find(u => u.id === initialReport.approvedBy)?.name : '')}</div>
           </div>
         </div>
         
-        <script>
-          window.onload = function() { 
-            setTimeout(() => { window.print(); }, 500);
-          }
-        </script>
       </body>
       </html>
     `;
 
     printWindow.document.write(html);
     printWindow.document.close();
+    // Trigger print from the opener (no inline <script> in the written document).
+    printWindow.onload = () => {
+      setTimeout(() => { printWindow.print(); }, 500);
+    };
   };
 
   // isManagerAction=true → save managerFeedback; false → save directorFeedback

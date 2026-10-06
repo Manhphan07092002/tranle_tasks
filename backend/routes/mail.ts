@@ -63,6 +63,46 @@ export function mailRoutes(db: any) {
     }
   });
 
+  // SSRF guard for user-supplied mail hosts: only the internal mail server,
+  // the company mail domains, or a plain hostname/IP the admin allowlisted.
+  // Private-range literals and cloud metadata endpoints are always rejected.
+  const ALLOWED_CUSTOM_MAIL_HOSTS = new Set(
+    (process.env.ALLOWED_MAIL_HOSTS || 'tranle_mailserver').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  );
+  const COMPANY_MAIL_SUFFIXES = ['vnptemail.vn', 'tranlecorp.com.vn', 'tranlecorp.com', 'ctcdn.vn'];
+
+  function isBlockedMailHost(host: unknown): boolean {
+    if (typeof host !== 'string') return true;
+    const h = host.trim().toLowerCase();
+    if (!h || h.length > 253 || /[\s@/:]/.test(h)) return true;
+    if (h === 'localhost' || h === 'metadata.google.internal' || h === 'metadata.google.com') return true;
+    if (h === '169.254.169.254' || h === '0.0.0.0' || h === '::' || h === '::1') return true;
+    if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true;
+    const m172 = h.match(/^172\.(\d+)\./);
+    if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
+    if (/^\[(::1|::ffff:[0-9.]+)\]$/.test(h)) return true;
+    return false;
+  }
+
+  function resolveCustomMailHost(raw: unknown, fallback: string): string | null {
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    if (typeof raw !== 'string') return null;
+    const h = raw.trim().toLowerCase();
+    if (isBlockedMailHost(h)) return null;
+    if (ALLOWED_CUSTOM_MAIL_HOSTS.has(h)) return h;
+    // Company mail domains are always acceptable.
+    if (COMPANY_MAIL_SUFFIXES.some((s) => h === s || h.endsWith('.' + s))) return h;
+    return null;
+  }
+
+  function resolveMailPort(raw: unknown, fallback: number): number | null {
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    const n = Number(raw);
+    if (!Number.isInteger(n)) return null;
+    if (![110, 143, 465, 587, 993, 995].includes(n)) return null;
+    return n;
+  }
+
   // 1. Connect and Save Credentials
   router.post('/connect', requireAuth, async (req: any, res: any) => {
     const { email, password, provider, customImapHost, customImapPort, customSmtpHost, customSmtpPort } = req.body;
@@ -89,10 +129,17 @@ export function mailRoutes(db: any) {
         targetSmtpHost = 'tranle_mailserver';
         targetSmtpPort = 587;
       } else if (provider === 'custom') {
-        targetImapHost = customImapHost || config.IMAP_HOST;
-        targetImapPort = Number(customImapPort) || Number(config.IMAP_PORT);
-        targetSmtpHost = customSmtpHost || config.SMTP_HOST;
-        targetSmtpPort = Number(customSmtpPort) || Number(config.SMTP_PORT);
+        const imapHost = resolveCustomMailHost(customImapHost, config.IMAP_HOST);
+        const smtpHost = resolveCustomMailHost(customSmtpHost, config.SMTP_HOST);
+        const imapPort = resolveMailPort(customImapPort, Number(config.IMAP_PORT));
+        const smtpPort = resolveMailPort(customSmtpPort, Number(config.SMTP_PORT));
+        if (!imapHost || !smtpHost || imapPort === null || smtpPort === null) {
+          return res.status(400).json({ error: 'Máy chủ mail tùy chỉnh không được phép' });
+        }
+        targetImapHost = imapHost;
+        targetImapPort = imapPort;
+        targetSmtpHost = smtpHost;
+        targetSmtpPort = smtpPort;
       }
 
       // TLS verify on by default; set ALLOW_INSECURE_TLS=true only for internal self-signed mailservers.
@@ -807,13 +854,40 @@ export function mailRoutes(db: any) {
     }
   });
 
-  // Setup multer for file uploads in memory
-  const upload = multer({ storage: multer.memoryStorage() });
+  // Setup multer for file uploads in memory — hard limits BEFORE buffering to RAM (OOM-DoS guard).
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 10, fieldSize: 2 * 1024 * 1024 },
+  });
+
+  // Email address validation (header-injection guard): single line, valid shape, bounded count.
+  const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+  function parseAddressList(raw: unknown, field: string, max = 50): string[] | null {
+    if (raw === undefined || raw === null || raw === '') return [];
+    const list = Array.isArray(raw) ? raw : String(raw).split(',');
+    const out: string[] = [];
+    for (const item of list) {
+      const addr = String(item).trim();
+      if (!addr) continue;
+      if (addr.length > 254 || /[\r\n]/.test(addr) || !EMAIL_RE.test(addr)) return null;
+      out.push(addr);
+      if (out.length > max) return null;
+    }
+    return out;
+  }
 
   // 6. Send Email + Save to Sent folder
   router.post('/send', requireAuth, upload.array('attachments', 10), async (req: any, res: any) => {
     const { to, subject, body, cc, bcc } = req.body;
     if (!to || !subject) return res.status(400).json({ error: 'To and Subject are required' });
+    const toList = parseAddressList(to, 'to');
+    const ccList = parseAddressList(cc, 'cc');
+    const bccList = parseAddressList(bcc, 'bcc');
+    if (!toList || toList.length === 0 || !ccList || !bccList) {
+      return res.status(400).json({ error: 'Địa chỉ email người nhận không hợp lệ' });
+    }
+    if (String(subject).length > 255) return res.status(400).json({ error: 'Tiêu đề quá dài (tối đa 255 ký tự)' });
+    if (body && String(body).length > 200000) return res.status(400).json({ error: 'Nội dung quá dài' });
 
     try {
       // Fetch full user from DB (name for display) + VNPT email from mailPassword
@@ -832,8 +906,9 @@ export function mailRoutes(db: any) {
 
       const transporter = await getSmtpTransporter(req.user.id, mailEmail);
 
-      const fromLabel = dbUser.name
-        ? `"${dbUser.name}" <${mailEmail}>`
+      const safeName = String(dbUser.name || '').replace(/[\r\n"]/g, '').slice(0, 100);
+      const fromLabel = safeName
+        ? `"${safeName}" <${mailEmail}>`
         : mailEmail;
 
       // Also pass mailEmail to IMAP appender later
@@ -863,25 +938,29 @@ export function mailRoutes(db: any) {
       let trackingId = null;
       if (req.body.track === 'true' || req.body.track === true) {
         trackingId = newTrackingId();
-        const trackingUrl = `${req.protocol}://${req.get('host')}/api/mail/track/${trackingId}.gif`;
+        // Never build absolute URLs from the Host header (poisonable behind trust-proxy).
+        const base = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+        const trackingUrl = base
+          ? `${base}/api/mail/track/${trackingId}.gif`
+          : `/api/mail/track/${trackingId}.gif`;
         finalHtml += `<img src="${trackingUrl}" width="1" height="1" style="display:none;" alt="" />`;
-        
+
         await db.run(
           'INSERT INTO mail_tracking (id, userId, messageId, subject, "to", opens, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)',
-          [trackingId, req.user.id, '', subject, to, new Date().toISOString()]
+          [trackingId, req.user.id, '', subject, toList.join(','), new Date().toISOString()]
         );
       }
 
       const mailOptions: any = {
         from: fromLabel,
-        to,
-        subject,
+        to: toList,
+        subject: String(subject).slice(0, 255),
         html: finalHtml,
         text: body ? body.replace(/<[^>]*>/g, '') : '',
         attachments: mailAttachments
       };
-      if (cc) mailOptions.cc = cc;
-      if (bcc) mailOptions.bcc = bcc;
+      if (ccList.length > 0) mailOptions.cc = ccList;
+      if (bccList.length > 0) mailOptions.bcc = bccList;
 
       // Return response immediately for instant UI feedback
       res.json({
@@ -937,7 +1016,6 @@ export function mailRoutes(db: any) {
       });
 
     } catch (error: any) {
-      console.error('Send email error:', error);
       console.error('Send email error');
       res.status(500).json({ error: 'Failed to send email' });
     }
@@ -947,6 +1025,14 @@ export function mailRoutes(db: any) {
   router.post('/schedule', requireAuth, upload.array('attachments', 10), async (req: any, res: any) => {
     const { to, subject, body, cc, bcc, scheduledAt } = req.body;
     if (!to || !subject || !scheduledAt) return res.status(400).json({ error: 'To, Subject and ScheduledAt are required' });
+    const toList = parseAddressList(to, 'to');
+    const ccList = parseAddressList(cc, 'cc');
+    const bccList = parseAddressList(bcc, 'bcc');
+    if (!toList || toList.length === 0 || !ccList || !bccList) {
+      return res.status(400).json({ error: 'Địa chỉ email người nhận không hợp lệ' });
+    }
+    if (String(subject).length > 255) return res.status(400).json({ error: 'Tiêu đề quá dài (tối đa 255 ký tự)' });
+    if (body && String(body).length > 200000) return res.status(400).json({ error: 'Nội dung quá dài' });
 
     try {
       const dbUser = await db.get('SELECT id, mailPassword FROM users WHERE id = ?', [req.user.id]);
@@ -981,12 +1067,11 @@ export function mailRoutes(db: any) {
       const id = crypto.randomUUID();
       await db.run(
         'INSERT INTO scheduled_emails (id, userId, "to", cc, bcc, subject, body, attachments, scheduledAt, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, req.user.id, to, cc || null, bcc || null, subject, body || '', JSON.stringify(mailAttachments), scheduledAt, 'pending', new Date().toISOString()]
+        [id, req.user.id, toList.join(','), ccList.join(',') || null, bccList.join(',') || null, String(subject).slice(0, 255), body || '', JSON.stringify(mailAttachments), scheduledAt, 'pending', new Date().toISOString()]
       );
 
       res.json({ success: true, message: 'Đã lên lịch gửi email.' });
     } catch (error: any) {
-      console.error('Schedule email error:', error);
       console.error('Schedule email error');
       res.status(500).json({ error: 'Failed to schedule email' });
     }

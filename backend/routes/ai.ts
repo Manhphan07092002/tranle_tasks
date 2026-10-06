@@ -1,8 +1,28 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TRANLE_KNOWLEDGE } from '../tranle_knowledge.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { decrypt } from '../utils/cryptoUtils.js';
+
+// Cost/abuse guard: every AI entry point validates input size. Without this,
+// one authenticated user can burn the shared provider quota (or DoS the model
+// call) with multi-MB prompts smuggled via contextString/history.
+const ChatHistoryItem = z.object({
+  role: z.string().max(20),
+  text: z.string().max(2000),
+});
+const ChatStreamSchema = z.object({
+  message: z.string().min(1).max(4000),
+  history: z.array(ChatHistoryItem).max(20).optional().default([]),
+  contextString: z.string().max(20000).optional().default(''),
+});
+const TitleSchema = z.object({
+  taskTitle: z.string().min(1).max(500),
+});
+const GoalSchema = z.object({
+  goal: z.string().min(1).max(2000),
+});
 
 function decryptStoredKeys(raw: any): string[] {
   if (!raw) return [];
@@ -262,8 +282,9 @@ export function aiRoutes(db: any) {
 
   // POST /api/ai/generate-subtasks
   router.post('/generate-subtasks', async (req, res) => {
-    const { taskTitle } = req.body;
-    if (!taskTitle || typeof taskTitle !== 'string' || taskTitle.length > 500) return res.status(400).json({ error: 'taskTitle is required (max 500 chars)' });
+    const parsed = TitleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'taskTitle is required (max 500 chars)' });
+    const { taskTitle } = parsed.data;
     try {
       const result = await withRotation(db, async (apiKey, provider) => {
         if (provider === 'gemini') {
@@ -288,8 +309,9 @@ export function aiRoutes(db: any) {
 
   // POST /api/ai/generate-details
   router.post('/generate-details', async (req, res) => {
-    const { taskTitle } = req.body;
-    if (!taskTitle) return res.status(400).json({ error: 'taskTitle is required' });
+    const parsed = TitleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'taskTitle is required (max 500 chars)' });
+    const { taskTitle } = parsed.data;
     try {
       const result = await withRotation(db, async (apiKey, provider) => {
         if (provider === 'gemini') {
@@ -313,8 +335,9 @@ export function aiRoutes(db: any) {
 
   // POST /api/ai/generate-tasks-from-goal
   router.post('/generate-tasks-from-goal', async (req, res) => {
-    const { goal } = req.body;
-    if (!goal) return res.status(400).json({ error: 'goal is required' });
+    const parsed = GoalSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'goal is required (max 2000 chars)' });
+    const { goal } = parsed.data;
     try {
       const result = await withRotation(db, async (apiKey, provider) => {
         if (provider === 'gemini') {
@@ -342,8 +365,9 @@ export function aiRoutes(db: any) {
   //         data: {"type":"function_call","name":"...","args":{...}}\n\n
   //         data: {"type":"done"}\n\n
   router.post('/chat-stream', async (req, res) => {
-    const { message, history = [], contextString = '' } = req.body;
-    if (!message) return res.status(400).json({ error: 'message is required' });
+    const parsed = ChatStreamSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid chat input (message ≤ 4000, history ≤ 20, context ≤ 20000 chars)' });
+    const { message, history = [], contextString = '' } = parsed.data;
 
     const systemInstruction = contextString
       ? `${BOT_SYSTEM_INSTRUCTION}\n\n${contextString}`

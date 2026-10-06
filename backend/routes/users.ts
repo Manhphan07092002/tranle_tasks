@@ -107,7 +107,9 @@ export function userRoutes(db: any, mailer: any) {
       } catch { /* revocation must never break the request */ }
       await db.run("UPDATE password_reset_requests SET status = 'resolved' WHERE userId = ? AND status = 'pending'", [req.params.id]);
       const emailSent = await mailer.sendResetPasswordEmail(user.email, finalPassword);
-      return res.json({ success: true, emailSent, generatedPassword: finalPassword });
+      // Never return the password (generated or not): it would land in logs,
+      // proxies and browser history. The user gets it via email only.
+      return res.json({ success: true, emailSent });
     } catch (e) { console.error('reset-password error', e); res.status(500).json({ error: 'Failed' }); }
   });
 

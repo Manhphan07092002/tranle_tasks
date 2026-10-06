@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAdmin } from '../middleware/auth.js';
 
 export function departmentRoutes(db: any) {
   const router = Router();
@@ -16,7 +17,7 @@ export function departmentRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to fetch departments' }); }
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdmin, async (req, res) => {
     const { id, name, description, color, managerId } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Tên phòng ban không được trống' });
     try {
@@ -29,7 +30,7 @@ export function departmentRoutes(db: any) {
     }
   });
 
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdmin, async (req, res) => {
     const { name, description, color, managerId } = req.body;
     try {
       const existing = await db.get('SELECT * FROM departments WHERE id = ?', [req.params.id]);
@@ -48,7 +49,7 @@ export function departmentRoutes(db: any) {
     }
   });
 
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdmin, async (req, res) => {
     try {
       const dept = await db.get('SELECT * FROM departments WHERE id = ?', [req.params.id]);
       if (!dept) return res.status(404).json({ error: 'Not found' });

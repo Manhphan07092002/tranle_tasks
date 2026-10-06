@@ -35,6 +35,7 @@ import { aiRoutes, invalidateAiKeyCache } from './routes/ai.js';
 
 import { initSocket, setSocketDb } from './socket.js';
 import { requireAuth, requireAdmin, setAuthDb, cookiesMiddleware } from './middleware/auth.js';
+import { ensureBody } from './middleware/ensureBody.js';
 
 import { scheduleFridayReminder } from './schedulers/fridayReminder.js';
 import { scheduleNoteReminders } from './schedulers/noteReminder.js';
@@ -84,11 +85,19 @@ async function startServer() {
   }));
 
   // Baseline security headers (helmet-equivalent, no extra dep).
+  // Content-Security-Policy: the app has no inline scripts/styles by design;
+  // any injected markup (e.g. via a future sink) cannot execute.
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; " +
+      "img-src 'self' data: https:; connect-src 'self'"
+    );
     if (process.env.NODE_ENV === 'production') {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
@@ -97,6 +106,9 @@ async function startServer() {
 
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ limit: '5mb', extended: true }));
+
+  // req.body defaults (shared helper — see middleware/ensureBody.ts).
+  app.use(ensureBody);
 
   // Minimal cookie parser (shared helper — populates req.cookies for httpOnly auth cookies).
   app.use(cookiesMiddleware);

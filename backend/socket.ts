@@ -2,7 +2,6 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from './middleware/auth.js';
-import { getBearerToken } from './middleware/auth.js';
 
 let io: SocketIOServer;
 let _socketDb: any = null;
@@ -22,11 +21,10 @@ export const initSocket = (server: HttpServer) => {
   });
 
   io.use(async (socket, next) => {
-    // Primary: explicit auth token (memory-held access token). Fallback: cookies
-    // (browser sends httpOnly cookies automatically on same-origin handshakes).
+    // The short-lived access token is memory-held on the client and sent here.
+    // (The httpOnly refresh cookie is only for /api/auth/refresh, never sockets.)
     const fromAuth = socket.handshake.auth?.token;
-    const token = (typeof fromAuth === 'string' && fromAuth ? fromAuth : null)
-      ?? getBearerToken({ headers: socket.handshake.headers, cookies: (socket.handshake as any).cookies });
+    const token = typeof fromAuth === 'string' && fromAuth ? fromAuth : null;
     const secret = process.env.JWT_SECRET;
     if (!token || !secret) {
       return next(new Error('Unauthorized'));

@@ -49,6 +49,16 @@ function refreshCookieOptions() {
   };
 }
 
+function clearRefreshCookie(res: any) {
+  // clearCookie must mirror the cookie flags or browsers keep the cookie.
+  res.clearCookie(REFRESH_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+  });
+}
+
 async function mintRefreshToken(db: any, userId: string): Promise<string> {
   const raw = 'rt_' + crypto.randomBytes(48).toString('hex');
   const now = new Date().toISOString();
@@ -86,9 +96,11 @@ export function authRoutes(db: any) {
       
       if (!user) {
         try {
+          // Sanitize before logging: raw input must not reach logs/admin panels.
+          const safeEmail = String(email || '').replace(/[\r\n]/g, '').slice(0, 255);
           await db.run(
             `INSERT INTO activity_logs (id, userId, action, entityId, entityType, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [crypto.randomUUID(), 'system', 'Đăng nhập thất bại', null, 'user', `Cố gắng đăng nhập với email không tồn tại: ${email}`, new Date().toISOString()]
+            [crypto.randomUUID(), 'system', 'Đăng nhập thất bại', null, 'user', `Cố gắng đăng nhập với email không tồn tại: ${safeEmail}`, new Date().toISOString()]
           );
         } catch (e) {}
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -185,29 +197,31 @@ export function authRoutes(db: any) {
   });
 
   // Silent session renewal: rotates the refresh token on every use.
+  // Cookie-only: the refresh token is NEVER accepted from JS-readable input
+  // (body/query), otherwise httpOnly buys nothing against XSS.
   // Reuse of an already-rotated token signals theft → all user sessions are revoked.
   router.post('/refresh', async (req, res) => {
     try {
-      const raw = req.cookies?.[REFRESH_COOKIE] || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '');
-      if (!raw) return res.status(401).json({ error: 'Unauthorized' });
-      const presented = hashToken(String(raw));
+      const raw = req.cookies?.[REFRESH_COOKIE];
+      if (!raw || typeof raw !== 'string') return res.status(401).json({ error: 'Unauthorized' });
+      const presented = hashToken(raw);
       const row = await db.get('SELECT id, userId, expiresAt, revokedAt FROM refresh_tokens WHERE tokenHash = ?', [presented]);
       if (!row) return res.status(401).json({ error: 'Unauthorized' });
       if (row.revokedAt) {
         // Token reuse after rotation — possible theft. Kill every session for this user.
         await revokeUserRefreshTokens(db, row.userId);
-        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        clearRefreshCookie(res);
         return res.status(401).json({ error: 'Unauthorized' });
       }
       if (new Date(row.expiresAt).getTime() < Date.now()) {
         await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE id = ?', [new Date().toISOString(), row.id]);
-        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        clearRefreshCookie(res);
         return res.status(401).json({ error: 'Unauthorized' });
       }
       const user = await db.get('SELECT id, name, email, role, department, avatar FROM users WHERE id = ?', [row.userId]);
       if (!user) {
         await revokeUserRefreshTokens(db, row.userId);
-        res.clearCookie(REFRESH_COOKIE, { path: '/' });
+        clearRefreshCookie(res);
         return res.status(401).json({ error: 'Unauthorized' });
       }
       if (user.isLocked) return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa.' });
@@ -230,12 +244,12 @@ export function authRoutes(db: any) {
 
   router.post('/logout', async (req, res) => {
     try {
-      const raw = req.cookies?.[REFRESH_COOKIE] || (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '');
-      if (raw) {
-        await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE tokenHash = ?', [new Date().toISOString(), hashToken(String(raw))]);
+      const raw = req.cookies?.[REFRESH_COOKIE];
+      if (typeof raw === 'string' && raw) {
+        await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE tokenHash = ?', [new Date().toISOString(), hashToken(raw)]);
       }
     } catch { /* ignore */ }
-    res.clearCookie(REFRESH_COOKIE, { path: '/' });
+    clearRefreshCookie(res);
     return res.json({ success: true });
   });
 
@@ -286,8 +300,10 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
       const tokenHash = hashResetToken(token);
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-      const appBaseUrl = process.env.APP_BASE_URL || 'https://ai.hieuhomecloud.online';
-      const resetLink = `${appBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      // Fail-closed: reset links must never point at a fallback/foreign domain.
+      const appBaseUrl = process.env.APP_BASE_URL;
+      if (!appBaseUrl) throw new Error('APP_BASE_URL is not configured');
+      const resetLink = `${appBaseUrl.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
 
       await db.run('DELETE FROM password_reset_tokens WHERE userId = ? AND usedAt IS NULL', [user.id]);
       await db.run('INSERT INTO password_reset_tokens (id, userId, email, token, expiresAt, usedAt) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), user.id, user.email, tokenHash, expiresAt, null]);
@@ -314,9 +330,11 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
     try {
       const tokenHash = hashResetToken(String(req.params.token || ''));
       const rt = await db.get('SELECT userId, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
-      if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
-      if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
-      if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
+      // Uniform response for missing/used/expired: distinct statuses would let
+      // attackers probe token validity (oracle).
+      if (!rt || rt.usedAt || new Date(rt.expiresAt).getTime() < Date.now()) {
+        return res.status(400).json({ error: 'Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn' });
+      }
       // Do not reveal the account email — prevents token oracle / account enumeration.
       return res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
@@ -328,9 +346,9 @@ export function forgotPasswordRoutes(db: any, mailer: any) {
       if (!newPassword || String(newPassword).trim().length < 8) return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
       const tokenHash = hashResetToken(String(token || ''));
       const rt = await db.get('SELECT userId, email, expiresAt, usedAt FROM password_reset_tokens WHERE token = ?', [tokenHash]);
-      if (!rt) return res.status(404).json({ error: 'Link đặt lại mật khẩu không tồn tại' });
-      if (rt.usedAt) return res.status(400).json({ error: 'Link này đã được sử dụng' });
-      if (new Date(rt.expiresAt).getTime() < Date.now()) return res.status(400).json({ error: 'Link đặt lại mật khẩu đã hết hạn' });
+      if (!rt || rt.usedAt || new Date(rt.expiresAt).getTime() < Date.now()) {
+        return res.status(400).json({ error: 'Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn' });
+      }
       const hashedPassword = await bcrypt.hash(String(newPassword).trim(), 10);
       await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, rt.userId]);
       const now = new Date().toISOString();

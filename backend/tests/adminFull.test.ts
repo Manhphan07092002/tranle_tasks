@@ -145,6 +145,23 @@ describe('admin secrets config', () => {
     expect(ok.status).toBe(200);
   });
 
+  it('import chạy trong transaction + chặn private IP cho poste', async () => {
+    const db = adminDb();
+    const app = appFor(db);
+    await request(app).post('/api/admin/database/import').set('Authorization', auth).attach('file', Buffer.from(JSON.stringify({ events: [{ id: 'e-1' }] })), 'ok.json');
+    const seq = db.runs.map((r) => r.sql);
+    expect(seq[0]).toBe('BEGIN TRANSACTION');
+    expect(seq).toContain('COMMIT');
+    // COMMIT phải xảy ra trước audit-log (không ghi gì sau commit ngoài audit).
+    expect(seq.indexOf('COMMIT')).toBeLessThan(seq.findIndex((s) => s.startsWith('INSERT INTO activity_logs')));
+    for (const host of ['http://192.168.0.1/', 'http://10.1.2.3/', 'http://127.0.0.1:8080/', 'http://169.254.169.254/']) {
+      const res = await request(app).post('/api/admin/system-config/poste-api').set('Authorization', auth).send({ POSTE_API_URL: host });
+      expect(res.status).toBe(400);
+    }
+    const internal = await request(app).post('/api/admin/system-config/poste-api').set('Authorization', auth).send({ POSTE_API_URL: 'http://tranle_mailserver:8080/admin/api', POSTE_API_USER: 'u' });
+    expect(internal.status).toBe(200);
+  });
+
   it('stats không lộ node/platform/memory', async () => {
     const app = appFor(adminDb());
     const res = await request(app).get('/api/admin/stats').set('Authorization', auth);
