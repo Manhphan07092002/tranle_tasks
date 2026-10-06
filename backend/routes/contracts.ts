@@ -3,6 +3,31 @@ import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
 
 export function contractRoutes(db: any) {
+  /**
+   * products.ts guards every inventory write behind manage_warehouse, but creating
+   * or editing a contract writes straight into `products` — including
+   * `DELETE FROM products WHERE importCode = ? OR importCode LIKE ?`, which wipes
+   * every warehouse line for a contract number the caller chose. That turned
+   * contract creation into a back door into inventory and pricing.
+   *
+   * Only the warehouse side effects are gated; the contract itself is a business
+   * record that ordinary staff must still be able to file.
+   */
+  async function hasWarehouseAccess(user: any): Promise<boolean> {
+    const perms = user?.permissions || [];
+    if (perms.includes('admin_panel') || perms.includes('manage_warehouse')) return true;
+    if (user?.role === 'Admin' || user?.role === 'Director') return true;
+    try {
+      const row = await db.get('SELECT permissions FROM roles WHERE name = ?', [user?.role]);
+      if (row?.permissions) {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed) && (parsed.includes('manage_warehouse') || parsed.includes('admin_panel'))) return true;
+      }
+    } catch {
+      // Treat an unreadable role row as "no warehouse access".
+    }
+    return false;
+  }
   const router = Router();
 
   async function logActivity(userId: string, action: string, entityId: string, metadata: any) {
@@ -498,7 +523,8 @@ export function contractRoutes(db: any) {
       }
 
       // Nếu là hợp đồng bán, tự động cập nhật salePrice của sản phẩm trong kho
-      if ((contractType || 'output') === 'output' && Array.isArray(products)) {
+      const mayWriteWarehouse = await hasWarehouseAccess(user);
+      if (mayWriteWarehouse && (contractType || 'output') === 'output' && Array.isArray(products)) {
         for (const p of products) {
           if (!p.name) continue;
           const unitPrice = Number(p.unitPrice) || 0;
@@ -509,7 +535,7 @@ export function contractRoutes(db: any) {
       await logActivity(req.user?.id || 'system', 'Tạo Hợp đồng', contractId, { contractNumber: contractNumber.trim(), contractName: contractName.trim() });
 
       // Nếu là hợp đồng đầu vào, tạo MỤC KHO MỚI (không gộp vào lô cũ)
-      if (contractType === 'input' && Array.isArray(products)) {
+      if (mayWriteWarehouse && contractType === 'input' && Array.isArray(products)) {
         // Clean up any pre-existing warehouse products under this contract number to prevent duplicates
         const contractNumberTrimmed = contractNumber.trim();
         await db.run(
@@ -733,7 +759,8 @@ export function contractRoutes(db: any) {
       }
 
       // Cập nhật salePrice của sản phẩm trong kho cho hợp đồng bán
-      if ((contractType || 'output') === 'output' && Array.isArray(products)) {
+      const mayWriteWarehousePut = await hasWarehouseAccess(user);
+      if (mayWriteWarehousePut && (contractType || 'output') === 'output' && Array.isArray(products)) {
         for (const p of products) {
           if (!p.name) continue;
           const unitPrice = Number(p.unitPrice) || 0;
@@ -742,7 +769,7 @@ export function contractRoutes(db: any) {
       }
 
       // Nếu là hợp đồng mua (đầu vào), cập nhật MỤC KHO theo hợp đồng
-      if (contractType === 'input' && Array.isArray(products)) {
+      if (mayWriteWarehousePut && contractType === 'input' && Array.isArray(products)) {
         // First delete all existing warehouse products associated with the old contract number
         const oldContractNumberTrimmed = existingContract.contractNumber.trim();
         await db.run(
