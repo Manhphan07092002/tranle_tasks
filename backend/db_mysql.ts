@@ -1,5 +1,8 @@
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+
+/** See utils/passwordPolicy.ts. 12 la muc toi thieu hien nay cua OWASP. */
+const BCRYPT_COST = 12;
 import crypto from 'crypto';
 
 function cryptoRandomHex(bytes: number): string {
@@ -582,7 +585,7 @@ async function seedIfEmpty(db: MysqlDb) {
         console.log(`[seed] dev user ${email} password: ${pw} (change immediately)`);
         await db.run(
           'INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [id, name, email, await bcrypt.hash(pw, 10), role, dept, `https://i.pravatar.cc/150?u=${id}`, '', '', '', '']
+          [id, name, email, await bcrypt.hash(pw, BCRYPT_COST), role, dept, `https://i.pravatar.cc/150?u=${id}`, '', '', '', '']
         );
       }
     } else {
@@ -593,7 +596,7 @@ async function seedIfEmpty(db: MysqlDb) {
       console.log('[seed] Creating initial admin account. Change its password immediately after first login.');
       await db.run(
         'INSERT INTO users (id, name, email, password, role, department, avatar, phone, dob, hometown, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        ['u1', 'Admin Tran Le', 'admin@tranlecorp.com.vn', await bcrypt.hash(adminPwd, 10), 'Admin', 'Ban Lãnh Đạo', 'https://i.pravatar.cc/150?u=u1', '', '', '', 'Quản trị viên hệ thống Tran Le Electricity.']
+        ['u1', 'Admin Tran Le', 'admin@tranlecorp.com.vn', await bcrypt.hash(adminPwd, BCRYPT_COST), 'Admin', 'Ban Lãnh Đạo', 'https://i.pravatar.cc/150?u=u1', '', '', '', 'Quản trị viên hệ thống Tran Le Electricity.']
       );
     }
   }

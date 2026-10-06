@@ -6,7 +6,7 @@ import { Task, User, TaskStatus, TaskPriority } from '../../types';
 import { AIAssistantHandle } from '../../components/AIAssistant';
 import { Pagination } from '../../components/Pagination';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import * as XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx';
 
 interface TasksPageProps {
   t: (key: string) => string;

@@ -1,5 +1,9 @@
+import { assertUnique, DuplicateFieldError } from '../utils/uniqueness.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+
+/** See utils/passwordPolicy.ts. 12 la muc toi thieu hien nay cua OWASP. */
+const BCRYPT_COST = 12;
 import crypto from 'crypto';
 
 const generateRandomPassword = (length = 12) => {
@@ -52,10 +56,18 @@ export function userRoutes(db: any, mailer: any) {
     if (!(await requireAdmin(req, res))) return;
     const { id, name, email, password, role, department, avatar, bio, phone, dob, hometown, cccd, gender, preferences } = req.body;
     try {
-      const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+      // Login tra user bang lower(email) = lower(?) va lay dong dau tien, nen hai
+      // tai khoan chung email se khong xac dinh duoc dang nhap vao tai khoan nao.
+      // Schema khong co UNIQUE va repo khong co migration runner, nen chan o server.
+      await assertUnique(db, { table: 'users', column: 'email', value: email, label: 'Email' });
+      const hashedPassword = password ? await bcrypt.hash(password, BCRYPT_COST) : null;
       await db.run('INSERT INTO users (id, name, email, password, role, department, avatar, bio, phone, dob, hometown, cccd, gender, preferences) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, name, email, hashedPassword, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}']);
       res.json({ id });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      if (e instanceof DuplicateFieldError) return res.status(409).json({ error: e.message, field: e.field });
+      console.error('POST /api/users error:', e);
+      res.status(500).json({ error: 'Failed' });
+    }
   });
 
   router.put('/:id', async (req, res) => {
@@ -75,14 +87,25 @@ export function userRoutes(db: any, mailer: any) {
         return res.json({ success: true });
       }
 
+      // Chi kiem khi email thuc su doi, va loai tru chinh dong dang sua.
+      const current = await db.get('SELECT email FROM users WHERE id = ?', [req.params.id]);
+      const nextEmail = email === undefined ? current?.email : email;
+      if (String(nextEmail ?? '').trim().toLowerCase() !== String(current?.email ?? '').trim().toLowerCase()) {
+        await assertUnique(db, { table: 'users', column: 'email', value: nextEmail, excludeId: req.params.id, label: 'Email' });
+      }
+
       if (password) {
-        const hashed = await bcrypt.hash(password, 10);
-        await db.run('UPDATE users SET name=?, email=?, password=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, email, hashed, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
+        const hashed = await bcrypt.hash(password, BCRYPT_COST);
+        await db.run('UPDATE users SET name=?, email=?, password=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, nextEmail, hashed, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
       } else {
-        await db.run('UPDATE users SET name=?, email=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, email, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
+        await db.run('UPDATE users SET name=?, email=?, role=?, department=?, avatar=?, bio=?, phone=?, dob=?, hometown=?, cccd=?, gender=?, preferences=? WHERE id=?', [name, nextEmail, role, department, avatar, bio || '', phone || '', dob || '', hometown || '', cccd || '', gender || '', preferences ? JSON.stringify(preferences) : '{}', req.params.id]);
       }
       res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    } catch (e) {
+      if (e instanceof DuplicateFieldError) return res.status(409).json({ error: e.message, field: e.field });
+      console.error('PUT /api/users/:id error:', e);
+      res.status(500).json({ error: 'Failed' });
+    }
   });
 
   router.delete('/:id', async (req, res) => {
@@ -100,7 +123,7 @@ export function userRoutes(db: any, mailer: any) {
       const user = await db.get('SELECT id, email, name FROM users WHERE id = ?', [req.params.id]);
       if (!user) return res.status(404).json({ error: 'User not found' });
       const finalPassword = newPassword && String(newPassword).trim().length >= 8 ? String(newPassword).trim() : generateRandomPassword(12);
-      const hashed = await bcrypt.hash(finalPassword, 10);
+      const hashed = await bcrypt.hash(finalPassword, BCRYPT_COST);
       await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL, isLocked = 0 WHERE id = ?', [hashed, req.params.id]);
       try {
         await db.run('UPDATE refresh_tokens SET revokedAt = ? WHERE userId = ? AND revokedAt IS NULL', [new Date().toISOString(), req.params.id]);

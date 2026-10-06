@@ -67,7 +67,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const payload = jwt.verify(token, secret) as JwtPayload;
+    // Pin HS256. Without this the accepted algorithm set is whatever the library
+    // infers from the key, so the token's own header decides how it is verified.
+    // Pinning means a token asking for a different family is rejected outright.
+    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JwtPayload;
     // Fail-closed freshness check: revoked/locked/deleted/role-changed tokens stop working.
     if (_authDb && payload?.id) {
       try {

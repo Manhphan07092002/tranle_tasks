@@ -31,7 +31,8 @@ export const initSocket = (server: HttpServer) => {
     }
 
     try {
-      const payload = jwt.verify(token, secret) as JwtPayload;
+      // Same pin as HTTP requireAuth: the token's header must not choose the algorithm.
+      const payload = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JwtPayload;
       // Same freshness check as HTTP requireAuth: locked/deleted/demoted tokens die here too.
       if (_socketDb && payload?.id) {
         try {

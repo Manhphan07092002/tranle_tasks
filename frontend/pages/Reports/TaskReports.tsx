@@ -10,7 +10,7 @@ import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTo
 import { ReportModal } from './ReportModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Report } from '../../types';
-import * as XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx';
 import { RevenueReportModal } from './RevenueReportModal';
 import { Pagination } from '../../components/Pagination';
 

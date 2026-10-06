@@ -35,7 +35,7 @@ function contractsDb(opts: {
       return [];
     },
     get: async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('FROM contracts WHERE contractNumber')) {
+      if (sql.includes('FROM contracts WHERE LOWER(contractNumber)')) {
         return opts.existingNumber ? { id: 'dup' } : undefined;
       }
       if (sql.includes('FROM contracts WHERE id = ?')) {
@@ -71,11 +71,20 @@ describe('contracts create', () => {
     expect((await request(app).post('/api/contracts').set('Authorization', `Bearer ${tokenFor(employee)}`).send({ ...baseBody, contractNumber: '' })).status).toBe(400);
   });
 
-  it('trùng số hợp đồng thì 400', async () => {
+  it('trùng số hợp đồng thì 409', async () => {
     const app = appFor(contractsDb({ existingNumber: 'HD-001' }));
     const res = await request(app).post('/api/contracts').set('Authorization', `Bearer ${tokenFor(employee)}`).send(baseBody);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(res.body.error).toContain('đã tồn tại');
+  });
+
+  it('trùng số hợp đồng chỉ khác hoa thường vẫn bị chặn', async () => {
+    // So sánh phân biệt hoa thường cho "HD-001" và "hd-001" cùng qua, trong khi đây
+    // là cùng một số hợp đồng — và báo cáo doanh thu bấm theo đúng giá trị đó.
+    const app = appFor(contractsDb({ existingNumber: 'HD-001' }));
+    const res = await request(app).post('/api/contracts').set('Authorization', `Bearer ${tokenFor(employee)}`)
+      .send({ contractNumber: 'hd-001', clientName: 'C', contractName: 'N', contractType: 'output', products: [], preTaxValue: 0 });
+    expect(res.status).toBe(409);
   });
 
   it('createdBy/department ép từ JWT, bỏ qua body giả mạo', async () => {

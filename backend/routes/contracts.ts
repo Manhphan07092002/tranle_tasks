@@ -436,12 +436,14 @@ export function contractRoutes(db: any) {
 
     try {
       // 2. Uniqueness Validation
+      // LOWER() de khop voi cach nguoi dung go: "HD-001" va "hd-001" la cung
+      // mot so hop dong, trong khi so sanh phan biet hoa thuong cho ca hai qua.
       const existing = await db.get(
-        'SELECT id FROM contracts WHERE contractNumber = ? AND (isDeleted IS NULL OR isDeleted = 0)',
+        'SELECT id FROM contracts WHERE LOWER(contractNumber) = LOWER(?) AND (isDeleted IS NULL OR isDeleted = 0)',
         [contractNumber.trim()]
       );
       if (existing) {
-        return res.status(400).json({ error: 'Số hợp đồng này đã tồn tại trên hệ thống' });
+        return res.status(409).json({ error: 'Số hợp đồng này đã tồn tại trên hệ thống' });
       }
 
       // Validate pricing constraint for products in output contract
@@ -675,11 +677,11 @@ export function contractRoutes(db: any) {
 
       // 3. Uniqueness Validation
       const duplicateContract = await db.get(
-        'SELECT id FROM contracts WHERE contractNumber = ? AND id != ? AND (isDeleted IS NULL OR isDeleted = 0)',
+        'SELECT id FROM contracts WHERE LOWER(contractNumber) = LOWER(?) AND id != ? AND (isDeleted IS NULL OR isDeleted = 0)',
         [contractNumber.trim(), contractId]
       );
       if (duplicateContract) {
-        return res.status(400).json({ error: 'Số hợp đồng này đã tồn tại trên hệ thống' });
+        return res.status(409).json({ error: 'Số hợp đồng này đã tồn tại trên hệ thống' });
       }
 
       const now = new Date().toISOString();

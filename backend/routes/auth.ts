@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+
+/** See utils/passwordPolicy.ts. 12 la muc toi thieu hien nay cua OWASP. */
+const BCRYPT_COST = 12;
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -86,7 +89,9 @@ export function authRoutes(db: any) {
   };
 
   const generateToken = (userPayload: any) => {
-    return jwt.sign(userPayload, getSecret(), { expiresIn: ACCESS_TOKEN_TTL });
+    // algorithm pinned so the verify side (requireAuth, socket) has exactly one
+  // accepted value to check against.
+  return jwt.sign(userPayload, getSecret(), { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' });
   };
 
   router.post('/login', validate(LoginSchema), async (req, res) => {
@@ -266,7 +271,7 @@ export function authRoutes(db: any) {
       if (!user || !user.password) return res.status(404).json({ error: 'User not found' });
       const isMatch = await bcrypt.compare(currentPassword || '', user.password);
       if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_COST);
       await db.run('UPDATE users SET password = ?, failedLogins = 0, lockedUntil = NULL WHERE id = ?', [hashedPassword, userId]);
       // Password change invalidates every session — stolen tokens die here.
       await revokeUserRefreshTokens(db, userId);

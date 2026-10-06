@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { PlusCircle, Search, FileText, Filter, Download, CheckCircle2, AlertCircle, X, AlertTriangle } from 'lucide-react';
 import { Contract, ContractProduct, ContractType, DocumentChecklist } from '../../services/contractService';
 import { apiFetch } from '../../services/api';
-import * as XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx';
 import * as productService from '../../services/productService';
 import { PaymentModal } from './PaymentModal';
 import { useReactToPrint } from 'react-to-print';

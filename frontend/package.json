@@ -24,8 +24,7 @@
     "react-to-print": "^3.3.0",
     "recharts": "^3.4.1",
     "socket.io-client": "^4.8.3",
-    "xlsx": "^0.18.5",
-    "xlsx-js-style": "^1.2.0"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
