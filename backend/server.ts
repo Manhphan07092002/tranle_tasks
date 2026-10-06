@@ -42,16 +42,36 @@ import { scheduleNoteReminders } from './schedulers/noteReminder.js';
 import { scheduleDailyTaskReminder } from './schedulers/dailyTaskReminder.js';
 import { initMailScheduler } from './schedulers/mailScheduler.js';
 import { scheduleRevenueAutoSubmit } from './schedulers/revenueAutoSubmit.js';
+import { resolveTrustProxy, describeTrustProxy } from './utils/trustProxy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Resolve `app.set('trust proxy', ...)` from the environment.
+ *
+ * X-Forwarded-For chỉ được tin khi app không thể bị gọi trực tiếp, ngoài proxy.
+ * Nếu không, mỗi client tự chọn IP trong header và mọi rate limiter đều bị vô
+ * hiệu — khoá đăng nhập ngừng hoạt động.
+ *
+ * TRUST_PROXY_CIDRS  danh sách IP/CIDR của proxy (ưu tiên, chính xác nhất)
+ * TRUST_PROXY_HOPS   số lớp proxy; yếu hơn vì vẫn giả được nếu proxy gộp sẵn
+ *                    X-Forwarded-For do client gửi lên
+ * TRUST_PROXY=none   không có proxy, bỏ qua header
+ *
+ * Mặc định giữ 1 hop để không phá rate limit đang chạy. KHÔNG đổi mặc định sang
+ * "none": loginLimiter chỉ cho 10 lần / 15 phút, nên khi đó mọi nhân viên sẽ
+ * dùng chung một bucket theo IP của proxy và 10 lần đăng nhập sai sẽ khoá cả
+ * công ty. Muốn fail-closed thì phải set TRUST_PROXY_CIDRS cho đúng địa chỉ
+ * proxy trước.
+ */
 async function startServer() {
   const app = express();
   app.disable('x-powered-by');
 
-  // Trust the first proxy to correctly extract client IP for rate limiting
-  app.set('trust proxy', 1);
+  const trustProxy = resolveTrustProxy();
+  app.set('trust proxy', trustProxy);
+  console.log(`[security] trust proxy = ${JSON.stringify(trustProxy)}${describeTrustProxy(trustProxy)}`);
 
   if (!process.env.JWT_SECRET) {
     if (process.env.NODE_ENV === 'production') {

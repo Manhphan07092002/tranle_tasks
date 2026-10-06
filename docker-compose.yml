@@ -17,6 +17,10 @@ services:
       - MAIL_ENCRYPTION_KEY=${MAIL_ENCRYPTION_KEY}
       - APP_BASE_URL=${APP_BASE_URL}
       - ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
+      # Xem .env.production.example. Để rỗng => giữ hành vi cũ (1 hop).
+      - TRUST_PROXY_CIDRS=${TRUST_PROXY_CIDRS:-}
+      - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-}
+      - TRUST_PROXY=${TRUST_PROXY:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -33,7 +37,10 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - TZ=Asia/Ho_Chi_Minh
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      # Bind loopback only: the app reaches MySQL over the compose network
+      # (mysql:3306), so publishing on 0.0.0.0 only exposed the database to
+      # every host on the LAN — with the root account usable from outside.
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
     healthcheck:
@@ -49,8 +56,12 @@ services:
     hostname: mail.tranlecorp.com.vn
     restart: always
     ports:
+      # 25/465/587/110/143/993/995 phải mở toàn mạng — đây là dịch vụ mail
+      # công cộng. Riêng 8080 là giao diện quản trị Postfix, chỉ Nginx trên
+      # chính máy này proxy tới (nginx.conf: proxy_pass 127.0.0.1:8080), nên
+      # bind loopback để không ai trong LAN mở được.
       - "25:25"
-      - "8080:80"   # Nginx proxy vào cổng 8080 để phục vụ mail.tranlecorp.com.vn
+      - "127.0.0.1:8080:80"
       - "4443:443"  # Cổng SSL dự phòng
       - "110:110"
       - "143:143"
