@@ -4,7 +4,10 @@ services:
     container_name: tranle_task_app
     restart: unless-stopped
     ports:
-      - "${PORT:-3500}:3500"
+      # Nginx chạy trên chính máy này, nên app chỉ cần nghe ở loopback. Publish ra
+      # 0.0.0.0 sẽ cho phép bất kỳ ai trong LAN gọi thẳng app, giả được
+      # X-Forwarded-For và lách được mọi rate limiter theo IP.
+      - "127.0.0.1:${PORT:-3500}:3500"
     volumes:
       - ./data/uploads:/app/uploads
     env_file:
@@ -18,7 +21,11 @@ services:
       - APP_BASE_URL=${APP_BASE_URL}
       - ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
       # Xem .env.production.example. Để rỗng => giữ hành vi cũ (1 hop).
-      - TRUST_PROXY_CIDRS=${TRUST_PROXY_CIDRS:-}
+      # Mặc định 172.16.0.0/12 là dải bridge của Docker: Nginx trên host gọi
+      # vào cổng publish, nên container NHÌN THẤY IP gateway của network (172.x),
+      # không phải 127.0.0.1. Chỉ an toàn vì cổng 3500 đã bind 127.0.0.1 ở trên —
+      # không ai ngoài host tới được container.
+      - TRUST_PROXY_CIDRS=${TRUST_PROXY_CIDRS:-172.16.0.0/12}
       - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-}
       - TRUST_PROXY=${TRUST_PROXY:-}
     depends_on:

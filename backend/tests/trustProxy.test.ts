@@ -88,3 +88,27 @@ describe('H8 — header X-Forwarded-For giả không lách được khoá đăng
     expect(res.body.ip).toBe('8.8.8.8');
   });
 });
+
+describe('H9 — CIDR docker bridge là giá trị đúng cho mô hình nginx-trên-host', () => {
+  it('docker-compose mặc định 172.16.0.0/12, KHÔNG phải 127.0.0.1', async () => {
+    // Request từ nginx trên host đi qua published port, nên container nhìn thấy
+    // IP gateway của network Docker (172.x). Đặt 127.0.0.1 ở đây sẽ không bao
+    // giờ khớp, và app sẽ coi IP gateway là IP client thật.
+    const app = limiterApp(resolveTrustProxy(env({ TRUST_PROXY_CIDRS: '172.16.0.0/12' })));
+    // supertest từ 127.0.0.1 => KHÔNG thuộc CIDR => header bị bỏ (đúng).
+    const res = await request(app).get('/login').set('X-Forwarded-For', '203.0.113.7');
+    expect(res.body.ip).toBe('::ffff:127.0.0.1');
+  });
+
+  it('truy vấn đến từ gateway docker thì header được tin', async () => {
+    // proxy-addr dùng proxy-addr.compile; đây là kiểm chứng đúng phạm vi CIDR
+    // mà không cần dựng container thật.
+    const { compile } = await import('proxy-addr');
+    const trust = compile(['172.16.0.0/12']);
+    expect(trust('172.18.0.1')).toBe(true);
+    expect(trust('172.31.255.254')).toBe(true);
+    expect(trust('127.0.0.1')).toBe(false);
+    expect(trust('10.0.0.5')).toBe(false);
+    expect(trust('203.0.113.7')).toBe(false);
+  });
+});
