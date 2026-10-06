@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
+import { inspectUpdate, isVerdictChange } from '../utils/workflowPolicy.js';
 
 export function revenueRoutes(db: any) {
   const router = Router();
@@ -118,17 +119,58 @@ export function revenueRoutes(db: any) {
       if (!isOwner && !isAdmin && !isDirector && !isManagerOfDept) {
         return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
       }
-      const approvedBy = (status === 'Approved' || status === 'Rejected') ? (me?.id ?? existing.approvedBy ?? null) : (existing.approvedBy ?? null);
-      const approvedAt = (status === 'Approved' || status === 'Rejected') ? new Date().toISOString() : (existing.approvedAt ?? null);
+      // An omitted field means "unchanged". These were written straight from the
+      // body with `?? 0`, so any partial save silently reset the revenue figures to
+      // zero and blanked the title and content.
+      const nextTitle = title === undefined ? existing.title : title;
+      const nextContent = content === undefined ? existing.content : content;
+      const nextPreTax = totalPreTax === undefined ? existing.totalPreTax : totalPreTax;
+      const nextDelivered = totalDelivered === undefined ? existing.totalDelivered : totalDelivered;
+      const nextCumulative = totalCumulative === undefined ? existing.totalCumulative : totalCumulative;
+      const nextSubmittedAt = submittedAt === undefined ? existing.submittedAt ?? null : submittedAt ?? null;
+
+      // "Approved" only meant the payload said so, so re-saving an approved report
+      // re-stamped approvedAt/approvedBy onto whoever happened to press save.
+      const isDecision = isVerdictChange(existing.status, status);
 
       // Approver feedback is a record of somebody else's verdict, so each column
       // is writable only by the role that performs that step.
       const nextManagerFeedback = isManagerOfDept || isDirector ? (managerFeedback ?? existing.managerFeedback ?? null) : (existing.managerFeedback ?? null);
       const nextDirectorFeedback = isDirector ? (directorFeedback ?? existing.directorFeedback ?? null) : (existing.directorFeedback ?? null);
 
+      const guard = inspectUpdate('revenue', existing, {
+        title: nextTitle,
+        content: nextContent,
+        totalPreTax: nextPreTax,
+        totalDelivered: nextDelivered,
+        totalCumulative: nextCumulative,
+        status,
+      });
+
+      // Unfreezing a signed-off revenue report is deliberate: Admin/Director only,
+      // and it drops the approval fields so the row cannot keep claiming a verdict
+      // that no longer covers its figures.
+      if (guard.isReopen && !(isAdmin || isDirector)) {
+        return res.status(403).json({ error: 'Chỉ Admin hoặc Giám đốc mới có thể mở lại báo cáo doanh thu đã duyệt' });
+      }
+      if (guard.isApproved && !guard.isReopen && guard.changed.length > 0) {
+        return res.status(409).json({
+          error: `Báo cáo doanh thu đã duyệt không thể sửa ${guard.changed.join(', ')}. Cần quản trị viên mở lại trước.`,
+        });
+      }
+      const clearsApproval = guard.isReopen;
+
       await db.run(
         `UPDATE revenue_reports SET title=?, content=?, reportType=?, periodStart=?, periodEnd=?, totalPreTax=?, totalDelivered=?, totalCumulative=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, managerFeedback=?, directorFeedback=?, generationMode=? WHERE id=?`,
-        [title, content ?? null, reportType, periodStart, periodEnd, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, status, submittedAt ?? null, approvedAt, approvedBy, nextManagerFeedback, nextDirectorFeedback, generationMode || existing.generationMode || 'manual', req.params.id]
+        [nextTitle, nextContent ?? null,
+          reportType === undefined ? existing.reportType : reportType,
+          periodStart === undefined ? existing.periodStart : periodStart,
+          periodEnd === undefined ? existing.periodEnd : periodEnd,
+          nextPreTax ?? 0, nextDelivered ?? 0, nextCumulative ?? 0, status,
+          nextSubmittedAt,
+          isDecision ? new Date().toISOString() : clearsApproval ? null : existing.approvedAt ?? null,
+          isDecision ? (me?.id ?? existing.approvedBy ?? null) : clearsApproval ? null : existing.approvedBy ?? null,
+          nextManagerFeedback, nextDirectorFeedback, generationMode || existing.generationMode || 'manual', req.params.id]
       );
 
       // Log
@@ -136,6 +178,12 @@ export function revenueRoutes(db: any) {
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
         [randomUUID(), me?.id || 'system', `revenue_report.${status}`, req.params.id, 'revenue_report', new Date().toISOString()]
       );
+      if (clearsApproval) {
+        await db.run(
+          'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+          [randomUUID(), me?.id || 'system', 'revenue_report.reopened', req.params.id, 'revenue_report', new Date().toISOString()]
+        );
+      }
 
       // Notify on status change
       if (existing && existing.status !== status) {

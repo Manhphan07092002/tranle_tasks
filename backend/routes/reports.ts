@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { sendNotification } from '../utils/notify.js';
+import { APPROVED, inspectUpdate, isVerdictChange } from '../utils/workflowPolicy.js';
 
 export function reportRoutes(db: any) {
   const router = Router();
@@ -147,10 +148,15 @@ export function reportRoutes(db: any) {
         return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
       }
 
-      let finalContent = content;
+      // An omitted field means "unchanged", not "erase": title/content were being
+      // written straight from the body, so any partial save blanked them.
+      const nextTitle = title === undefined ? existing.title : title;
+      const nextContentRaw = content === undefined ? existing.content : content;
+
+      let finalContent = nextContentRaw;
       try {
-        if (content) {
-          const parsed = JSON.parse(content);
+        if (nextContentRaw) {
+          const parsed = JSON.parse(nextContentRaw);
           const docs = await db.all(
             'SELECT name, url, size, type FROM documents WHERE linkedId = ? AND category = ? AND (isDeleted IS NULL OR isDeleted = 0)',
             [req.params.id, 'reports']
@@ -176,16 +182,48 @@ export function reportRoutes(db: any) {
       // by the role that actually performs that step.
       const nextDirectorFeedback = isDirector ? (directorFeedback ?? existing.directorFeedback ?? null) : (existing.directorFeedback ?? null);
       const nextManagerFeedback = isManagerOfDept || isDirector ? (managerFeedback ?? existing.managerFeedback ?? null) : (existing.managerFeedback ?? null);
-      const isDecision = status === 'Approved' || status === 'Rejected';
+
+      // "Approved" used to mean only that the payload said so, so any save that
+      // repeated it re-stamped approvedAt/approvedBy — refreshing the verdict to
+      // whoever pressed save. A verdict is a transition, not a payload value.
+      const isDecision = isVerdictChange(existing.status, status);
+
+      // What the row will actually look like after this update, used for the freeze
+      // check below so it catches server-side attachment drift too.
+      const candidate = { title: nextTitle, content: finalContent, status };
+      const guard = inspectUpdate('report', existing, candidate);
+
+      // Reopening a signed-off report is deliberate, not incidental: Admin/Director
+      // only, and it must drop the approval fields so the record cannot keep
+      // claiming a verdict that no longer covers its contents.
+      if (guard.isReopen && !(isAdmin || isDirector)) {
+        return res.status(403).json({ error: 'Chỉ Admin hoặc Giám đốc mới có thể mở lại báo cáo đã duyệt' });
+      }
+      if (guard.isApproved && !guard.isReopen && guard.changed.length > 0) {
+        return res.status(409).json({
+          error: `Báo cáo đã duyệt không thể sửa ${guard.changed.join(', ')}. Cần quản trị viên mở lại trước.`,
+        });
+      }
+
+      const clearsApproval = guard.isReopen;
 
       await db.run(
         'UPDATE reports SET title=?, content=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, directorFeedback=?, managerFeedback=? WHERE id=?',
-        [title, finalContent ?? null, status, submittedAt ?? null, isDecision ? new Date().toISOString() : existing.approvedAt ?? null, isDecision ? ((req as any).user?.id ?? existing.approvedBy ?? null) : existing.approvedBy ?? null, nextDirectorFeedback, nextManagerFeedback, req.params.id],
+        [nextTitle, finalContent ?? null, status, submittedAt === undefined ? existing.submittedAt ?? null : submittedAt ?? null,
+          isDecision ? new Date().toISOString() : clearsApproval ? null : existing.approvedAt ?? null,
+          isDecision ? ((req as any).user?.id ?? existing.approvedBy ?? null) : clearsApproval ? null : existing.approvedBy ?? null,
+          nextDirectorFeedback, nextManagerFeedback, req.params.id],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
         [randomUUID(), (req as any).user?.id || 'system', `report.${status}`, req.params.id, 'report', new Date().toISOString()],
       );
+      if (clearsApproval) {
+        await db.run(
+          'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+          [randomUUID(), (req as any).user?.id || 'system', 'report.reopened', req.params.id, 'report', new Date().toISOString()],
+        );
+      }
 
       if (existing && existing.status !== status) {
         let msg = `Báo cáo của bạn đã chuyển sang trạng thái: ${status}`;

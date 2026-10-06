@@ -78,6 +78,31 @@ describe('admin db browser', () => {
     expect(db.runs.some((r) => r.sql.includes('DELETE FROM `events`'))).toBe(true);
   });
 
+  it('activity_logs là append-only: không xóa được qua DB browser', async () => {
+    // Trước đây allowlist có activity_logs và chỉ chặn roles/departments, nên admin
+    // xóa được từng dòng log — tức là xóa được dấu vết "ai duyệt khoản này", và
+    // audit ghi lại chỉ có tên bảng, không có id dòng bị xóa.
+    const db = adminDb();
+    const app = appFor(db);
+    const res = await request(app).delete('/api/admin/database/table/activity_logs/row/log-1').set('Authorization', auth);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('append-only');
+    expect(db.runs.some((r) => r.sql.includes('DELETE FROM `activity_logs`'))).toBe(false);
+  });
+
+  it('xoá dòng thường thì lưu lại nội dung dòng bị xoá trong audit', async () => {
+    const db = adminDb();
+    const app = appFor(db);
+    await request(app).delete('/api/admin/database/table/events/row/evt-9').set('Authorization', auth).expect(200);
+    const audit = db.runs.find((r) => r.sql.startsWith('INSERT INTO activity_logs') && r.params[2] === 'admin.db_row_deleted');
+    expect(audit).toBeTruthy();
+    const metadata = JSON.parse(audit!.params[5] as string);
+    expect(metadata.table).toBe('events');
+    expect(metadata.rowId).toBe('evt-9');
+    // Không có dòng lưu thì hành động vẫn ghi được id, để không mất hoàn toàn dấu vết.
+    expect(metadata).toHaveProperty('removed');
+  });
+
   it('export không chứa users thô, secret bị che', async () => {
     const db = adminDb();
     db.config['SMTP_PASS'] = 'supersecret';

@@ -137,9 +137,17 @@ export function adminRoutes(db: any, mailer: any) {
       if (!/^[a-zA-Z0-9_]+$/.test(table)) return res.status(400).json({ error: 'Tên bảng không hợp lệ' });
       if (!DB_BROWSER_ALLOWLIST.has(table)) return res.status(403).json({ error: 'Bảng này không được phép thao tác' });
       if (table === 'roles' || table === 'departments') return res.status(403).json({ error: 'Không được xóa trực tiếp bảng hệ thống này' });
+      // activity_logs là nhật ký kiểm toán append-only: không route nào trong codebase
+      // UPDATE/DELETE được nó. Cho phép xóa qua DB browser là hở lỗ hổng duy nhất,
+      // và nó đúng loại việc kẻ phá dữ liệu cần che: xoá dòng log ghi "ai duyệt
+      // khoản doanh thu này" rồi để lại một dòng audit không ghi id nào.
+      if (table === 'activity_logs') return res.status(403).json({ error: 'Nhật ký hoạt động là append-only, không thể xóa' });
 
+      // Ghi lại nội dung dòng bị xóa trước khi xóa, nếu không thì hành động này không
+      // để lại dấu vết có thể khôi phục nào.
+      const removed = await db.get(`SELECT * FROM \`${table}\` WHERE id = ?`, [req.params.id]);
       await db.run(`DELETE FROM \`${table}\` WHERE id = ?`, [req.params.id]);
-      await auditAdmin(req, 'admin.db_row_deleted', { table });
+      await auditAdmin(req, 'admin.db_row_deleted', { table, rowId: req.params.id, removed: removed ? redactRow(removed) : null });
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
   });
