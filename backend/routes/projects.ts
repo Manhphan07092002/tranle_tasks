@@ -106,7 +106,7 @@ export function projectRoutes(db: any) {
       await logActivity((req as any).user?.id || 'system', 'Tạo Dự án', projectId, { projectCode, name });
 
       res.status(201).json({ id: projectId });
-    } catch (e: any) { res.status(500).json({ error: 'Failed to create project', detail: e.message }); }
+    } catch (e: any) { console.error('[projects] create project failed:', e); res.status(500).json({ error: 'Failed to create project' }); }
   });
 
   // UPDATE project
@@ -173,7 +173,7 @@ export function projectRoutes(db: any) {
 
       await logActivity((req as any).user?.id || 'system', 'Tạo Báo cáo DA', req.params.id, { reportId, title, progress });
       res.status(201).json({ id: reportId });
-    } catch (e: any) { res.status(500).json({ error: 'Failed to create project report', detail: e.message }); }
+    } catch (e: any) { console.error('[projects] create project report failed:', e); res.status(500).json({ error: 'Failed to create project report' }); }
   });
 
   router.put('/:id/reports/:reportId', async (req, res) => {
@@ -230,7 +230,7 @@ export function projectRoutes(db: any) {
         [mId, req.params.id, title, dueDate, status || 'pending', sortOrder || 0, new Date().toISOString()]
       );
       res.status(201).json({ id: mId });
-    } catch (e: any) { res.status(500).json({ error: 'Failed to create milestone', detail: e.message }); }
+    } catch (e: any) { console.error('[projects] create milestone failed:', e); res.status(500).json({ error: 'Failed to create milestone' }); }
   });
 
   router.put('/:id/milestones/:milestoneId', async (req, res) => {

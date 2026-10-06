@@ -59,7 +59,10 @@ export function mailRoutes(db: any) {
         smtpHost: userConfig.smtpHost || config.SMTP_HOST
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      // Never return the raw driver/SMTP message: it can carry hostnames,
+      // recipient lists and config paths.
+      console.error('[mail/imap-config] failed to load config:', e?.message);
+      res.status(500).json({ error: 'Không thể tải cấu hình email' });
     }
   });
 

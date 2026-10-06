@@ -2,7 +2,7 @@ import React from 'react';
 import { Mail, RefreshCw, Star, Reply, Forward, Trash2, Paperclip, Download } from 'lucide-react';
 import { Email, FullEmail, FolderKey } from '../types';
 import { Avatar, formatDate } from '../utils';
-import DOMPurify from 'dompurify';
+import { sanitizeMailHtml } from '../../../utils/mailHtml';
 
 interface ReadingPaneProps {
   selectedThread: Email[] | null;
@@ -185,7 +185,7 @@ export default function ReadingPane({
                       <div className="px-6 py-6 overflow-x-auto">
                         <div
                           className="prose prose-sm max-w-none text-gray-700 leading-relaxed"
-                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fullMail.html || '') }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeMailHtml(fullMail.html) }}
                         />
                       </div>
                     </>

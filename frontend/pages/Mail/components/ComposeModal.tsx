@@ -6,6 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 
 import Flatpickr from 'react-flatpickr';
 import { toLocalDatetimeString } from '../../../utils/dateUtils';
+import { sanitizeMailHtml } from '../../../utils/mailHtml';
 import { avatarColor } from '../utils';
 
 interface ComposeData {
@@ -48,18 +49,23 @@ export default function ComposeModal({ initialData, onClose, onDiscard, onSendSu
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionIdx, setSuggestionIdx] = useState(-1);
 
-  // Focus body if empty or has just signature
+  // The compose body embeds quoted mail HTML, which is attacker-controlled:
+  // anyone who can send us an email controls this string. Sanitize at the sink
+  // so every path in (reply / forward / resend / restored draft) is covered by
+  // exactly one check, instead of trusting each caller.
   useEffect(() => {
-    if (bodyRef.current && bodyRef.current.innerHTML !== composeBody) {
-      bodyRef.current.innerHTML = composeBody;
+    const safeBody = sanitizeMailHtml(composeBody);
+    if (bodyRef.current && bodyRef.current.innerHTML !== safeBody) {
+      bodyRef.current.innerHTML = safeBody;
     }
   }, [composeBody]);
 
-  // Sync to local state silently every time it changes
+  // Persist only the sanitized body, so a payload can never survive in storage
+  // and be re-injected on the next visit to /mail.
   useEffect(() => {
     localStorage.setItem('mail_draft', JSON.stringify({
       to: composeTo, cc: composeCc, bcc: composeBcc,
-      subject: composeSubject, body: composeBody
+      subject: composeSubject, body: sanitizeMailHtml(composeBody)
     }));
   }, [composeTo, composeCc, composeBcc, composeSubject, composeBody]);
 
@@ -138,7 +144,10 @@ export default function ComposeModal({ initialData, onClose, onDiscard, onSendSu
     if (composeCc) formData.append('cc', composeCc);
     if (composeBcc) formData.append('bcc', composeBcc);
     formData.append('subject', composeSubject);
-    formData.append('body', composeBody);
+    // Sanitize on send too: composeBody is raw React state until the first
+    // input event, and sending it verbatim would relay an inbound payload to
+    // every recipient of the reply.
+    formData.append('body', sanitizeMailHtml(composeBody));
     formData.append('track', trackOpens.toString());
 
     composeAttachments.forEach(file => {

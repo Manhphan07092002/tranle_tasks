@@ -65,7 +65,7 @@ export function revenueRoutes(db: any) {
       }
 
       res.status(201).json({ id });
-    } catch (e: any) { res.status(500).json({ error: 'Failed to create revenue report', detail: e.message }); }
+    } catch (e: any) { console.error('[revenue] create revenue report failed:', e); res.status(500).json({ error: 'Failed to create revenue report' }); }
   });
 
   // UPDATE (also used for approve/reject)

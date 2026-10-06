@@ -5,6 +5,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Email, FullEmail, FolderKey } from './types';
 import { getSignature, normalizeSubject } from './utils';
+import { escapeHtml, sanitizeMailHtml, purgeLegacyMailDraft } from '../../utils/mailHtml';
 import ConnectScreen from './components/ConnectScreen';
 import MailSidebar from './components/MailSidebar';
 import ReadingPane from './components/ReadingPane';
@@ -125,6 +126,9 @@ export default function MailPage() {
 
   // Load draft from localStorage on mount (if we want to restore previous crash)
   useEffect(() => {
+    // One-time migration: drafts persisted before the sanitizer existed may hold
+    // an inbound email's markup verbatim. Drop them once, then never again.
+    purgeLegacyMailDraft();
     const draftStr = localStorage.getItem('mail_draft');
     if (draftStr) {
       try {
@@ -132,7 +136,7 @@ export default function MailPage() {
         if (draft.to || draft.subject || draft.body || draft.cc || draft.bcc) {
           setComposeData({
             to: draft.to || '', cc: draft.cc || '', bcc: draft.bcc || '',
-            subject: draft.subject || '', body: draft.body || ''
+            subject: draft.subject || '', body: sanitizeMailHtml(draft.body)
           });
         }
       } catch { }
@@ -329,10 +333,10 @@ export default function MailPage() {
   const handleReply = (mail: FullEmail) => {
     const quotedBody = `<br><br><blockquote style="border-left: 2px solid #ccc; margin-left: 0; padding-left: 10px; color: #666;">
       <div style="font-size: 12px; margin-bottom: 8px;">
-        <strong>Từ:</strong> ${mail.from}<br>
+        <strong>Từ:</strong> ${escapeHtml(mail.from)}<br>
         <strong>Ngày:</strong> ${new Date(mail.date).toLocaleString('vi-VN')}
       </div>
-      ${mail.html || ''}
+      ${sanitizeMailHtml(mail.html)}
     </blockquote>`;
     setComposeData({
       to: mail.from || '',
@@ -346,11 +350,11 @@ export default function MailPage() {
     const quotedBody = `<br><br><blockquote style="border-left: 2px solid #ccc; margin-left: 0; padding-left: 10px; color: #666;">
       <div style="font-size: 12px; margin-bottom: 8px;">
         <strong>------- Chuyển tiếp từ -------</strong><br>
-        <strong>Từ:</strong> ${mail.from}<br>
+        <strong>Từ:</strong> ${escapeHtml(mail.from)}<br>
         <strong>Ngày:</strong> ${new Date(mail.date).toLocaleString('vi-VN')}<br>
-        <strong>Chủ đề:</strong> ${mail.subject}
+        <strong>Chủ đề:</strong> ${escapeHtml(mail.subject)}
       </div>
-      ${mail.html || ''}
+      ${sanitizeMailHtml(mail.html)}
     </blockquote>`;
     setComposeData({
       to: '', cc: '', bcc: '',
@@ -363,7 +367,7 @@ export default function MailPage() {
     setComposeData({
       to: mail.to || '', cc: '', bcc: '',
       subject: mail.subject || '',
-      body: mail.html || ''
+      body: sanitizeMailHtml(mail.html)
     });
   };
 

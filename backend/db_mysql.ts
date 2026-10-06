@@ -366,7 +366,21 @@ CREATE TABLE IF NOT EXISTS mail_quotas (
 `;
 
 export async function initDbMysql(): Promise<MysqlDb> {
-  const url = process.env.DATABASE_URL || 'mysql://root:@127.0.0.1:3306/tranletask';
+  // Fail closed. The dev fallback below is an empty-password root login, which is
+  // only ever appropriate on a developer machine. In production a missing
+  // DATABASE_URL must stop the boot instead of silently trying root/no-password
+  // against localhost.
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DATABASE_URL is required when NODE_ENV=production (refusing to fall back to passwordless root)');
+    }
+    return initDbMysqlWithUrl('mysql://root:@127.0.0.1:3306/tranletask');
+  }
+  return initDbMysqlWithUrl(url);
+}
+
+async function initDbMysqlWithUrl(url: string): Promise<MysqlDb> {
   const parsed = new URL(url);
   const dbName = parsed.pathname.replace(/^\//, '') || 'tranletask';
   const host = parsed.hostname || '127.0.0.1';
