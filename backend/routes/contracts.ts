@@ -994,6 +994,14 @@ export function contractRoutes(db: any) {
         return res.status(403).json({ error: 'Chỉ Trưởng phòng của phòng ban hoặc Admin mới có quyền thao tác trên hợp đồng này!' });
       }
 
+      // Nobody decides their own contract. A department head can file a contract
+      // (canFileAnywhere includes Manager) and would otherwise approve, reject or
+      // cancel it themselves, with the activity log recording them as both the
+      // author and the reviewer.
+      if (contract.createdBy === user.id) {
+        return res.status(403).json({ error: 'Bạn không có quyền thao tác trên hợp đồng của chính mình' });
+      }
+
       const now = new Date().toISOString();
       await db.run(
         `UPDATE contracts SET status = 'in_progress', approvalFeedback = NULL, updatedAt = ? WHERE id = ?`,
@@ -1049,6 +1057,14 @@ export function contractRoutes(db: any) {
         return res.status(403).json({ error: 'Chỉ Trưởng phòng của phòng ban hoặc Admin mới có quyền thao tác trên hợp đồng này!' });
       }
 
+      // Nobody decides their own contract. A department head can file a contract
+      // (canFileAnywhere includes Manager) and would otherwise approve, reject or
+      // cancel it themselves, with the activity log recording them as both the
+      // author and the reviewer.
+      if (contract.createdBy === user.id) {
+        return res.status(403).json({ error: 'Bạn không có quyền thao tác trên hợp đồng của chính mình' });
+      }
+
       const now = new Date().toISOString();
       await db.run(
         `UPDATE contracts SET status = 'draft', approvalFeedback = ?, updatedAt = ? WHERE id = ?`,
@@ -1102,6 +1118,14 @@ export function contractRoutes(db: any) {
 
       if (!isSystemAdmin && !isDeptManager) {
         return res.status(403).json({ error: 'Chỉ Trưởng phòng của phòng ban hoặc Admin mới có quyền thao tác trên hợp đồng này!' });
+      }
+
+      // Nobody decides their own contract. A department head can file a contract
+      // (canFileAnywhere includes Manager) and would otherwise approve, reject or
+      // cancel it themselves, with the activity log recording them as both the
+      // author and the reviewer.
+      if (contract.createdBy === user.id) {
+        return res.status(403).json({ error: 'Bạn không có quyền thao tác trên hợp đồng của chính mình' });
       }
 
       const now = new Date().toISOString();

@@ -5,6 +5,9 @@ import { sendNotification } from '../utils/notify.js';
 export function revenueRoutes(db: any) {
   const router = Router();
 
+  // A new record may only be created in a "not yet approved" state.
+  const CREATE_STATUS_ALLOWLIST = new Set(['Draft', 'Pending', 'Pending Manager', 'Pending Director']);
+
   // GET all revenue reports (not deleted, last 6 months)
   router.get('/', async (req, res) => {
     try {
@@ -26,9 +29,21 @@ export function revenueRoutes(db: any) {
   });
 
   // GET archive
-  router.get('/archive', async (_req, res) => {
+  router.get('/archive', async (req, res) => {
     try {
-      const rows = await db.all('SELECT * FROM revenue_reports WHERE isDeleted IS NULL OR isDeleted = 0 ORDER BY createdAt DESC');
+      const user = (req as any).user;
+      const perms = user?.permissions || [];
+      const canViewAll = perms.includes('view_all_reports') || perms.includes('director_feedback') || perms.includes('admin_panel') || perms.includes('view_all_tasks');
+
+      let query = 'SELECT * FROM revenue_reports WHERE isDeleted IS NULL OR isDeleted = 0';
+      const params: any[] = [];
+      if (!canViewAll && user) {
+        query += ' AND (authorId = ? OR department = ?)';
+        params.push(user.id, user.department || '');
+      }
+      query += ' ORDER BY createdAt DESC LIMIT 500';
+
+      const rows = await db.all(query, params);
       res.json(rows);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch revenue reports archive' }); }
   });
@@ -39,6 +54,11 @@ export function revenueRoutes(db: any) {
     const authorId = (req as any).user?.id;
     if (!authorId) return res.status(401).json({ error: 'Unauthorized' });
     if (!title) return res.status(400).json({ error: 'Thiếu tiêu đề' });
+    // Only "not yet approved" states are accepted on create. Without this,
+    // `POST /api/revenue-reports {status:'Approved'}` mints a revenue report that
+    // looks director-approved while approvedBy/approvedAt stay NULL — skipping
+    // the Manager -> Director chain and its notifications.
+    const initialStatus = CREATE_STATUS_ALLOWLIST.has(status) ? status : 'Draft';
     const me = (req as any).user;
     const canFileAnywhere = me?.role === 'Admin' || me?.role === 'Director' || me?.role === 'Giám đốc' || me?.role === 'Manager';
     const effectiveDepartment = canFileAnywhere ? (department || me?.department) : me?.department;
@@ -47,7 +67,7 @@ export function revenueRoutes(db: any) {
       await db.run(
         `INSERT INTO revenue_reports (id, title, reportType, periodStart, periodEnd, content, totalPreTax, totalDelivered, totalCumulative, authorId, department, status, createdAt, submittedAt, generationMode)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, title, reportType, periodStart, periodEnd, content ?? null, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, authorId, effectiveDepartment, status || 'Draft', now, submittedAt ?? null, generationMode || 'manual']
+        [id, title, reportType, periodStart, periodEnd, content ?? null, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, authorId, effectiveDepartment, initialStatus, now, submittedAt ?? null, generationMode || 'manual']
       );
 
       // Log activity
@@ -57,7 +77,7 @@ export function revenueRoutes(db: any) {
       );
 
       // Notify manager if submitting
-      if (status === 'Pending Manager') {
+      if (initialStatus === 'Pending Manager') {
         const dept = await db.get('SELECT managerId FROM departments WHERE name = ? OR id = ?', [effectiveDepartment, effectiveDepartment]);
         if (dept?.managerId) {
           await sendNotification(db, dept.managerId, 'revenue_submitted', 'Báo cáo doanh thu mới', `Nhân viên vừa nộp báo cáo doanh thu: ${title}`, id);
@@ -78,23 +98,37 @@ export function revenueRoutes(db: any) {
       const isAdmin = me?.role === 'Admin';
       const isDirector = me?.role === 'Director' || isAdmin;
       const isOwner = existing.authorId === me?.id;
+      const isManager = me?.role === 'Manager';
+      // A Manager's reach stops at their own department.
+      const isManagerOfDept = isManager && !!existing.department && !!me?.department && me.department === existing.department;
       const statusChanging = status && status !== existing.status;
       const wantsApprove = statusChanging && (status === 'Approved' || status === 'Rejected' || String(status).startsWith('Pending'));
-      if (wantsApprove && !(isAdmin || isDirector)) {
-        const isManager = me?.role === 'Manager';
-        if (!(isManager && me?.department === existing.department)) {
-          return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo doanh thu này' });
-        }
+      // Self-review is forbidden only for a *verdict*. Moving a record into
+      // `Pending*` is a submission, not a decision — a Manager filing and
+      // submitting their own report must keep working. Approving or rejecting
+      // it is not allowed, or approvedBy records them as the reviewer of their
+      // own work.
+      const isOwnVerdict = statusChanging && (status === 'Approved' || status === 'Rejected');
+      if (isOwnVerdict && isOwner) {
+        return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo doanh thu của chính mình' });
       }
-      if (!isOwner && !isAdmin && !isDirector && me?.role !== 'Manager') {
+      if (wantsApprove && !(isAdmin || isDirector) && !isManagerOfDept) {
+        return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo doanh thu này' });
+      }
+      if (!isOwner && !isAdmin && !isDirector && !isManagerOfDept) {
         return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
       }
       const approvedBy = (status === 'Approved' || status === 'Rejected') ? (me?.id ?? existing.approvedBy ?? null) : (existing.approvedBy ?? null);
       const approvedAt = (status === 'Approved' || status === 'Rejected') ? new Date().toISOString() : (existing.approvedAt ?? null);
 
+      // Approver feedback is a record of somebody else's verdict, so each column
+      // is writable only by the role that performs that step.
+      const nextManagerFeedback = isManagerOfDept || isDirector ? (managerFeedback ?? existing.managerFeedback ?? null) : (existing.managerFeedback ?? null);
+      const nextDirectorFeedback = isDirector ? (directorFeedback ?? existing.directorFeedback ?? null) : (existing.directorFeedback ?? null);
+
       await db.run(
         `UPDATE revenue_reports SET title=?, content=?, reportType=?, periodStart=?, periodEnd=?, totalPreTax=?, totalDelivered=?, totalCumulative=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, managerFeedback=?, directorFeedback=?, generationMode=? WHERE id=?`,
-        [title, content ?? null, reportType, periodStart, periodEnd, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, status, submittedAt ?? null, approvedAt, approvedBy, managerFeedback ?? existing.managerFeedback ?? null, directorFeedback ?? existing.directorFeedback ?? null, generationMode || 'manual', req.params.id]
+        [title, content ?? null, reportType, periodStart, periodEnd, totalPreTax ?? 0, totalDelivered ?? 0, totalCumulative ?? 0, status, submittedAt ?? null, approvedAt, approvedBy, nextManagerFeedback, nextDirectorFeedback, generationMode || existing.generationMode || 'manual', req.params.id]
       );
 
       // Log

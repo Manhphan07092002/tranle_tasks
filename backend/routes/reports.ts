@@ -28,12 +28,33 @@ export function reportRoutes(db: any) {
     } catch (e) { res.status(500).json({ error: 'Failed to fetch reports' }); }
   });
 
-  router.get('/archive', async (_req, res) => {
+  // The archive must be scoped exactly like the list endpoint. Unscoped, any
+  // authenticated employee enumerates every report in the company — other
+  // departments' figures, content and director feedback included.
+  router.get('/archive', async (req, res) => {
     try {
-      const reports = await db.all('SELECT * FROM reports WHERE isDeleted IS NULL OR isDeleted = 0');
+      const user = (req as any).user;
+      const perms = user?.permissions || [];
+      const canViewAll = perms.includes('view_all_reports') || perms.includes('director_feedback') || perms.includes('admin_panel') || perms.includes('view_all_tasks');
+
+      let query = 'SELECT * FROM reports WHERE (isDeleted IS NULL OR isDeleted = 0)';
+      const params: any[] = [];
+      if (!canViewAll && user) {
+        query += ' AND (authorId = ? OR department = ?)';
+        params.push(user.id, user.department || '');
+      }
+      query += ' ORDER BY createdAt DESC LIMIT 500';
+
+      const reports = await db.all(query, params);
       res.json(reports);
     } catch (e) { res.status(500).json({ error: 'Failed to fetch reports archive' }); }
   });
+
+  // A new record may only be created in a "not yet approved" state. Otherwise
+  // `POST /api/reports {status:'Approved'}` mints a report that looks
+  // director-approved while approvedBy/approvedAt stay NULL — skipping the
+  // whole Manager -> Director chain and its notifications.
+  const CREATE_STATUS_ALLOWLIST = new Set(['Draft', 'Pending', 'Pending Manager', 'Pending Director']);
 
   router.post('/', async (req, res) => {
     const { id, title, content, department, status, createdAt, submittedAt } = req.body;
@@ -41,6 +62,7 @@ export function reportRoutes(db: any) {
     const authorId = (req as any).user?.id;
     if (!authorId) return res.status(401).json({ error: 'Unauthorized' });
     if (!title) return res.status(400).json({ error: 'Thiếu tiêu đề báo cáo' });
+    const initialStatus = CREATE_STATUS_ALLOWLIST.has(status) ? status : 'Draft';
     // Only privileged users may file into another department.
     const me = (req as any).user;
     const canFileAnywhere = me?.role === 'Admin' || me?.role === 'Director' || me?.role === 'Giám đốc' || me?.role === 'Manager';
@@ -73,14 +95,14 @@ export function reportRoutes(db: any) {
 
       await db.run(
         'INSERT INTO reports (id, title, content, authorId, department, status, createdAt, submittedAt, approvedAt, approvedBy, directorFeedback, managerFeedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, title, finalContent ?? null, authorId, effectiveDepartment, status, now, submittedAt ?? null, null, null, null, null],
+        [id, title, finalContent ?? null, authorId, effectiveDepartment, initialStatus, now, submittedAt ?? null, null, null, null, null],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
         [randomUUID(), authorId, 'report.created', id, 'report', new Date().toISOString()],
       );
 
-      if (status === 'Pending Manager') {
+      if (initialStatus === 'Pending Manager') {
         const dept = await db.get('SELECT managerId FROM departments WHERE name = ? OR id = ?', [effectiveDepartment, effectiveDepartment]);
         if (dept?.managerId) {
           await sendNotification(db, dept.managerId, 'report_submitted', 'Báo cáo mới', `Nhân viên vừa nộp báo cáo: ${title}`, id);
@@ -100,16 +122,28 @@ export function reportRoutes(db: any) {
       const isAdmin = me?.role === 'Admin';
       const isDirector = me?.role === 'Director' || isAdmin;
       const isOwner = existing.authorId === me?.id;
+      const isManager = me?.role === 'Manager';
+      // A Manager's reach stops at their own department. Without this check a
+      // department head can rewrite any other department's title, content and
+      // status.
+      const isManagerOfDept = isManager && !!existing.department && !!me?.department && me.department === existing.department;
       // Only owner (draft edits) or privileged approvers may update.
-      const wantsApprove = status === 'Approved' || directorFeedback || (existing.status !== status && (status === 'Approved' || status === 'Rejected'));
-      if (wantsApprove && !(isAdmin || isDirector)) {
-        // Managers may approve their own department's reports.
-        const isManager = me?.role === 'Manager';
-        if (!(isManager && existing.department && me?.department === existing.department)) {
-          return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo này' });
-        }
+      // `wantsApprove` must mean "issuing a review verdict", nothing else. The
+      // save form always echoes directorFeedback/managerFeedback back (see
+      // ReportModal.handleSave), so treating a carried-over feedback value as an
+      // approval attempt locked authors out of re-submitting a rejected report.
+      // Feedback writes are gated separately, by role, at the UPDATE below.
+      const wantsApprove = status === 'Approved' || (existing.status !== status && (status === 'Approved' || status === 'Rejected'));
+      // Nobody reviews their own record, whatever their role: otherwise a
+      // Manager files a report and signs it off, and approvedBy records them as
+      // the reviewer. The approval ledger becomes untrustworthy.
+      if (wantsApprove && isOwner) {
+        return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo của chính mình' });
       }
-      if (!isOwner && !isAdmin && !isDirector && me?.role !== 'Manager') {
+      if (wantsApprove && !(isAdmin || isDirector) && !isManagerOfDept) {
+        return res.status(403).json({ error: 'Bạn không có quyền duyệt báo cáo này' });
+      }
+      if (!isOwner && !isAdmin && !isDirector && !isManagerOfDept) {
         return res.status(403).json({ error: 'Bạn không có quyền sửa báo cáo này' });
       }
 
@@ -137,9 +171,16 @@ export function reportRoutes(db: any) {
         console.error('Lỗi đồng bộ đính kèm báo cáo:', err);
       }
 
+      // Approver feedback is a record of somebody else's verdict. An author
+      // writing it back forges the review trail, so each column is writable only
+      // by the role that actually performs that step.
+      const nextDirectorFeedback = isDirector ? (directorFeedback ?? existing.directorFeedback ?? null) : (existing.directorFeedback ?? null);
+      const nextManagerFeedback = isManagerOfDept || isDirector ? (managerFeedback ?? existing.managerFeedback ?? null) : (existing.managerFeedback ?? null);
+      const isDecision = status === 'Approved' || status === 'Rejected';
+
       await db.run(
         'UPDATE reports SET title=?, content=?, status=?, submittedAt=?, approvedAt=?, approvedBy=?, directorFeedback=?, managerFeedback=? WHERE id=?',
-        [title, finalContent ?? null, status, submittedAt ?? null, (status === 'Approved' || status === 'Rejected') ? new Date().toISOString() : existing.approvedAt ?? null, (status === 'Approved' || status === 'Rejected') ? ((req as any).user?.id ?? existing.approvedBy ?? null) : existing.approvedBy ?? null, directorFeedback ?? existing.directorFeedback ?? null, managerFeedback ?? existing.managerFeedback ?? null, req.params.id],
+        [title, finalContent ?? null, status, submittedAt ?? null, isDecision ? new Date().toISOString() : existing.approvedAt ?? null, isDecision ? ((req as any).user?.id ?? existing.approvedBy ?? null) : existing.approvedBy ?? null, nextDirectorFeedback, nextManagerFeedback, req.params.id],
       );
       await db.run(
         'INSERT INTO activity_logs (id, userId, action, entityId, entityType, createdAt) VALUES (?, ?, ?, ?, ?, ?)',

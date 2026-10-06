@@ -65,7 +65,11 @@ export interface Note {
 // The type is kept open (| string) to support custom roles created via Admin panel.
 export type UserRole = 'Admin' | 'Director' | 'Manager' | 'Employee' | (string & {});
 
-export type ReportStatus = 'Draft' | 'Pending' | 'Approved' | 'Rejected';
+// 'Pending Manager' / 'Pending Director' are the real review states used by
+// RevenueReportModal and the Admin approval screens; 'Pending' is the author
+// submit state used by ReportModal. Leaving them out of this union let the
+// server-side status allowlist drift from the UI.
+export type ReportStatus = 'Draft' | 'Pending' | 'Pending Manager' | 'Pending Director' | 'Approved' | 'Rejected';
 
 export interface Report {
   id: string;
